@@ -45,9 +45,19 @@ class DataComPyEngine:
 
         compare_columns = _common_compare_columns(db_frame, source_frame, join_columns)
         datacompy_columns = [*join_columns, *compare_columns]
+        db_compare_frame = _with_missing_columns(
+            db_frame,
+            datacompy_columns,
+            source_frame,
+        )
+        source_compare_frame = _with_missing_columns(
+            source_frame,
+            datacompy_columns,
+            db_frame,
+        )
         compare = PolarsCompare(
-            db_frame.select(datacompy_columns),
-            source_frame.select(datacompy_columns),
+            db_compare_frame.select(datacompy_columns),
+            source_compare_frame.select(datacompy_columns),
             join_columns=list(join_columns),
             abs_tol=0,
             rel_tol=0,
@@ -57,10 +67,15 @@ class DataComPyEngine:
         )
         report_path.write_text(compare.report(), encoding="utf-8")
 
-        summary = _build_summary(db_frame, source_frame, join_columns, compare_columns)
+        summary = _build_summary(
+            db_compare_frame,
+            source_compare_frame,
+            join_columns,
+            compare_columns,
+        )
         diff_payload = _build_diff_payload(
-            db_frame,
-            source_frame,
+            db_compare_frame,
+            source_compare_frame,
             join_columns,
             compare_columns,
             summary,
@@ -226,6 +241,20 @@ def _common_compare_columns(
         for column in db_frame.columns
         if column not in join_column_set and column in source_column_set
     )
+
+
+def _with_missing_columns(
+    frame: pl.DataFrame,
+    columns: list[str],
+    reference_frame: pl.DataFrame,
+) -> pl.DataFrame:
+    output = frame
+    for column in columns:
+        if column in output.columns:
+            continue
+        dtype = reference_frame.schema.get(column, pl.String)
+        output = output.with_columns(pl.Series(column, [None] * output.height, dtype=dtype))
+    return output
 
 
 def _safe_name(text: str) -> str:
