@@ -52,6 +52,77 @@ def pytest_addoption(parser):
         default=[],
         help="Limit database accuracy validation to one or more tables",
     )
+    parser.addoption(
+        "--db-accuracy-mode",
+        action="store",
+        choices=("direct", "cached"),
+        default="direct",
+        help="DB accuracy execution mode: direct or cached",
+    )
+    parser.addoption(
+        "--db-accuracy-cache-root",
+        action="store",
+        default=".cache/binance_accuracy",
+        help="Local cache root for cached Binance source data",
+    )
+    parser.addoption(
+        "--db-accuracy-symbol",
+        action="append",
+        default=[],
+        help="Limit cached DB accuracy validation to one or more symbols",
+    )
+    parser.addoption(
+        "--db-accuracy-pair",
+        action="append",
+        default=[],
+        help="Limit cached DB accuracy validation to one or more delivery pairs",
+    )
+    parser.addoption(
+        "--db-accuracy-contract-type",
+        action="append",
+        default=[],
+        help="Limit cached DB accuracy validation to one or more contract types",
+    )
+    parser.addoption(
+        "--db-accuracy-interval",
+        action="append",
+        default=[],
+        help="Limit cached DB accuracy validation to one or more intervals",
+    )
+    parser.addoption(
+        "--db-accuracy-start-ms",
+        action="store",
+        type=int,
+        default=None,
+        help="Inclusive start timestamp in milliseconds for cached DB accuracy validation",
+    )
+    parser.addoption(
+        "--db-accuracy-end-ms",
+        action="store",
+        type=int,
+        default=None,
+        help="Inclusive end timestamp in milliseconds for cached DB accuracy validation",
+    )
+    parser.addoption(
+        "--db-accuracy-partition-days",
+        action="store",
+        type=int,
+        default=1,
+        help="Time partition size in days for cached DB accuracy validation",
+    )
+    parser.addoption(
+        "--db-accuracy-refresh-cache",
+        action="store_true",
+        default=False,
+        help="Refresh cached Binance source partitions before comparing",
+    )
+    parser.addoption(
+        "--db-accuracy-max-shards",
+        action="store",
+        type=int,
+        default=100,
+        help="Maximum DB-discovered market shards for cached DB accuracy validation",
+    )
 
 def pytest_configure(config):
     """
