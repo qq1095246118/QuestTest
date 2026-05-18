@@ -37,6 +37,8 @@ class CacheStore:
 
     def write_manifest(self, paths: CachePaths, manifest: CacheManifest) -> None:
         paths.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        if manifest.status != "complete" and paths.data_path.exists():
+            paths.data_path.unlink()
         paths.manifest_path.write_text(
             json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8",
