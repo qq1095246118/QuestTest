@@ -31,7 +31,10 @@ class CachedBinanceSource:
         if not refresh and self.store.has_complete_partition(paths):
             manifest = self.store.read_manifest(paths)
             if manifest is not None:
-                return self.store.read_frame(paths), manifest
+                if manifest.status == "complete":
+                    return self.store.read_frame(paths), manifest
+                if manifest.status in {"empty", "source_market_unavailable"}:
+                    return _empty_frame(shard), manifest
 
         try:
             rows = self.source.fetch_rows(

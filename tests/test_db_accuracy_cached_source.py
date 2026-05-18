@@ -1,3 +1,5 @@
+import json
+
 import pytest
 import polars as pl
 
@@ -171,6 +173,95 @@ def test_ensure_partition_records_empty_partition_and_removes_stale_data(tmp_pat
         "close",
     ]
     assert not paths.data_path.exists()
+
+
+def test_ensure_partition_reuses_empty_partition_with_stable_schema(tmp_path):
+    source = RecordingSource(
+        [
+            SourceRow(
+                key=1704067200000,
+                fields={"timestamp": 1704067200000, "open": "9", "close": "9"},
+            )
+        ]
+    )
+    store = CacheStore(tmp_path)
+    partition = _partition()
+    paths = store.paths_for(_shard(), partition)
+    existing = CacheManifest(
+        table="binance_kline_all_future_raw",
+        endpoint="usdm_klines",
+        market_key={"symbol": "BTCUSDT", "interval": "1m"},
+        start_ms=partition.start_ms,
+        end_ms=partition.end_ms,
+        status="empty",
+        row_count=0,
+        source_error=None,
+        created_at_utc="2026-05-18T12:00:00+00:00",
+    )
+    store.write_manifest(paths, existing)
+    fetcher = CachedBinanceSource(store=store, source=source)
+
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
+
+    assert manifest == existing
+    assert source.calls == []
+    assert frame.is_empty()
+    assert frame.columns == [
+        "symbol",
+        "interval",
+        "timestamp",
+        "timestamp__compare",
+        "open",
+        "close",
+    ]
+
+
+def test_ensure_partition_empty_cache_hit_ignores_stale_parquet(tmp_path):
+    source = RecordingSource()
+    store = CacheStore(tmp_path)
+    partition = _partition()
+    paths = store.paths_for(_shard(), partition)
+    stale_frame = pl.DataFrame(
+        {
+            "symbol": ["BTCUSDT"],
+            "interval": ["1m"],
+            "timestamp": ["1704067200000"],
+            "timestamp__compare": ["1704067200000"],
+            "open": ["9"],
+            "close": ["9"],
+        }
+    )
+    empty_manifest = CacheManifest(
+        table="binance_kline_all_future_raw",
+        endpoint="usdm_klines",
+        market_key={"symbol": "BTCUSDT", "interval": "1m"},
+        start_ms=partition.start_ms,
+        end_ms=partition.end_ms,
+        status="empty",
+        row_count=0,
+        source_error=None,
+        created_at_utc="2026-05-18T12:00:00+00:00",
+    )
+    store.write_frame(paths, stale_frame)
+    paths.manifest_path.write_text(
+        json.dumps(empty_manifest.to_dict()),
+        encoding="utf-8",
+    )
+    fetcher = CachedBinanceSource(store=store, source=source)
+
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
+
+    assert manifest == empty_manifest
+    assert source.calls == []
+    assert frame.is_empty()
+    assert frame.to_dict(as_series=False) == {
+        "symbol": [],
+        "interval": [],
+        "timestamp": [],
+        "timestamp__compare": [],
+        "open": [],
+        "close": [],
+    }
 
 
 @pytest.mark.parametrize(
