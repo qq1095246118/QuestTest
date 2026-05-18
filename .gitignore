@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+allure-results/
+allure-report/
+.venv/
+venv/
+.idea/
+.agents/
+skills-lock.json
+config/.env.*
+!config/.env.example
+.DS_Store

@@ -1,0 +1,131 @@
+tables:
+  - table: kline_data_future_raw
+    kind: kline
+    endpoint: usdm_klines
+    key_fields: [symbol, interval]
+    time_fields: [timestamp, open_time]
+    interval_field: interval
+    compare_fields: [timestamp, open, high, low, close, volume, close_time, quote_volume, taker_buy_base_volume, taker_buy_quote_volume]
+    optional_compare_fields: [open_time, trade_count, trades]
+    request_limit: 1000
+
+  - table: kline_data_spot_raw
+    kind: kline
+    endpoint: spot_klines
+    key_fields: [symbol, interval]
+    time_fields: [timestamp, open_time]
+    interval_field: interval
+    compare_fields: [timestamp, open, high, low, close, volume, close_time, quote_volume, taker_buy_base_volume, taker_buy_quote_volume]
+    optional_compare_fields: [open_time, trade_count, trades]
+    request_limit: 1000
+
+  - table: binance_usdm_funding_rate_raw
+    kind: funding
+    endpoint: usdm_funding
+    key_fields: [symbol]
+    time_fields: [funding_time, timestamp]
+    interval_field:
+    compare_fields: [symbol, funding_rate, funding_time, mark_price]
+    request_limit: 1000
+
+  - table: binance_kline_all_future_raw
+    kind: kline
+    endpoint: usdm_klines
+    key_fields: [symbol, interval]
+    time_fields: [timestamp, open_time]
+    interval_field: interval
+    compare_fields: [timestamp, open, high, low, close, volume, close_time, quote_volume, taker_buy_base_volume, taker_buy_quote_volume]
+    optional_compare_fields: [open_time, trade_count, trades]
+    request_limit: 1000
+
+  - table: binance_funding_rate_all_future_raw
+    kind: funding
+    endpoint: usdm_funding
+    key_fields: [symbol]
+    time_fields: [funding_time, timestamp]
+    interval_field:
+    compare_fields: [symbol, funding_rate, funding_time, mark_price]
+    request_limit: 1000
+
+  - table: binance_kline_all_future_raw_1h
+    kind: kline
+    endpoint: usdm_klines
+    key_fields: [symbol]
+    time_fields: [timestamp, open_time]
+    interval_field:
+    fixed_interval: 1h
+    compare_fields: [timestamp, open, high, low, close, volume, close_time, quote_volume, taker_buy_base_volume, taker_buy_quote_volume]
+    optional_compare_fields: [open_time, trade_count, trades]
+    request_limit: 1000
+
+  - table: binance_1h_usdm_kline_raw
+    kind: kline
+    endpoint: usdm_klines
+    key_fields: [symbol]
+    time_fields: [timestamp, open_time]
+    interval_field:
+    fixed_interval: 1h
+    compare_fields: [timestamp, open, high, low, close, volume, close_time, quote_volume, taker_buy_base_volume, taker_buy_quote_volume]
+    optional_compare_fields: [open_time, trade_count, trades]
+    request_limit: 1000
+
+  - table: binance_1h_usdm_funding_rate_raw
+    kind: funding
+    endpoint: usdm_funding
+    key_fields: [symbol]
+    time_fields: [funding_time, timestamp]
+    interval_field:
+    compare_fields: [symbol, funding_rate, funding_time, mark_price]
+    request_limit: 1000
+
+  - table: binance_kline_coinm_perp_raw
+    kind: kline
+    endpoint: coinm_klines
+    key_fields: [symbol, interval]
+    time_fields: [timestamp, open_time]
+    interval_field: interval
+    compare_fields: [timestamp, open, high, low, close, volume]
+    optional_compare_fields: [open_time, close_time, trade_count, trades, base_asset_volume, taker_buy_volume, taker_buy_base_asset_volume]
+    request_limit: 1000
+
+  - table: binance_kline_coinm_delivery_raw
+    kind: kline
+    endpoint: coinm_continuous_klines
+    key_fields: [pair, contract_type, interval]
+    time_fields: [timestamp, open_time]
+    interval_field: interval
+    contract_type_field: contract_type
+    pair_field: pair
+    compare_fields: [timestamp, open, high, low, close, volume]
+    optional_compare_fields: [open_time, close_time, trade_count, trades, base_asset_volume, taker_buy_volume, taker_buy_base_asset_volume]
+    request_limit: 1000
+
+  - table: binance_funding_rate_coinm_perp_raw
+    kind: funding
+    endpoint: coinm_funding
+    key_fields: [symbol]
+    time_fields: [funding_time, timestamp]
+    interval_field:
+    compare_fields: [symbol, funding_rate, funding_time]
+    request_limit: 1000
+
+  - table: binance_kline_usdm_delivery_raw
+    kind: kline
+    endpoint: usdm_continuous_klines
+    key_fields: [pair, contract_type, interval]
+    time_fields: [timestamp, open_time]
+    interval_field: interval
+    contract_type_field: contract_type
+    pair_field: pair
+    compare_fields: [timestamp, open, high, low, close, volume, close_time, quote_volume, taker_buy_base_volume, taker_buy_quote_volume]
+    optional_compare_fields: [open_time, trade_count, trades]
+    request_limit: 1000
+
+  - table: binance_futures_symbols
+    kind: registry
+    endpoint: usdm_exchange_info
+    key_fields: [symbol]
+    time_fields: []
+    interval_field:
+    compare_fields: [symbol, status, contract_type, quote_asset, margin_asset, is_enabled, onboard_date_ms]
+    request_limit: 1000
