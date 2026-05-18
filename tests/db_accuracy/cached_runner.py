@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from tests.db_accuracy.binance_source import BinanceSource
+from tests.db_accuracy.cache_models import (
+    CachedCompareRequest,
+    CachedRunResult,
+    CachedShardResult,
+    MarketShard,
+)
+from tests.db_accuracy.cache_store import CacheStore
+from tests.db_accuracy.cached_db_reader import CachedDBReader
+from tests.db_accuracy.cached_source import CachedBinanceSource
+from tests.db_accuracy.datacompy_engine import DataComPyEngine
+from tests.db_accuracy.db_reader import DBAccuracyReader
+from tests.db_accuracy.frame_normalizer import rows_to_normalized_frame
+from tests.db_accuracy.models import ResolvedTableSpec, TableSpec
+from tests.db_accuracy.shard_planner import (
+    explicit_market_key,
+    split_time_partitions,
+    validate_cached_request,
+)
+from tests.db_accuracy.table_specs import load_table_specs, resolve_spec
+
+
+SOURCE_FAILURE_STATUSES = {"source_market_unavailable", "source_request_failed"}
+
+
+class CachedAccuracyRunner:
+    def __init__(self, db: Any = None, source: Any = None) -> None:
+        if db is None:
+            from core.db_client import DBClient
+
+            db = DBClient()
+        self.db = db
+        self.source = source if source is not None else BinanceSource()
+
+    def run(self, request: CachedCompareRequest) -> CachedRunResult:
+        validate_cached_request(request)
+
+        spec = _find_spec(request.table)
+        columns = DBAccuracyReader(self.db).table_columns(spec.table)
+        resolved = resolve_spec(spec, columns)
+        if resolved.time_field is None:
+            raise ValueError(f"{request.table} has no time field for cached comparison")
+
+        db_reader = CachedDBReader(self.db)
+        cached_source = CachedBinanceSource(
+            store=CacheStore(request.cache_root),
+            source=self.source,
+        )
+        engine = DataComPyEngine(report_root=Path(request.cache_root) / "reports")
+        result = CachedRunResult()
+
+        shards = _build_shards(resolved, request, db_reader)
+        partitions = split_time_partitions(
+            request.start_ms,
+            request.end_ms,
+            request.partition_days,
+        )
+
+        for shard in shards:
+            for partition in partitions:
+                try:
+                    source_frame, manifest = cached_source.ensure_partition(
+                        resolved.spec,
+                        shard,
+                        partition,
+                        refresh=request.refresh_cache,
+                    )
+                    db_rows = db_reader.rows_for_partition(shard, partition)
+                    db_frame = rows_to_normalized_frame(shard, db_rows)
+
+                    if manifest.status in SOURCE_FAILURE_STATUSES:
+                        result.shards.append(
+                            CachedShardResult(
+                                shard_label=shard.label,
+                                partition_label=partition.label,
+                                status="failed",
+                                db_rows=db_frame.height,
+                                source_rows=source_frame.height,
+                                differences=max(db_frame.height, 1),
+                                report_path=None,
+                                diff_path=None,
+                                message=_source_failure_message(
+                                    manifest.status,
+                                    manifest.source_error,
+                                ),
+                            )
+                        )
+                        continue
+
+                    result.shards.append(
+                        engine.compare(
+                            shard_label=shard.label,
+                            partition_label=partition.label,
+                            db_frame=db_frame,
+                            source_frame=source_frame,
+                            join_columns=shard.join_columns,
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001 - runner returns shard failures
+                    result.shards.append(
+                        CachedShardResult(
+                            shard_label=shard.label,
+                            partition_label=partition.label,
+                            status="failed",
+                            db_rows=0,
+                            source_rows=0,
+                            differences=1,
+                            report_path=None,
+                            diff_path=None,
+                            message=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+
+        return result
+
+
+def cached_result_to_json(result: CachedRunResult) -> str:
+    return json.dumps(
+        {
+            "passed": result.passed,
+            "summary": result.summary_text(),
+            "shards": [asdict(shard) for shard in result.shards],
+        },
+        ensure_ascii=False,
+        indent=2,
+        default=str,
+    )
+
+
+def _find_spec(table: str) -> TableSpec:
+    for spec in load_table_specs():
+        if spec.table == table:
+            return spec
+    raise ValueError(f"unknown table for cached comparison: {table}")
+
+
+def _build_shards(
+    resolved: ResolvedTableSpec,
+    request: CachedCompareRequest,
+    db_reader: CachedDBReader,
+) -> list[MarketShard]:
+    explicit = explicit_market_key(resolved, request)
+    if explicit is not None:
+        keys = [explicit]
+    else:
+        keys = db_reader.discover_market_keys(
+            table=resolved.spec.table,
+            key_fields=resolved.key_fields,
+            time_field=_required_time_field(resolved),
+            start_ms=request.start_ms,
+            end_ms=request.end_ms,
+            filters=_discovery_filters(resolved, request),
+            limit=request.max_shards,
+        )
+
+    return [
+        MarketShard(
+            table=resolved.spec.table,
+            endpoint=resolved.spec.endpoint,
+            kind=resolved.spec.kind,
+            key_values=dict(key),
+            time_field=_required_time_field(resolved),
+            source_time_field=(
+                resolved.spec.source_time_field or _required_time_field(resolved)
+            ),
+            compare_fields=resolved.compare_fields,
+            request_limit=resolved.spec.request_limit,
+        )
+        for key in keys
+    ]
+
+
+def _discovery_filters(
+    resolved: ResolvedTableSpec,
+    request: CachedCompareRequest,
+) -> dict[str, Any]:
+    candidates = {
+        "symbol": request.symbols,
+        "pair": request.pairs,
+        "contract_type": request.contract_types,
+        "interval": request.intervals,
+    }
+    return {
+        field: values[0]
+        for field, values in candidates.items()
+        if field in resolved.key_fields and values
+    }
+
+
+def _required_time_field(resolved: ResolvedTableSpec) -> str:
+    if resolved.time_field is None:
+        raise ValueError(f"{resolved.spec.table} has no time field for cached comparison")
+    return resolved.time_field
+
+
+def _source_failure_message(status: str, source_error: str | None) -> str:
+    if source_error:
+        return f"{status}: {source_error}"
+    return status
