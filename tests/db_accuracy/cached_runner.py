@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -40,29 +40,33 @@ class CachedAccuracyRunner:
         self.source = source if source is not None else BinanceSource()
 
     def run(self, request: CachedCompareRequest) -> CachedRunResult:
-        validate_cached_request(request)
+        try:
+            validate_cached_request(request)
+            spec = _find_spec(request.table)
+            columns = DBAccuracyReader(self.db).table_columns(spec.table)
+            resolved = resolve_spec(spec, columns)
+            if resolved.time_field is None:
+                raise ValueError(
+                    f"{request.table} has no time field for cached comparison"
+                )
 
-        spec = _find_spec(request.table)
-        columns = DBAccuracyReader(self.db).table_columns(spec.table)
-        resolved = resolve_spec(spec, columns)
-        if resolved.time_field is None:
-            raise ValueError(f"{request.table} has no time field for cached comparison")
+            db_reader = CachedDBReader(self.db)
+            cached_source = CachedBinanceSource(
+                store=CacheStore(request.cache_root),
+                source=self.source,
+            )
+            report_root = Path(request.cache_root) / "reports"
+            engine = DataComPyEngine(report_root=report_root)
+            shards = _build_shards(resolved, request, db_reader)
+            partitions = split_time_partitions(
+                request.start_ms,
+                request.end_ms,
+                request.partition_days,
+            )
+        except Exception as exc:  # noqa: BLE001 - runner reports setup failures
+            return _setup_failure_result(request, exc)
 
-        db_reader = CachedDBReader(self.db)
-        cached_source = CachedBinanceSource(
-            store=CacheStore(request.cache_root),
-            source=self.source,
-        )
-        engine = DataComPyEngine(report_root=Path(request.cache_root) / "reports")
         result = CachedRunResult()
-
-        shards = _build_shards(resolved, request, db_reader)
-        partitions = split_time_partitions(
-            request.start_ms,
-            request.end_ms,
-            request.partition_days,
-        )
-
         for shard in shards:
             for partition in partitions:
                 try:
@@ -83,7 +87,10 @@ class CachedAccuracyRunner:
                                 status="failed",
                                 db_rows=db_frame.height,
                                 source_rows=source_frame.height,
-                                differences=max(db_frame.height, 1),
+                                differences=_source_failure_differences(
+                                    manifest.status,
+                                    db_frame.height,
+                                ),
                                 report_path=None,
                                 diff_path=None,
                                 message=_source_failure_message(
@@ -94,14 +101,15 @@ class CachedAccuracyRunner:
                         )
                         continue
 
+                    shard_result = engine.compare(
+                        shard_label=shard.label,
+                        partition_label=partition.label,
+                        db_frame=db_frame,
+                        source_frame=source_frame,
+                        join_columns=shard.join_columns,
+                    )
                     result.shards.append(
-                        engine.compare(
-                            shard_label=shard.label,
-                            partition_label=partition.label,
-                            db_frame=db_frame,
-                            source_frame=source_frame,
-                            join_columns=shard.join_columns,
-                        )
+                        _with_cache_relative_artifact_paths(shard_result)
                     )
                 except Exception as exc:  # noqa: BLE001 - runner returns shard failures
                     result.shards.append(
@@ -187,11 +195,17 @@ def _discovery_filters(
         "contract_type": request.contract_types,
         "interval": request.intervals,
     }
-    return {
-        field: values[0]
-        for field, values in candidates.items()
-        if field in resolved.key_fields and values
-    }
+    filters: dict[str, Any] = {}
+    for field, values in candidates.items():
+        if field not in resolved.key_fields or not values:
+            continue
+        if len(values) > 1:
+            raise ValueError(
+                "multi-value discovery filters are unsupported in this version: "
+                f"{field}"
+            )
+        filters[field] = values[0]
+    return filters
 
 
 def _required_time_field(resolved: ResolvedTableSpec) -> str:
@@ -204,3 +218,41 @@ def _source_failure_message(status: str, source_error: str | None) -> str:
     if source_error:
         return f"{status}: {source_error}"
     return status
+
+
+def _setup_failure_result(request: CachedCompareRequest, exc: Exception) -> CachedRunResult:
+    return CachedRunResult(
+        shards=[
+            CachedShardResult(
+                shard_label=f"table={request.table}",
+                partition_label="setup",
+                status="failed",
+                db_rows=0,
+                source_rows=0,
+                differences=1,
+                report_path=None,
+                diff_path=None,
+                message=f"setup_error:{type(exc).__name__}:{exc}",
+            )
+        ]
+    )
+
+
+def _source_failure_differences(status: str, db_rows: int) -> int:
+    if status == "source_request_failed":
+        return 1
+    return max(db_rows, 1)
+
+
+def _with_cache_relative_artifact_paths(result: CachedShardResult) -> CachedShardResult:
+    return replace(
+        result,
+        report_path=_cache_relative_artifact_path(result.report_path),
+        diff_path=_cache_relative_artifact_path(result.diff_path),
+    )
+
+
+def _cache_relative_artifact_path(path: str | None) -> str | None:
+    if path is None or path.startswith("reports/"):
+        return path
+    return f"reports/{path}"
