@@ -64,6 +64,61 @@ Numeric values are compared with Decimal normalization. For example, `1.2300` an
 
 Row keys for time-series comparisons are normalized before matching, so DB timestamps represented as integers, Decimals, or numeric strings match the same upstream timestamp.
 
+## Cached Range Compare Mode
+
+Cached mode is intended for large Binance raw tables where direct full-history comparison would create too many DB queries and Binance REST requests.
+
+The minimum execution unit is a market shard plus time partition:
+
+- USDM/Spot Kline: `symbol + interval + time partition`
+- Funding: `symbol + time partition`
+- COIN-M perpetual Kline: `symbol + interval + time partition`
+- Delivery/continuous Kline: `pair + contract_type + interval + time partition`
+
+Run one explicit USDM Kline market:
+
+```bash
+python3 -m pytest tests/test_binance_db_accuracy.py -v \
+  --run-db-accuracy \
+  --db-accuracy-mode cached \
+  --db-accuracy-table binance_kline_all_future_raw \
+  --db-accuracy-symbol BTCUSDT \
+  --db-accuracy-interval 1m \
+  --db-accuracy-start-ms 1704067200000 \
+  --db-accuracy-end-ms 1704153599999
+```
+
+Run one delivery market:
+
+```bash
+python3 -m pytest tests/test_binance_db_accuracy.py -v \
+  --run-db-accuracy \
+  --db-accuracy-mode cached \
+  --db-accuracy-table binance_kline_usdm_delivery_raw \
+  --db-accuracy-pair BTCUSDT \
+  --db-accuracy-contract-type CURRENT_QUARTER \
+  --db-accuracy-interval 1h \
+  --db-accuracy-start-ms 1704067200000 \
+  --db-accuracy-end-ms 1706745599999
+```
+
+Discover market shards from DB for a fixed interval and cap the run:
+
+```bash
+python3 -m pytest tests/test_binance_db_accuracy.py -v \
+  --run-db-accuracy \
+  --db-accuracy-mode cached \
+  --db-accuracy-table binance_kline_all_future_raw \
+  --db-accuracy-interval 1m \
+  --db-accuracy-start-ms 1704067200000 \
+  --db-accuracy-end-ms 1704153599999 \
+  --db-accuracy-max-shards 20
+```
+
+Cache files are written under `.cache/binance_accuracy` by default. Use `--db-accuracy-cache-root` to place cached Binance source data on a larger disk.
+
+Cached mode writes one DataComPy report and one JSON diff summary per compared shard partition under the cache root's `reports/` directory. Binance source partitions with invalid or unavailable markets are recorded in manifest files with `source_market_unavailable`; request and rate-limit failures are recorded as `source_request_failed`.
+
 ## Default CI Behavior
 
 The suite is skipped unless `--run-db-accuracy` is passed. Default `pytest` and existing CI flows do not run the full DB accuracy validation.

@@ -81,6 +81,8 @@ def test_data_consistency():
 python3 -m pytest tests/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
+For large raw tables, use cached range compare mode instead of direct full-history validation. Cached mode stores Binance source rows as market/time partitioned local Parquet files, queries DB rows for the same shard, and compares both sides with DataComPy. See `docs/binance_db_accuracy_validation.md` for command examples.
+
 更多运行方式见 `docs/binance_db_accuracy_validation.md`。
 
 ### 4. 测试范围控制 (Scope Restriction)
