@@ -62,10 +62,19 @@ def test_ensure_partition_fetches_and_writes_missing_partition(tmp_path):
     store = CacheStore(tmp_path)
     fetcher = CachedBinanceSource(store=store, source=source)
 
-    manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
 
     assert manifest.status == "complete"
     assert manifest.row_count == 1
+    expected_frame = {
+        "symbol": ["BTCUSDT"],
+        "interval": ["1m"],
+        "timestamp": ["1704067200000"],
+        "timestamp__compare": ["1704067200000"],
+        "open": ["1"],
+        "close": ["2"],
+    }
+    assert frame.to_dict(as_series=False) == expected_frame
     assert source.calls == [
         (
             _spec(),
@@ -77,14 +86,7 @@ def test_ensure_partition_fetches_and_writes_missing_partition(tmp_path):
 
     paths = store.paths_for(_shard(), _partition())
     assert store.read_manifest(paths) == manifest
-    assert store.read_frame(paths).to_dict(as_series=False) == {
-        "symbol": ["BTCUSDT"],
-        "interval": ["1m"],
-        "timestamp": ["1704067200000"],
-        "timestamp__compare": ["1704067200000"],
-        "open": ["1"],
-        "close": ["2"],
-    }
+    assert store.read_frame(paths).to_dict(as_series=False) == expected_frame
 
 
 def test_ensure_partition_reuses_complete_partition_without_refresh(tmp_path):
@@ -126,9 +128,10 @@ def test_ensure_partition_reuses_complete_partition_without_refresh(tmp_path):
     store.write_manifest(paths, existing)
     fetcher = CachedBinanceSource(store=store, source=source)
 
-    manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
 
     assert manifest == existing
+    assert frame.to_dict(as_series=False)["open"] == ["1"]
     assert source.calls == []
     assert store.read_frame(paths).to_dict(as_series=False)["open"] == ["1"]
 
@@ -153,11 +156,20 @@ def test_ensure_partition_records_empty_partition_and_removes_stale_data(tmp_pat
     )
     fetcher = CachedBinanceSource(store=store, source=source)
 
-    manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=True)
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=True)
 
     assert manifest.status == "empty"
     assert manifest.row_count == 0
     assert manifest.source_error is None
+    assert frame.is_empty()
+    assert frame.columns == [
+        "symbol",
+        "interval",
+        "timestamp",
+        "timestamp__compare",
+        "open",
+        "close",
+    ]
     assert not paths.data_path.exists()
 
 
@@ -173,8 +185,9 @@ def test_ensure_partition_records_source_errors(tmp_path, error, status):
     store = CacheStore(tmp_path)
     fetcher = CachedBinanceSource(store=store, source=source)
 
-    manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
 
     assert manifest.status == status
     assert manifest.row_count == 0
     assert manifest.source_error == str(error)
+    assert frame.is_empty()
