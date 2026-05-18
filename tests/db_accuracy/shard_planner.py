@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from tests.db_accuracy.cache_models import CachedCompareRequest, TimePartition
 from tests.db_accuracy.models import ResolvedTableSpec
 
@@ -53,11 +55,15 @@ def explicit_market_key(spec: ResolvedTableSpec, request: CachedCompareRequest) 
 
 
 def split_time_partitions(start_ms: int, end_ms: int, partition_days: int) -> list[TimePartition]:
-    partition_ms = partition_days * DAY_MS
+    if partition_days < 1:
+        raise ValueError("partition_days must be >= 1")
+
     partitions: list[TimePartition] = []
     cursor = start_ms
     while cursor <= end_ms:
-        partition_end = min(cursor + partition_ms - 1, end_ms)
+        cursor_date = datetime.fromtimestamp(cursor / 1000, UTC).date()
+        bucket_end = datetime.combine(cursor_date, datetime.min.time(), UTC) + timedelta(days=partition_days)
+        partition_end = min(int(bucket_end.timestamp() * 1000) - 1, end_ms)
         partitions.append(TimePartition(start_ms=cursor, end_ms=partition_end))
         cursor = partition_end + 1
     return partitions

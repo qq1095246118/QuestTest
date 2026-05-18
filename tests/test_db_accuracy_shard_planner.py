@@ -131,3 +131,26 @@ def test_split_time_partitions_uses_inclusive_end_ms():
         (1704067200000, 1704153599999, "date=2024-01-01"),
         (1704153600000, 1704239999999, "date=2024-01-02"),
     ]
+
+
+@pytest.mark.parametrize("partition_days", [0, -1])
+def test_split_time_partitions_rejects_non_positive_partition_days(partition_days):
+    with pytest.raises(ValueError, match="partition_days must be >= 1"):
+        split_time_partitions(
+            start_ms=1704067200000,
+            end_ms=1704153599999,
+            partition_days=partition_days,
+        )
+
+
+def test_split_time_partitions_aligns_intraday_start_to_utc_date_buckets():
+    partitions = split_time_partitions(
+        start_ms=1704110400000,
+        end_ms=1704196800000,
+        partition_days=1,
+    )
+
+    assert [(part.start_ms, part.end_ms, part.bucket) for part in partitions] == [
+        (1704110400000, 1704153599999, "date=2024-01-01"),
+        (1704153600000, 1704196800000, "date=2024-01-02"),
+    ]
