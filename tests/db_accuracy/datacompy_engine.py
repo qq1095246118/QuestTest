@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +13,7 @@ from tests.db_accuracy.cache_models import CachedShardResult
 
 
 SAMPLE_LIMIT = 20
-SOURCE_SUFFIX = "__source"
+RIGHT_SUFFIX_BASE = "__rhs"
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class DataComPyEngine:
         report_path = self.report_root / f"{safe_name}.report.txt"
         diff_path = self.report_root / f"{safe_name}.diff.json"
 
-        compare_columns = _common_compare_columns(db_frame, source_frame, join_columns)
+        compare_columns = _payload_compare_columns(db_frame, source_frame, join_columns)
         datacompy_columns = [*join_columns, *compare_columns]
         db_compare_frame = _with_missing_columns(
             db_frame,
@@ -124,11 +125,13 @@ def _build_diff_payload(
     compare_columns: tuple[str, ...],
     summary: CompareSummary,
 ) -> dict[str, Any]:
+    right_suffix = _right_suffix(db_frame, source_frame, compare_columns)
     unequal_rows = _unequal_joined_rows(
         db_frame,
         source_frame,
         join_columns,
         compare_columns,
+        right_suffix,
     ).head(SAMPLE_LIMIT)
     return {
         "db_only_count": summary.db_only_count,
@@ -144,6 +147,7 @@ def _build_diff_payload(
             unequal_rows,
             join_columns,
             compare_columns,
+            right_suffix,
         ),
     }
 
@@ -165,21 +169,33 @@ def _unequal_joined_rows(
     source_frame: pl.DataFrame,
     join_columns: tuple[str, ...],
     compare_columns: tuple[str, ...],
+    right_suffix: str | None = None,
 ) -> pl.DataFrame:
+    if right_suffix is None:
+        right_suffix = _right_suffix(db_frame, source_frame, compare_columns)
     if db_frame.is_empty() or source_frame.is_empty() or not compare_columns:
-        return _empty_joined_frame(db_frame, source_frame, join_columns, compare_columns)
+        return _empty_joined_frame(
+            db_frame,
+            source_frame,
+            join_columns,
+            compare_columns,
+            right_suffix,
+        )
 
+    right_columns = {
+        column: f"{column}{right_suffix}"
+        for column in compare_columns
+    }
     joined = db_frame.select([*join_columns, *compare_columns]).join(
-        source_frame.select([*join_columns, *compare_columns]),
+        source_frame.select([*join_columns, *compare_columns]).rename(right_columns),
         on=list(join_columns),
         how="inner",
-        suffix=SOURCE_SUFFIX,
     )
     if joined.is_empty():
         return joined
 
     expressions = [
-        pl.col(column).ne_missing(pl.col(f"{column}{SOURCE_SUFFIX}"))
+        pl.col(column).ne_missing(pl.col(f"{column}{right_suffix}"))
         for column in compare_columns
     ]
     return joined.filter(pl.any_horizontal(expressions))
@@ -190,6 +206,7 @@ def _empty_joined_frame(
     source_frame: pl.DataFrame,
     join_columns: tuple[str, ...],
     compare_columns: tuple[str, ...],
+    right_suffix: str,
 ) -> pl.DataFrame:
     schema: dict[str, pl.DataType] = {}
     for column in join_columns:
@@ -199,7 +216,7 @@ def _empty_joined_frame(
         )
     for column in compare_columns:
         schema[column] = db_frame.schema.get(column, pl.String)
-        schema[f"{column}{SOURCE_SUFFIX}"] = source_frame.schema.get(column, pl.String)
+        schema[f"{column}{right_suffix}"] = source_frame.schema.get(column, pl.String)
     return pl.DataFrame(schema=schema)
 
 
@@ -207,13 +224,14 @@ def _unequal_sample(
     unequal_rows: pl.DataFrame,
     join_columns: tuple[str, ...],
     compare_columns: tuple[str, ...],
+    right_suffix: str,
 ) -> list[dict[str, Any]]:
     samples: list[dict[str, Any]] = []
     for row in unequal_rows.to_dicts():
         changed_columns = [
             column
             for column in compare_columns
-            if row.get(column) != row.get(f"{column}{SOURCE_SUFFIX}")
+            if row.get(column) != row.get(f"{column}{right_suffix}")
         ]
         samples.append(
             {
@@ -221,7 +239,7 @@ def _unequal_sample(
                 "columns": changed_columns,
                 "db": {column: row.get(column) for column in changed_columns},
                 "source": {
-                    column: row.get(f"{column}{SOURCE_SUFFIX}")
+                    column: row.get(f"{column}{right_suffix}")
                     for column in changed_columns
                 },
             }
@@ -229,18 +247,19 @@ def _unequal_sample(
     return samples
 
 
-def _common_compare_columns(
+def _payload_compare_columns(
     db_frame: pl.DataFrame,
     source_frame: pl.DataFrame,
     join_columns: tuple[str, ...],
 ) -> tuple[str, ...]:
     join_column_set = set(join_columns)
-    source_column_set = set(source_frame.columns)
-    return tuple(
+    columns = [column for column in db_frame.columns if column not in join_column_set]
+    columns.extend(
         column
-        for column in db_frame.columns
-        if column not in join_column_set and column in source_column_set
+        for column in source_frame.columns
+        if column not in join_column_set and column not in columns
     )
+    return tuple(columns)
 
 
 def _with_missing_columns(
@@ -257,6 +276,20 @@ def _with_missing_columns(
     return output
 
 
+def _right_suffix(
+    db_frame: pl.DataFrame,
+    source_frame: pl.DataFrame,
+    compare_columns: tuple[str, ...],
+) -> str:
+    existing_columns = set(db_frame.columns) | set(source_frame.columns)
+    suffix = RIGHT_SUFFIX_BASE
+    index = 1
+    while any(f"{column}{suffix}" in existing_columns for column in compare_columns):
+        suffix = f"{RIGHT_SUFFIX_BASE}{index}"
+        index += 1
+    return suffix
+
+
 def _safe_name(text: str) -> str:
     safe = []
     for char in text:
@@ -264,4 +297,5 @@ def _safe_name(text: str) -> str:
             safe.append(char)
         else:
             safe.append("_")
-    return "".join(safe)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return f"{''.join(safe)}__{digest}"
