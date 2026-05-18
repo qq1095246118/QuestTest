@@ -6,6 +6,7 @@ import pytest
 from tests.db_accuracy.cache_models import CachedCompareRequest
 from tests.db_accuracy.cached_runner import CachedAccuracyRunner, cached_result_to_json
 from tests.db_accuracy.runner import AccuracyRunner, result_to_json
+from tests.db_accuracy.shard_planner import validate_cached_request
 
 
 pytestmark = pytest.mark.db_accuracy
@@ -20,23 +21,9 @@ def test_binance_raw_and_metadata_db_accuracy(request):
     """
     mode = request.config.getoption("--db-accuracy-mode")
     if mode == "cached":
-        result = CachedAccuracyRunner().run(
-            CachedCompareRequest(
-                table=_single_table(request.config.getoption("--db-accuracy-table")),
-                start_ms=request.config.getoption("--db-accuracy-start-ms"),
-                end_ms=request.config.getoption("--db-accuracy-end-ms"),
-                cache_root=Path(request.config.getoption("--db-accuracy-cache-root")),
-                symbols=tuple(request.config.getoption("--db-accuracy-symbol")),
-                pairs=tuple(request.config.getoption("--db-accuracy-pair")),
-                contract_types=tuple(
-                    request.config.getoption("--db-accuracy-contract-type")
-                ),
-                intervals=tuple(request.config.getoption("--db-accuracy-interval")),
-                partition_days=request.config.getoption("--db-accuracy-partition-days"),
-                refresh_cache=request.config.getoption("--db-accuracy-refresh-cache"),
-                max_shards=request.config.getoption("--db-accuracy-max-shards"),
-            )
-        )
+        cached_request = _cached_compare_request(request.config)
+        validate_cached_request(cached_request)
+        result = CachedAccuracyRunner().run(cached_request)
 
         allure.attach(
             result.summary_text(),
@@ -80,3 +67,19 @@ def _single_table(tables: list[str]) -> str:
             "cached DB accuracy mode requires exactly one --db-accuracy-table"
         )
     return tables[0]
+
+
+def _cached_compare_request(config) -> CachedCompareRequest:
+    return CachedCompareRequest(
+        table=_single_table(config.getoption("--db-accuracy-table")),
+        start_ms=config.getoption("--db-accuracy-start-ms"),
+        end_ms=config.getoption("--db-accuracy-end-ms"),
+        cache_root=Path(config.getoption("--db-accuracy-cache-root")),
+        symbols=tuple(config.getoption("--db-accuracy-symbol")),
+        pairs=tuple(config.getoption("--db-accuracy-pair")),
+        contract_types=tuple(config.getoption("--db-accuracy-contract-type")),
+        intervals=tuple(config.getoption("--db-accuracy-interval")),
+        partition_days=config.getoption("--db-accuracy-partition-days"),
+        refresh_cache=config.getoption("--db-accuracy-refresh-cache"),
+        max_shards=config.getoption("--db-accuracy-max-shards"),
+    )

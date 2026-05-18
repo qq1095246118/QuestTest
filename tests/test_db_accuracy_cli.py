@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+import tests.test_binance_db_accuracy as db_accuracy_entry
+
 
 pytest_plugins = ("pytester",)
 
@@ -91,3 +95,88 @@ def test_cached_db_accuracy_defaults_are_registered(pytester):
     result = pytester.runpytest()
 
     result.assert_outcomes(passed=1)
+
+
+def test_cached_mode_validates_single_table_before_runner_construction(monkeypatch):
+    monkeypatch.setattr(
+        db_accuracy_entry,
+        "CachedAccuracyRunner",
+        _runner_that_must_not_be_constructed,
+    )
+    monkeypatch.setattr(db_accuracy_entry.allure, "attach", _no_op_attach)
+
+    request = _fake_request(
+        {
+            "--db-accuracy-mode": "cached",
+            "--db-accuracy-table": [],
+            "--db-accuracy-start-ms": 1704067200000,
+            "--db-accuracy-end-ms": 1704153599999,
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="cached DB accuracy mode requires exactly one --db-accuracy-table",
+    ):
+        db_accuracy_entry.test_binance_raw_and_metadata_db_accuracy(request)
+
+
+def test_cached_mode_validates_time_range_before_runner_construction(monkeypatch):
+    monkeypatch.setattr(
+        db_accuracy_entry,
+        "CachedAccuracyRunner",
+        _runner_that_must_not_be_constructed,
+    )
+    monkeypatch.setattr(db_accuracy_entry.allure, "attach", _no_op_attach)
+
+    request = _fake_request(
+        {
+            "--db-accuracy-mode": "cached",
+            "--db-accuracy-table": ["binance_kline_all_future_raw"],
+            "--db-accuracy-start-ms": None,
+            "--db-accuracy-end-ms": None,
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="start_ms and end_ms are required for cached DB accuracy comparison",
+    ):
+        db_accuracy_entry.test_binance_raw_and_metadata_db_accuracy(request)
+
+
+def _runner_that_must_not_be_constructed(*_args, **_kwargs):
+    raise AssertionError("CachedAccuracyRunner was constructed before validation")
+
+
+def _no_op_attach(*_args, **_kwargs):
+    return None
+
+
+def _fake_request(options):
+    defaults = {
+        "--db-accuracy-cache-root": ".cache/binance_accuracy",
+        "--db-accuracy-symbol": [],
+        "--db-accuracy-pair": [],
+        "--db-accuracy-contract-type": [],
+        "--db-accuracy-interval": [],
+        "--db-accuracy-partition-days": 1,
+        "--db-accuracy-refresh-cache": False,
+        "--db-accuracy-max-shards": 100,
+        "--db-accuracy-safety-hours": 24,
+    }
+    defaults.update(options)
+    return _FakeRequest(_FakeConfig(defaults))
+
+
+class _FakeRequest:
+    def __init__(self, config):
+        self.config = config
+
+
+class _FakeConfig:
+    def __init__(self, options):
+        self.options = options
+
+    def getoption(self, name):
+        return self.options[name]
