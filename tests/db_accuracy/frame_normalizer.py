@@ -9,6 +9,10 @@ from tests.db_accuracy.compare import normalize_value
 from tests.db_accuracy.models import SourceRow
 
 
+MISSING_FIELD_SENTINEL = "__DB_ACCURACY_MISSING__"
+COMPARE_COLUMN_SUFFIX = "__compare"
+
+
 class DuplicateJoinKeyError(ValueError):
     pass
 
@@ -28,19 +32,39 @@ def source_rows_to_normalized_frame(shard: MarketShard, rows: list[SourceRow]) -
     return rows_to_normalized_frame(shard, [row.fields for row in rows])
 
 
+def normalized_compare_columns(shard: MarketShard) -> tuple[str, ...]:
+    join_columns = set(shard.join_columns)
+    return tuple(
+        _payload_column(field) if field in join_columns else field
+        for field in shard.compare_fields
+    )
+
+
 def _columns(shard: MarketShard) -> tuple[str, ...]:
-    return (*shard.key_values.keys(), *shard.compare_fields)
+    return (*shard.join_columns, *normalized_compare_columns(shard))
 
 
 def _normalize_row(shard: MarketShard, row: dict[str, Any]) -> dict[str, str | None]:
     output: dict[str, str | None] = {}
     for field, value in shard.key_values.items():
         output[field] = str(value)
+    output[shard.time_field] = _normalized_to_string(
+        normalize_value(row.get(shard.time_field))
+    )
+
+    join_columns = set(shard.join_columns)
     for field in shard.compare_fields:
-        value = row.get(field)
-        normalized = normalize_value(value)
-        output[field] = _normalized_to_string(normalized)
+        output_field = _payload_column(field) if field in join_columns else field
+        if field in row:
+            normalized = normalize_value(row[field])
+            output[output_field] = _normalized_to_string(normalized)
+        else:
+            output[output_field] = MISSING_FIELD_SENTINEL
     return output
+
+
+def _payload_column(field: str) -> str:
+    return f"{field}{COMPARE_COLUMN_SUFFIX}"
 
 
 def _normalized_to_string(value: Any) -> str | None:
@@ -48,6 +72,9 @@ def _normalized_to_string(value: Any) -> str | None:
         return None
     if isinstance(value, tuple) and len(value) == 4 and value[0] == "decimal":
         _, sign, digits, exponent = value
+        if any(not isinstance(digit, int) or digit < 0 or digit > 9 for digit in digits):
+            digits_text = ",".join(str(digit) for digit in digits)
+            return f"decimal:{sign}:{digits_text}:{exponent}"
         digits_text = "".join(str(digit) for digit in digits)
         if exponent < 0:
             split_at = len(digits_text) + exponent
