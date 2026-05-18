@@ -83,6 +83,30 @@ def test_cached_request_requires_time_range_and_table(tmp_path):
         validate_cached_request(request)
 
 
+def test_cached_request_requires_start_and_end_ms(tmp_path):
+    request = CachedCompareRequest(
+        table="binance_kline_all_future_raw",
+        start_ms=None,
+        end_ms=None,
+        cache_root=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="start_ms and end_ms are required"):
+        validate_cached_request(request)
+
+
+def test_cached_request_rejects_end_before_start(tmp_path):
+    request = CachedCompareRequest(
+        table="binance_kline_all_future_raw",
+        start_ms=1704153599999,
+        end_ms=1704067200000,
+        cache_root=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="end_ms must be greater than or equal to start_ms"):
+        validate_cached_request(request)
+
+
 def test_cached_request_rejects_non_positive_partition_days(tmp_path):
     request = CachedCompareRequest(
         table="binance_kline_all_future_raw",
