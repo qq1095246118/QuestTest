@@ -75,6 +75,21 @@ def test_cached_run_result_summarizes_shards():
     )
 
 
+def test_cached_run_result_without_shards_fails():
+    result = CachedRunResult()
+
+    assert result.passed is False
+    assert result.summary_text() == (
+        "shards=0\n"
+        "passed=0\n"
+        "failed=0\n"
+        "skipped=0\n"
+        "db_rows=0\n"
+        "source_rows=0\n"
+        "differences=0"
+    )
+
+
 def test_cache_manifest_serializes_to_plain_dict():
     manifest = CacheManifest(
         table="binance_kline_all_future_raw",

@@ -81,9 +81,9 @@ def test_data_consistency():
 python3 -m pytest tests/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
-For large raw tables, use cached range compare mode instead of direct full-history validation. Cached mode stores Binance source rows as market/time partitioned local Parquet files, queries DB rows for the same shard, and compares both sides with DataComPy. See `docs/binance_db_accuracy_validation.md` for command examples.
+大表优先使用 cached 范围分片校验模式。cached 模式会把 Binance 上游数据按市场和时间分片缓存成本地 Parquet，再查询同一 shard 的 DB 数据，并通过 DataComPy 生成文本报告和 JSON diff。
 
-更多运行方式见 `docs/binance_db_accuracy_validation.md`。
+完整功能、参数、缓存结构、报告说明和排错方式见 `docs/binance_db_accuracy_validation.md`。
 
 ### 4. 测试范围控制 (Scope Restriction)
 当前框架的测试边界被**严格限制于数据中台 PDF 文档内记载的核心表与接口**（如 `binance_1h_usdm_kline_raw` 等）。禁止擅自编写针对链上数据、新闻资讯、Meme 监控等未定型的接口测试，以免产生大量无效用例。

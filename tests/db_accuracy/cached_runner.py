@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +56,8 @@ class CachedAccuracyRunner:
                 store=CacheStore(request.cache_root),
                 source=self.source,
             )
-            report_root = Path(request.cache_root) / "reports"
+            cache_root = Path(request.cache_root)
+            report_root = _run_report_root(cache_root)
             engine = DataComPyEngine(report_root=report_root)
             shards = _build_shards(resolved, request, db_reader)
             partitions = split_time_partitions(
@@ -109,7 +111,11 @@ class CachedAccuracyRunner:
                         join_columns=shard.join_columns,
                     )
                     result.shards.append(
-                        _with_cache_relative_artifact_paths(shard_result)
+                        _with_cache_relative_artifact_paths(
+                            shard_result,
+                            report_root=report_root,
+                            cache_root=cache_root,
+                        )
                     )
                 except Exception as exc:  # noqa: BLE001 - runner returns shard failures
                     result.shards.append(
@@ -167,6 +173,9 @@ def _build_shards(
             filters=_discovery_filters(resolved, request),
             limit=request.max_shards,
         )
+
+    if not keys:
+        raise ValueError("no_shards_discovered")
 
     return [
         MarketShard(
@@ -244,15 +253,37 @@ def _source_failure_differences(status: str, db_rows: int) -> int:
     return max(db_rows, 1)
 
 
-def _with_cache_relative_artifact_paths(result: CachedShardResult) -> CachedShardResult:
+def _run_report_root(cache_root: Path) -> Path:
+    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    return cache_root / "reports" / f"run_id={run_id}"
+
+
+def _with_cache_relative_artifact_paths(
+    result: CachedShardResult,
+    report_root: Path,
+    cache_root: Path,
+) -> CachedShardResult:
     return replace(
         result,
-        report_path=_cache_relative_artifact_path(result.report_path),
-        diff_path=_cache_relative_artifact_path(result.diff_path),
+        report_path=_cache_relative_artifact_path(
+            result.report_path,
+            report_root=report_root,
+            cache_root=cache_root,
+        ),
+        diff_path=_cache_relative_artifact_path(
+            result.diff_path,
+            report_root=report_root,
+            cache_root=cache_root,
+        ),
     )
 
 
-def _cache_relative_artifact_path(path: str | None) -> str | None:
-    if path is None or path.startswith("reports/"):
+def _cache_relative_artifact_path(
+    path: str | None,
+    report_root: Path,
+    cache_root: Path,
+) -> str | None:
+    if path is None:
         return path
-    return f"reports/{path}"
+    absolute_path = report_root / path
+    return str(absolute_path.relative_to(cache_root))

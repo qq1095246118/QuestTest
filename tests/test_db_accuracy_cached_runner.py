@@ -10,9 +10,18 @@ from tests.db_accuracy.models import SourceRow, TableSpec
 
 
 class FakeDB:
-    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[dict[str, Any]] | None = None,
+        market_keys: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.queries: list[tuple[str, tuple[Any, ...]]] = []
         self.rows = rows or [_db_row(1704067200000)]
+        self.market_keys = (
+            market_keys
+            if market_keys is not None
+            else [{"symbol": "BTCUSDT", "interval": "1m"}]
+        )
 
     def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         self.queries.append((sql, params))
@@ -25,7 +34,7 @@ class FakeDB:
                 {"Field": "close"},
             ]
         if "GROUP BY" in sql:
-            return [{"symbol": "BTCUSDT", "interval": "1m"}]
+            return self.market_keys
         return self.rows
 
 
@@ -37,6 +46,8 @@ class FakeSource:
         start_ms: int,
         end_ms: int,
     ) -> list[SourceRow]:
+        if not start_ms <= 1704067200000 <= end_ms:
+            return []
         return [
             SourceRow(
                 key=1704067200000,
@@ -93,9 +104,9 @@ def test_cached_runner_passes_single_explicit_shard(tmp_path: Path, monkeypatch:
     assert result.shards[0].source_rows == 1
     assert result.shards[0].differences == 0
     assert result.shards[0].report_path is not None
-    assert result.shards[0].report_path.startswith("reports/")
+    assert result.shards[0].report_path.startswith("reports/run_id=")
     assert result.shards[0].diff_path is not None
-    assert result.shards[0].diff_path.startswith("reports/")
+    assert result.shards[0].diff_path.startswith("reports/run_id=")
     assert any(
         sql.startswith("SHOW COLUMNS FROM `binance_kline_all_future_raw`")
         for sql, _ in db.queries
@@ -127,7 +138,35 @@ def test_cached_runner_discovers_market_shards_from_db(tmp_path: Path, monkeypat
     assert result.shards[0].status == "passed"
     assert payload["passed"] is True
     assert payload["shards"][0]["db_rows"] == 1
-    assert payload["shards"][0]["report_path"].startswith("reports/")
+    assert payload["shards"][0]["report_path"].startswith("reports/run_id=")
+
+
+def test_cached_runner_fails_when_discovery_finds_no_shards(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(
+        "tests.db_accuracy.cached_runner.load_table_specs",
+        lambda: [_kline_spec()],
+    )
+    runner = CachedAccuracyRunner(db=FakeDB(market_keys=[]), source=FakeSource())
+
+    result = runner.run(
+        CachedCompareRequest(
+            table="binance_kline_all_future_raw",
+            start_ms=1704067200000,
+            end_ms=1704153599999,
+            cache_root=tmp_path,
+            intervals=("1m",),
+            max_shards=10,
+        )
+    )
+
+    assert not result.passed
+    assert len(result.shards) == 1
+    assert result.shards[0].status == "failed"
+    assert result.shards[0].message is not None
+    assert "no_shards_discovered" in result.shards[0].message
 
 
 def test_cached_runner_returns_failed_result_for_setup_errors(

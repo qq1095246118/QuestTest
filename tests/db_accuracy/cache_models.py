@@ -99,7 +99,9 @@ class CachedRunResult:
 
     @property
     def passed(self) -> bool:
-        return all(shard.status in {"passed", "skipped_empty"} for shard in self.shards)
+        return bool(self.shards) and all(
+            shard.status in {"passed", "skipped_empty"} for shard in self.shards
+        )
 
     def summary_text(self) -> str:
         passed = sum(1 for shard in self.shards if shard.status == "passed")

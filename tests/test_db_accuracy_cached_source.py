@@ -39,6 +39,10 @@ def _partition():
     return TimePartition(start_ms=1704067200000, end_ms=1704153599999)
 
 
+def _small_partition():
+    return TimePartition(start_ms=1704067200000, end_ms=1704067259999)
+
+
 class RecordingSource:
     def __init__(self, rows=None, error=None):
         self.rows = rows if rows is not None else []
@@ -63,8 +67,9 @@ def test_ensure_partition_fetches_and_writes_missing_partition(tmp_path):
     )
     store = CacheStore(tmp_path)
     fetcher = CachedBinanceSource(store=store, source=source)
+    partition = _small_partition()
 
-    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
 
     assert manifest.status == "complete"
     assert manifest.row_count == 1
@@ -82,13 +87,51 @@ def test_ensure_partition_fetches_and_writes_missing_partition(tmp_path):
             _spec(),
             ValidationKey({"symbol": "BTCUSDT", "interval": "1m"}),
             1704067200000,
-            1704153599999,
+            1704067259999,
         )
     ]
 
-    paths = store.paths_for(_shard(), _partition())
+    paths = store.paths_for(_shard(), partition)
     assert store.read_manifest(paths) == manifest
     assert store.read_frame(paths).to_dict(as_series=False) == expected_frame
+
+
+def test_ensure_partition_splits_fetches_by_source_request_limit(tmp_path):
+    class MinuteSource:
+        def __init__(self):
+            self.calls = []
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            self.calls.append((start_ms, end_ms))
+            rows = []
+            timestamp = start_ms
+            while timestamp <= end_ms:
+                rows.append(
+                    SourceRow(
+                        key=timestamp,
+                        fields={
+                            "timestamp": timestamp,
+                            "open": "1.0",
+                            "close": "2.0",
+                        },
+                    )
+                )
+                timestamp += 60_000
+            return rows
+
+    source = MinuteSource()
+    store = CacheStore(tmp_path)
+    fetcher = CachedBinanceSource(store=store, source=source)
+
+    frame, manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
+
+    assert source.calls == [
+        (1704067200000, 1704127199999),
+        (1704127200000, 1704153599999),
+    ]
+    assert frame.height == 1440
+    assert manifest.status == "complete"
+    assert manifest.row_count == 1440
 
 
 def test_ensure_partition_reuses_complete_partition_without_refresh(tmp_path):

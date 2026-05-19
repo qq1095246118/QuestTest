@@ -8,11 +8,17 @@ import polars as pl
 from tests.db_accuracy.binance_source import BinanceSource
 from tests.db_accuracy.cache_models import CacheManifest, MarketShard, TimePartition
 from tests.db_accuracy.cache_store import CacheStore
+from tests.db_accuracy.db_reader import DBAccuracyReader
 from tests.db_accuracy.frame_normalizer import (
     normalized_compare_columns,
     source_rows_to_normalized_frame,
 )
-from tests.db_accuracy.models import TableSpec, ValidationKey
+from tests.db_accuracy.models import (
+    KeyTimeRange,
+    ResolvedTableSpec,
+    TableSpec,
+    ValidationKey,
+)
 
 
 class CachedBinanceSource:
@@ -36,13 +42,18 @@ class CachedBinanceSource:
                 if manifest.status in {"empty", "source_market_unavailable"}:
                     return _empty_frame(shard), manifest
 
+        key = ValidationKey(dict(shard.key_values))
         try:
-            rows = self.source.fetch_rows(
-                spec,
-                ValidationKey(dict(shard.key_values)),
-                partition.start_ms,
-                partition.end_ms,
-            )
+            rows = []
+            for start_ms, end_ms in _source_windows(spec, shard, partition, key):
+                rows.extend(
+                    self.source.fetch_rows(
+                        spec,
+                        key,
+                        start_ms,
+                        end_ms,
+                    )
+                )
         except Exception as exc:  # noqa: BLE001 - cache records source state instead of raising
             manifest = self._manifest(
                 shard,
@@ -122,3 +133,29 @@ def _empty_frame(shard: MarketShard) -> pl.DataFrame:
 
 def _frame_columns(shard: MarketShard) -> tuple[str, ...]:
     return (*shard.join_columns, *normalized_compare_columns(shard))
+
+
+def _source_windows(
+    spec: TableSpec,
+    shard: MarketShard,
+    partition: TimePartition,
+    key: ValidationKey,
+) -> list[tuple[int, int]]:
+    resolved = ResolvedTableSpec(
+        spec=spec,
+        columns=(),
+        time_field=shard.time_field,
+        interval_field=spec.interval_field,
+        compare_fields=shard.compare_fields,
+        key_fields=tuple(shard.key_values.keys()),
+    )
+    time_range = KeyTimeRange(
+        table=shard.table,
+        key=key,
+        start_ms=partition.start_ms,
+        end_ms=partition.end_ms,
+    )
+    return [
+        (window.start_ms, window.end_ms)
+        for window in DBAccuracyReader(db=None).build_windows(resolved, time_range)
+    ]
