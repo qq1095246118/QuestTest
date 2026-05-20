@@ -154,7 +154,7 @@ def test_kd_fetch_param_003_unknown_source(kline_api):
             source="unknown",
         )
     except HTTPError as exc:
-        assert exc.response is not 哦
+        assert exc.response is not None
         response = exc.response
 
     assert response.status_code < 500
