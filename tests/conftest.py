@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import platform
+import re
 from pathlib import Path
 
 import allure
@@ -28,6 +29,11 @@ ALLURE_STORY_BY_NAME = {
     "db_consistency": "Database Consistency",
     "data_quality": "Data Quality",
 }
+
+DEFAULT_ALLURE_DIR = Path("allure-results")
+DB_ACCURACY_ALLURE_ROOT = DEFAULT_ALLURE_DIR / "db_accuracy"
+DEFAULT_ALLURE_DIR_NAMES = {"allure-results", "./allure-results"}
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -124,11 +130,82 @@ def pytest_addoption(parser):
         help="Maximum DB-discovered market shards for cached DB accuracy validation",
     )
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_configure(config):
     """
     Set TEST_ENV before test modules import config.settings.
     """
+    configure_db_accuracy_allure_dir(config)
     os.environ["TEST_ENV"] = config.getoption("--env")
+
+
+def configure_db_accuracy_allure_dir(config):
+    """
+    Isolate DB accuracy Allure output by command/table when the default Allure
+    directory is in use. Explicit --alluredir values are respected.
+    """
+    if not config.getoption("--run-db-accuracy"):
+        return None
+
+    current = getattr(config.option, "allure_report_dir", None)
+    if not current or not _is_default_allure_dir(current, _config_cwd(config)):
+        return None
+
+    report_dir = _config_cwd(config) / DB_ACCURACY_ALLURE_ROOT / _db_accuracy_run_slug(config)
+    config.option.allure_report_dir = str(report_dir)
+    return report_dir
+
+
+def _config_cwd(config) -> Path:
+    return Path(getattr(config, "cwd", Path.cwd()))
+
+
+def _is_default_allure_dir(value, cwd: Path) -> bool:
+    text = str(value).rstrip("/")
+    if text in DEFAULT_ALLURE_DIR_NAMES:
+        return True
+
+    path = Path(text)
+    if not path.is_absolute():
+        path = cwd / path
+    return path == cwd / DEFAULT_ALLURE_DIR
+
+
+def _db_accuracy_run_slug(config) -> str:
+    tables = config.getoption("--db-accuracy-table") or []
+    mode = config.getoption("--db-accuracy-mode")
+    if len(tables) == 1:
+        parts = [tables[0]]
+    elif tables:
+        parts = ["multi", *tables]
+    else:
+        parts = ["all_tables"]
+
+    if mode == "cached":
+        parts.append("cached")
+        parts.extend(_option_values_for_slug(config, "--db-accuracy-symbol", "symbol"))
+        parts.extend(_option_values_for_slug(config, "--db-accuracy-pair", "pair"))
+        parts.extend(_option_values_for_slug(config, "--db-accuracy-contract-type", "contract"))
+        parts.extend(_option_values_for_slug(config, "--db-accuracy-interval", "interval"))
+        for option, label in [
+            ("--db-accuracy-start-ms", "start"),
+            ("--db-accuracy-end-ms", "end"),
+        ]:
+            value = config.getoption(option)
+            if value is not None:
+                parts.append(f"{label}_{value}")
+
+    return _safe_path_component("__".join(str(part) for part in parts if part))
+
+
+def _option_values_for_slug(config, option: str, label: str) -> list[str]:
+    values = config.getoption(option) or []
+    return [f"{label}_{value}" for value in values]
+
+
+def _safe_path_component(value: str) -> str:
+    safe = re.sub(r"[^0-9A-Za-z_.-]+", "_", value).strip("._")
+    return (safe or "db_accuracy")[:180]
 
 
 def _extract_case_metadata(test_function):

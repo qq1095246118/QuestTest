@@ -1,3 +1,5 @@
+import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,7 +11,7 @@ pytest_plugins = ("pytester",)
 
 
 def _install_project_cli_options(pytester):
-    conftest_path = Path(__file__).with_name("conftest.py")
+    conftest_path = _project_conftest_path()
     pytester.makeconftest(
         f"""
         import importlib.util
@@ -25,6 +27,20 @@ def _install_project_cli_options(pytester):
         pytest_addoption = project_conftest.pytest_addoption
         """
     )
+
+
+def _project_conftest_path():
+    return Path(__file__).with_name("conftest.py")
+
+
+def _load_project_conftest():
+    conftest_path = _project_conftest_path()
+    spec = importlib.util.spec_from_file_location("project_conftest_for_tests", conftest_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_cached_db_accuracy_options_are_registered(pytester):
@@ -93,6 +109,83 @@ def test_cached_db_accuracy_defaults_are_registered(pytester):
     )
 
     result = pytester.runpytest()
+
+    result.assert_outcomes(passed=1)
+
+
+def test_db_accuracy_default_allure_dir_is_scoped_to_single_table(tmp_path):
+    project_conftest = _load_project_conftest()
+    config = _fake_config(
+        {
+            "--run-db-accuracy": True,
+            "--db-accuracy-table": ["binance_kline_all_future_raw_1h"],
+            "--db-accuracy-mode": "direct",
+        },
+        allure_report_dir="./allure-results",
+        cwd=tmp_path,
+    )
+
+    resolved = project_conftest.configure_db_accuracy_allure_dir(config)
+
+    assert resolved == tmp_path / "allure-results" / "db_accuracy" / "binance_kline_all_future_raw_1h"
+    assert (
+        config.option.allure_report_dir
+        == str(tmp_path / "allure-results" / "db_accuracy" / "binance_kline_all_future_raw_1h")
+    )
+
+
+def test_db_accuracy_custom_allure_dir_is_not_overridden(tmp_path):
+    project_conftest = _load_project_conftest()
+    config = _fake_config(
+        {
+            "--run-db-accuracy": True,
+            "--db-accuracy-table": ["binance_kline_all_future_raw_1h"],
+            "--db-accuracy-mode": "direct",
+        },
+        allure_report_dir=str(tmp_path / "custom-allure"),
+        cwd=tmp_path,
+    )
+
+    resolved = project_conftest.configure_db_accuracy_allure_dir(config)
+
+    assert resolved is None
+    assert config.option.allure_report_dir == str(tmp_path / "custom-allure")
+
+
+def test_db_accuracy_pytest_configure_scopes_default_allure_dir(pytester):
+    conftest_path = _project_conftest_path()
+    pytester.makeconftest(
+        f"""
+        import importlib.util
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "project_conftest",
+            Path({str(conftest_path)!r}),
+        )
+        project_conftest = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(project_conftest)
+        pytest_addoption = project_conftest.pytest_addoption
+        pytest_configure = project_conftest.pytest_configure
+        """
+    )
+    pytester.makepyfile(
+        """
+        from pathlib import Path
+
+        def test_allure_dir(request):
+            expected = Path.cwd() / "allure-results" / "db_accuracy" / "binance_kline_all_future_raw_1h"
+            assert request.config.option.allure_report_dir == str(expected)
+        """
+    )
+
+    result = pytester.runpytest(
+        "--run-db-accuracy",
+        "--db-accuracy-table",
+        "binance_kline_all_future_raw_1h",
+        "--alluredir=./allure-results",
+    )
 
     result.assert_outcomes(passed=1)
 
@@ -169,14 +262,37 @@ def _fake_request(options):
     return _FakeRequest(_FakeConfig(defaults))
 
 
+def _fake_config(options, *, allure_report_dir=None, cwd=None):
+    defaults = {
+        "--run-db-accuracy": False,
+        "--db-accuracy-table": [],
+        "--db-accuracy-mode": "direct",
+        "--db-accuracy-symbol": [],
+        "--db-accuracy-pair": [],
+        "--db-accuracy-contract-type": [],
+        "--db-accuracy-interval": [],
+        "--db-accuracy-start-ms": None,
+        "--db-accuracy-end-ms": None,
+    }
+    defaults.update(options)
+    return _FakeConfig(defaults, allure_report_dir=allure_report_dir, cwd=cwd)
+
+
 class _FakeRequest:
     def __init__(self, config):
         self.config = config
 
 
 class _FakeConfig:
-    def __init__(self, options):
+    def __init__(self, options, *, allure_report_dir=None, cwd=None):
         self.options = options
+        self.option = _FakeOption(allure_report_dir)
+        self.cwd = Path(cwd or ".")
 
     def getoption(self, name):
         return self.options[name]
+
+
+class _FakeOption:
+    def __init__(self, allure_report_dir):
+        self.allure_report_dir = allure_report_dir
