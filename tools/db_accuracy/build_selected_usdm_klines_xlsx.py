@@ -1,3 +1,8 @@
+"""指定 USDM K 线专项报告 Excel 构建工具。
+
+本工具读取专项 CSV/JSON 报告并生成便于人工查看的中文 Excel 文件。
+"""
+
 from __future__ import annotations
 
 import csv
@@ -12,8 +17,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 
-WORKSPACE = Path(__file__).resolve().parents[1]
-REPORT_DIR = WORKSPACE / "reports"
+WORKSPACE = Path(__file__).resolve().parents[2]
+REPORT_DIR = WORKSPACE / "artifacts" / "reports"
 MANIFEST = REPORT_DIR / "binance_usdm_1m_kline_5symbols_latest_manifest.json"
 EXCEL_MAX_ROWS = 1_048_576
 

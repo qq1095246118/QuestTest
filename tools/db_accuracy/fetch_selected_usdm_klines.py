@@ -1,7 +1,14 @@
+"""指定 USDM K 线样本拉取与对比工具。
+
+本工具用于人工生成 DB 与 Binance 源数据的专项 CSV/JSON 报告。
+"""
+
 from __future__ import annotations
 
+import argparse
 import csv
 import json
+import re
 import sys
 import time
 from collections import Counter
@@ -10,7 +17,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-WORKSPACE = Path(__file__).resolve().parents[1]
+WORKSPACE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(WORKSPACE))
 
 from api.external.binance.usdm_market_api import USDMMarketAPI
@@ -18,13 +25,11 @@ from infrastructure.database.db_client import DBClient
 from services.db_accuracy.compare_service import normalize_value
 
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
-TABLE = "kline_data_future_raw"
-INTERVAL = "1m"
-INTERVAL_MS = 60_000
-START_MS = int(datetime(2026, 5, 8, tzinfo=timezone.utc).timestamp() * 1000)
-REPORT_DIR = WORKSPACE / "reports"
-REPORT_DIR.mkdir(exist_ok=True)
+DEFAULT_TABLE = "binance_kline_all_future_raw"
+DEFAULT_INTERVAL = "1m"
+DEFAULT_START_MS = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+REPORT_DIR = WORKSPACE / "artifacts" / "reports"
+REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 COMPARE_FIELDS = [
     "symbol",
@@ -87,10 +92,112 @@ SOURCE_RAW_FIELDS = [
 DIFF_FIELDS = ["symbol", "timestamp", "timestamp_utc", "field", "reason", "db_value", "source_value", "note"]
 
 
-def last_closed_kline_open_ms() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Compare all-market Binance USD-M DB klines with Binance REST klines and write CSV reports."
+    )
+    parser.add_argument("--table", default=DEFAULT_TABLE, help="DB table to read, default: binance_kline_all_future_raw")
+    parser.add_argument("--interval", default=DEFAULT_INTERVAL, help="Kline interval, default: 1m")
+    parser.add_argument(
+        "--start-ms",
+        type=int,
+        default=DEFAULT_START_MS,
+        help="Inclusive UTC start timestamp in milliseconds, default: 2026-01-01 00:00:00 UTC",
+    )
+    parser.add_argument(
+        "--end-ms",
+        type=int,
+        default=None,
+        help="Inclusive UTC end timestamp in milliseconds. Defaults to the latest closed kline for --interval.",
+    )
+    parser.add_argument(
+        "--symbol",
+        action="append",
+        default=[],
+        help="Symbol to compare. May be repeated or comma-separated. Defaults to all DB symbols.",
+    )
+    parser.add_argument(
+        "--all-symbols",
+        action="store_true",
+        help="Discover all distinct symbols in the DB table even if --symbol is provided.",
+    )
+    parser.add_argument(
+        "--report-dir",
+        default=str(REPORT_DIR),
+        help="Directory for generated CSV/JSON reports, default: ./artifacts/reports",
+    )
+    return parser.parse_args(argv)
+
+
+def parse_symbols(values: list[str]) -> list[str]:
+    symbols: list[str] = []
+    for value in values:
+        symbols.extend(part.strip().upper() for part in value.split(",") if part.strip())
+    return list(dict.fromkeys(symbols))
+
+
+def quote_identifier(identifier: str) -> str:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", identifier):
+        raise ValueError(f"Unsafe SQL identifier: {identifier}")
+    return f"`{identifier}`"
+
+
+def interval_to_ms(interval: str) -> int:
+    match = re.fullmatch(r"(\d+)([mhd])", interval)
+    if not match:
+        raise ValueError(f"Unsupported kline interval: {interval}")
+    amount = int(match.group(1))
+    unit = match.group(2)
+    multipliers = {"m": 60_000, "h": 3_600_000, "d": 86_400_000}
+    return amount * multipliers[unit]
+
+
+def last_closed_kline_open_ms(interval_ms: int) -> int:
     now_ms = int(time.time() * 1000)
-    current_interval_open = now_ms - (now_ms % INTERVAL_MS)
-    return current_interval_open - INTERVAL_MS
+    current_interval_open = now_ms - (now_ms % interval_ms)
+    return current_interval_open - interval_ms
+
+
+def resolve_symbols(
+    db: DBClient,
+    *,
+    explicit_symbols: list[str],
+    all_symbols: bool,
+    table: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+) -> list[str]:
+    if explicit_symbols and not all_symbols:
+        return explicit_symbols
+
+    sql = (
+        f"SELECT DISTINCT `symbol` FROM {quote_identifier(table)} "
+        "WHERE `interval`=%s AND `timestamp` >= %s AND `timestamp` <= %s "
+        "ORDER BY `symbol` ASC"
+    )
+    rows = list(db.query(sql, (interval, start_ms, end_ms)))
+    symbols = [str(row["symbol"]).upper() for row in rows if row.get("symbol")]
+    if not symbols:
+        raise RuntimeError(
+            f"No symbols found in {table} for interval={interval}, "
+            f"range={ms_to_utc(start_ms)} -> {ms_to_utc(end_ms)}"
+        )
+    return symbols
+
+
+def build_report_base(
+    *,
+    table: str,
+    interval: str,
+    symbols: list[str],
+    all_symbols: bool,
+    start_ms: int,
+    stamp: str,
+) -> str:
+    start_day = datetime.fromtimestamp(start_ms / 1000, timezone.utc).strftime("%Y%m%d")
+    symbol_scope = "all_symbols" if all_symbols else f"{len(symbols)}symbols"
+    return f"{table}_{interval}_{symbol_scope}_{start_day}_to_now_{stamp}"
 
 
 def ms_to_utc(value: Any) -> str:
@@ -116,24 +223,32 @@ def write_csv_row(writer: csv.DictWriter, fields: list[str], row: dict[str, Any]
     writer.writerow({field: text(row.get(field)) for field in fields})
 
 
-def db_rows_for_symbol(db: DBClient, symbol: str, end_ms: int) -> list[dict[str, Any]]:
+def db_rows_for_symbol(
+    db: DBClient,
+    *,
+    symbol: str,
+    table: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+) -> list[dict[str, Any]]:
     fields = ", ".join(f"`{field}`" for field in DB_SELECT_FIELDS)
     sql = (
-        f"SELECT {fields} FROM `{TABLE}` "
+        f"SELECT {fields} FROM {quote_identifier(table)} "
         f"WHERE `symbol`=%s AND `interval`=%s AND `timestamp` >= %s AND `timestamp` <= %s "
         f"ORDER BY `timestamp` ASC"
     )
-    rows = list(db.query(sql, (symbol, INTERVAL, START_MS, end_ms)))
+    rows = list(db.query(sql, (symbol, interval, start_ms, end_ms)))
     for row in rows:
         row["timestamp_utc"] = ms_to_utc(row.get("timestamp"))
         row["close_time_utc"] = ms_to_utc(row.get("close_time"))
     return rows
 
 
-def map_kline(symbol: str, raw: list[Any]) -> dict[str, Any]:
+def map_kline(symbol: str, interval: str, raw: list[Any]) -> dict[str, Any]:
     return {
         "symbol": symbol,
-        "interval": INTERVAL,
+        "interval": interval,
         "timestamp": raw[0],
         "timestamp_utc": ms_to_utc(raw[0]),
         "open": raw[1],
@@ -150,13 +265,21 @@ def map_kline(symbol: str, raw: list[Any]) -> dict[str, Any]:
     }
 
 
-def fetch_source_rows(api: USDMMarketAPI, symbol: str, end_ms: int) -> list[dict[str, Any]]:
+def fetch_source_rows(
+    api: USDMMarketAPI,
+    *,
+    symbol: str,
+    interval: str,
+    interval_ms: int,
+    start_ms: int,
+    end_ms: int,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    start = START_MS
+    start = start_ms
     while start <= end_ms:
         response = api.get_klines(
             symbol=symbol,
-            interval=INTERVAL,
+            interval=interval,
             startTime=start,
             endTime=end_ms,
             limit=1000,
@@ -164,10 +287,10 @@ def fetch_source_rows(api: USDMMarketAPI, symbol: str, end_ms: int) -> list[dict
         payload = response.json() if hasattr(response, "json") else response
         if not payload:
             break
-        mapped = [map_kline(symbol, item) for item in payload]
+        mapped = [map_kline(symbol, interval, item) for item in payload]
         rows.extend(mapped)
         last_open = int(mapped[-1]["timestamp"])
-        next_start = last_open + INTERVAL_MS
+        next_start = last_open + interval_ms
         if next_start <= start:
             break
         start = next_start
@@ -245,24 +368,49 @@ def compare_symbol(symbol: str, db_rows: list[dict[str, Any]], source_rows: list
     return differences
 
 
-def main() -> int:
-    end_ms = last_closed_kline_open_ms()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    interval_ms = interval_to_ms(args.interval)
+    end_ms = args.end_ms if args.end_ms is not None else last_closed_kline_open_ms(interval_ms)
+    if args.start_ms > end_ms:
+        raise ValueError(f"--start-ms must be <= end_ms: {args.start_ms} > {end_ms}")
+
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    base = f"binance_usdm_1m_kline_5symbols_20240101_to_now_{stamp}"
+    report_dir = Path(args.report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
 
-    diff_csv = REPORT_DIR / f"{base}_differences.csv"
-    db_csv = REPORT_DIR / f"{base}_db_raw.csv"
-    source_csv = REPORT_DIR / f"{base}_source_raw.csv"
-    meta_json = REPORT_DIR / f"{base}_meta.json"
-    latest_manifest = REPORT_DIR / "binance_usdm_1m_kline_5symbols_latest_manifest.json"
+    db = DBClient()
+    symbols = resolve_symbols(
+        db,
+        explicit_symbols=parse_symbols(args.symbol),
+        all_symbols=args.all_symbols,
+        table=args.table,
+        interval=args.interval,
+        start_ms=args.start_ms,
+        end_ms=end_ms,
+    )
 
-    print("table", TABLE, flush=True)
-    print("symbols", ",".join(SYMBOLS), flush=True)
-    print("range", ms_to_utc(START_MS), "->", ms_to_utc(end_ms), flush=True)
+    base = build_report_base(
+        table=args.table,
+        interval=args.interval,
+        symbols=symbols,
+        all_symbols=args.all_symbols,
+        start_ms=args.start_ms,
+        stamp=stamp,
+    )
+
+    diff_csv = report_dir / f"{base}_differences.csv"
+    db_csv = report_dir / f"{base}_db_raw.csv"
+    source_csv = report_dir / f"{base}_source_raw.csv"
+    meta_json = report_dir / f"{base}_meta.json"
+    latest_manifest = report_dir / f"{args.table}_{args.interval}_{'all_symbols' if args.all_symbols else str(len(symbols)) + 'symbols'}_latest_manifest.json"
+
+    print("table", args.table, flush=True)
+    print("symbols", ",".join(symbols), flush=True)
+    print("range", ms_to_utc(args.start_ms), "->", ms_to_utc(end_ms), flush=True)
 
     api = USDMMarketAPI()
-    db = DBClient()
     summary_by_symbol: list[dict[str, Any]] = []
     total_db_rows = 0
     total_source_rows = 0
@@ -277,12 +425,26 @@ def main() -> int:
         source_writer.writeheader()
 
         try:
-            for index, symbol in enumerate(SYMBOLS, 1):
-                print(f"[{index}/{len(SYMBOLS)}] DB {symbol}", flush=True)
-                db_rows = db_rows_for_symbol(db, symbol, end_ms)
-                print(f"[{index}/{len(SYMBOLS)}] Binance {symbol}", flush=True)
-                source_rows = fetch_source_rows(api, symbol, end_ms)
-                print(f"[{index}/{len(SYMBOLS)}] compare {symbol}: db={len(db_rows)} source={len(source_rows)}", flush=True)
+            for index, symbol in enumerate(symbols, 1):
+                print(f"[{index}/{len(symbols)}] DB {symbol}", flush=True)
+                db_rows = db_rows_for_symbol(
+                    db,
+                    symbol=symbol,
+                    table=args.table,
+                    interval=args.interval,
+                    start_ms=args.start_ms,
+                    end_ms=end_ms,
+                )
+                print(f"[{index}/{len(symbols)}] Binance {symbol}", flush=True)
+                source_rows = fetch_source_rows(
+                    api,
+                    symbol=symbol,
+                    interval=args.interval,
+                    interval_ms=interval_ms,
+                    start_ms=args.start_ms,
+                    end_ms=end_ms,
+                )
+                print(f"[{index}/{len(symbols)}] compare {symbol}: db={len(db_rows)} source={len(source_rows)}", flush=True)
                 differences = compare_symbol(symbol, db_rows, source_rows)
 
                 for row in db_rows:
@@ -313,20 +475,21 @@ def main() -> int:
                 total_db_rows += len(db_rows)
                 total_source_rows += len(source_rows)
                 total_differences += len(differences)
-                print(f"[{index}/{len(SYMBOLS)}] done {symbol}: differences={len(differences)}", flush=True)
+                print(f"[{index}/{len(symbols)}] done {symbol}: differences={len(differences)}", flush=True)
         finally:
             db.close()
 
     meta = {
         "generated_at": generated_at,
-        "table": TABLE,
-        "symbols": SYMBOLS,
-        "interval": INTERVAL,
-        "start_ms": START_MS,
+        "table": args.table,
+        "symbols": symbols,
+        "all_symbols": args.all_symbols,
+        "interval": args.interval,
+        "start_ms": args.start_ms,
         "end_ms": end_ms,
-        "start_utc": ms_to_utc(START_MS),
+        "start_utc": ms_to_utc(args.start_ms),
         "end_utc": ms_to_utc(end_ms),
-        "range_note": "截至当前已闭合的最后一根 1m K线，避免未闭合当前分钟产生误差",
+        "range_note": f"截至当前已闭合的最后一根 {args.interval} K线，避免未闭合当前周期产生误差",
         "summary_by_symbol": summary_by_symbol,
         "db_rows": total_db_rows,
         "source_rows": total_source_rows,

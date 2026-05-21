@@ -1,3 +1,8 @@
+"""DB accuracy Allure 附件转 Excel 工具。
+
+本工具作为可直接运行的外层入口，负责读取 Allure JSON 附件并生成中文 Excel 报告。
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -13,9 +18,9 @@ from typing import Any, Sequence
 from xml.sax.saxutils import escape
 
 
-WORKSPACE = Path(__file__).resolve().parents[1]
+WORKSPACE = Path(__file__).resolve().parents[2]
 DEFAULT_ALLURE_DIR = WORKSPACE / "allure-results"
-DEFAULT_REPORTS_DIR = WORKSPACE / "reports"
+DEFAULT_REPORTS_DIR = WORKSPACE / "artifacts" / "reports"
 DEFAULT_DB_ACCURACY_ALLURE_ROOT = DEFAULT_ALLURE_DIR / "db_accuracy"
 EXCEL_MAX_ROWS = 1_048_576
 DETAIL_HEADER = [
@@ -649,7 +654,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--input", type=Path, help="指定 db_accuracy_details JSON 附件路径；不传则自动读取最新 Allure 附件")
     parser.add_argument("--allure-dir", type=Path, default=DEFAULT_ALLURE_DIR, help="Allure raw results 目录")
     parser.add_argument("--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR, help="默认输出目录")
-    parser.add_argument("--output", type=Path, help="指定 xlsx 输出路径；不传则写入 reports 下的时间戳文件和 latest 文件")
+    parser.add_argument("--output", type=Path, help="指定 xlsx 输出路径；不传则写入 artifacts/reports 下的时间戳文件和 latest 文件")
     parser.add_argument("--no-latest", action="store_true", help="使用默认输出时，不额外覆盖 latest 文件")
     return parser.parse_args(argv)
 
