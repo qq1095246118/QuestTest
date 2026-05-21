@@ -12,11 +12,6 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.cell import WriteOnlyCell
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-
 
 WORKSPACE = Path(__file__).resolve().parents[2]
 REPORT_DIR = WORKSPACE / "artifacts" / "reports"
@@ -128,6 +123,30 @@ def output_paths(report_dir: Path, base: str, stamp: str) -> tuple[Path, Path]:
     )
 
 
+def _ensure_openpyxl() -> None:
+    global Workbook, load_workbook, WriteOnlyCell
+    global Alignment, Border, Font, PatternFill, Side, get_column_letter
+
+    from openpyxl import Workbook as _Workbook, load_workbook as _load_workbook
+    from openpyxl.cell import WriteOnlyCell as _WriteOnlyCell
+    from openpyxl.styles import Alignment as _Alignment
+    from openpyxl.styles import Border as _Border
+    from openpyxl.styles import Font as _Font
+    from openpyxl.styles import PatternFill as _PatternFill
+    from openpyxl.styles import Side as _Side
+    from openpyxl.utils import get_column_letter as _get_column_letter
+
+    Workbook = _Workbook
+    load_workbook = _load_workbook
+    WriteOnlyCell = _WriteOnlyCell
+    Alignment = _Alignment
+    Border = _Border
+    Font = _Font
+    PatternFill = _PatternFill
+    Side = _Side
+    get_column_letter = _get_column_letter
+
+
 def styled_cell(ws, value, *, title=False, header=False, text_format=False):
     thin = Side(style="thin", color="D9E2F3")
     cell = WriteOnlyCell(ws, value=value)
@@ -194,6 +213,7 @@ def append_csv_sheet(wb, sheet_name: str, title: str, csv_path: Path, header_map
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    _ensure_openpyxl()
     report_dir = Path(args.report_dir)
     manifest = Path(args.manifest) if args.manifest else find_latest_manifest(report_dir)
     meta = json.loads(manifest.read_text(encoding="utf-8"))
