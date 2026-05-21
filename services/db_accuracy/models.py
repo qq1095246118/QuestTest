@@ -1,3 +1,8 @@
+"""DB accuracy 数据模型。
+
+本模块定义 DB accuracy direct 与 cached 模式共享的数据结构。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -60,6 +65,14 @@ class KeyTimeRange:
 class SourceRow:
     key: Any
     fields: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class MarketLifecycle:
+    is_known: bool
+    status: str | None
+    onboard_ms: int | None
+    delivery_ms: int | None
 
 
 @dataclass(frozen=True)

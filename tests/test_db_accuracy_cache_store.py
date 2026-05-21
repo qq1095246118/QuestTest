@@ -1,5 +1,5 @@
-from tests.db_accuracy.cache_models import CacheManifest, MarketShard, TimePartition
-from tests.db_accuracy.cache_store import CacheStore
+from services.db_accuracy.cached.cache_models import CacheManifest, MarketShard, TimePartition
+from services.db_accuracy.cached.cache_store_service import CacheStoreService
 
 
 def _shard():
@@ -16,7 +16,7 @@ def _shard():
 
 
 def test_cache_store_builds_partition_paths(tmp_path):
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = TimePartition(start_ms=1704067200000, end_ms=1704153599999)
 
     paths = store.paths_for(_shard(), partition)
@@ -34,7 +34,7 @@ def test_cache_store_builds_partition_paths(tmp_path):
 
 
 def test_cache_store_manifest_roundtrip(tmp_path):
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = TimePartition(start_ms=1704067200000, end_ms=1704153599999)
     paths = store.paths_for(_shard(), partition)
     manifest = CacheManifest(
@@ -60,7 +60,7 @@ def test_cache_store_manifest_roundtrip(tmp_path):
 def test_cache_store_parquet_roundtrip(tmp_path):
     import polars as pl
 
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = TimePartition(start_ms=1704067200000, end_ms=1704153599999)
     paths = store.paths_for(_shard(), partition)
     frame = pl.DataFrame(
@@ -82,7 +82,7 @@ def test_cache_store_parquet_roundtrip(tmp_path):
 def test_cache_store_empty_manifest_removes_stale_parquet(tmp_path):
     import polars as pl
 
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = TimePartition(start_ms=1704067200000, end_ms=1704153599999)
     paths = store.paths_for(_shard(), partition)
     frame = pl.DataFrame(

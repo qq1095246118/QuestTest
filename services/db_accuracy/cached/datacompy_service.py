@@ -1,3 +1,8 @@
+"""cached 模式 DataComPy 对比与差异报告服务。
+
+本模块负责执行 DataComPy 对比，并输出报告与差异明细文件。
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,7 +14,7 @@ from typing import Any
 import polars as pl
 from datacompy.polars import PolarsCompare
 
-from tests.db_accuracy.cache_models import CachedShardResult
+from services.db_accuracy.cached.cache_models import CachedShardResult
 
 
 SAMPLE_LIMIT = 20
@@ -27,7 +32,7 @@ class CompareSummary:
         return self.db_only_count + self.source_only_count + self.unequal_count
 
 
-class DataComPyEngine:
+class DataComPyCompareService:
     def __init__(self, report_root: Path):
         self.report_root = Path(report_root)
 

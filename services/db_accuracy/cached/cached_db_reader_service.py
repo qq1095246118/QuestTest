@@ -1,12 +1,17 @@
+"""cached 模式 DB 分区读取服务。
+
+本模块负责发现市场分片，并读取 cached 模式指定时间分区内的 DB 行。
+"""
+
 from __future__ import annotations
 
 from typing import Any
 
-from tests.db_accuracy.cache_models import MarketShard, TimePartition
-from tests.db_accuracy.db_reader import _dedupe, quote_identifier
+from services.db_accuracy.cached.cache_models import MarketShard, TimePartition
+from services.db_accuracy.db_reader_service import _dedupe, quote_identifier
 
 
-class CachedDBReader:
+class CachedDBReaderService:
     def __init__(self, db: Any):
         self.db = db
 

@@ -15,7 +15,7 @@ sys.path.insert(0, str(WORKSPACE))
 
 from api.external.binance.usdm_market_api import USDMMarketAPI
 from infrastructure.database.db_client import DBClient
-from tests.db_accuracy.compare import normalize_value
+from services.db_accuracy.compare_service import normalize_value
 
 
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from tests.db_accuracy.binance_source import BinanceSource
-from tests.db_accuracy.models import SourceRow, TableSpec, ValidationKey
-from tests.db_accuracy.runner import AccuracyRunner, compare_db_and_source_rows, compare_registry_rows
+from services.db_accuracy.source_service import BinanceSourceService
+from services.db_accuracy.models import MarketLifecycle, SourceRow, TableSpec, ValidationKey
+from services.db_accuracy.direct.accuracy_service import DirectAccuracyService, compare_db_and_source_rows, compare_registry_rows
 
 
 KLINE_PAYLOAD = [
@@ -84,6 +84,19 @@ class FakeSpot:
         self.calls.append(("get_klines", kwargs))
         return FakeResponse(KLINE_PAYLOAD)
 
+    def get_exchange_info(self):
+        self.calls.append(("get_exchange_info", {}))
+        return FakeResponse(
+            {
+                "symbols": [
+                    {
+                        "symbol": "ETHUSDT",
+                        "status": "TRADING",
+                    }
+                ]
+            }
+        )
+
 
 class FakeCoinM:
     def __init__(self):
@@ -109,12 +122,37 @@ class FakeCoinM:
             ]
         )
 
+    def get_exchange_info(self):
+        self.calls.append(("get_exchange_info", {}))
+        return FakeResponse(
+            {
+                "symbols": [
+                    {
+                        "symbol": "BTCUSD_240329",
+                        "pair": "BTCUSD",
+                        "contractType": "CURRENT_QUARTER",
+                        "contractStatus": "TRADING",
+                        "onboardDate": 1704067200000,
+                        "deliveryDate": 1711670400000,
+                    },
+                    {
+                        "symbol": "BTCUSD_240628",
+                        "pair": "BTCUSD",
+                        "contractType": "NEXT_QUARTER",
+                        "contractStatus": "TRADING",
+                        "onboardDate": 1704067200000,
+                        "deliveryDate": 1719532800000,
+                    },
+                ]
+            }
+        )
+
 
 def _source():
     usdm = FakeUSDM()
     spot = FakeSpot()
     coinm = FakeCoinM()
-    return BinanceSource(usdm=usdm, spot=spot, coinm=coinm), usdm, spot, coinm
+    return BinanceSourceService(usdm=usdm, spot=spot, coinm=coinm), usdm, spot, coinm
 
 
 def test_source_maps_usdm_kline_array_to_named_fields():
@@ -352,6 +390,93 @@ def test_source_maps_registry_enabled_status():
     assert rows[0].fields["is_enabled"] == 1
 
 
+def test_source_returns_usdm_market_lifecycle_from_exchange_info():
+    source, usdm, _, _ = _source()
+    spec = TableSpec(
+        table="binance_1h_usdm_kline_raw",
+        kind="kline",
+        endpoint="usdm_klines",
+        key_fields=("symbol",),
+        time_fields=("timestamp",),
+        interval_field=None,
+        compare_fields=("timestamp", "open"),
+        request_limit=1000,
+        fixed_interval="1h",
+    )
+
+    lifecycle = source.market_lifecycle(spec, ValidationKey({"symbol": "BTCUSDT"}))
+
+    assert lifecycle == MarketLifecycle(
+        is_known=True,
+        status="TRADING",
+        onboard_ms=1577836800000,
+        delivery_ms=None,
+    )
+    assert usdm.calls == [("get_exchange_info", {})]
+
+
+def test_source_returns_spot_market_lifecycle_from_exchange_info():
+    source, _, spot, _ = _source()
+    spec = TableSpec(
+        table="kline_data_spot_raw",
+        kind="kline",
+        endpoint="spot_klines",
+        key_fields=("symbol", "interval"),
+        time_fields=("timestamp",),
+        interval_field="interval",
+        compare_fields=("timestamp", "open"),
+        request_limit=1000,
+    )
+
+    lifecycle = source.market_lifecycle(
+        spec,
+        ValidationKey({"symbol": "ETHUSDT", "interval": "1h"}),
+    )
+
+    assert lifecycle == MarketLifecycle(
+        is_known=True,
+        status="TRADING",
+        onboard_ms=None,
+        delivery_ms=None,
+    )
+    assert spot.calls == [("get_exchange_info", {})]
+
+
+def test_source_matches_continuous_contract_lifecycle_by_pair_and_contract_type():
+    source, _, _, coinm = _source()
+    spec = TableSpec(
+        table="binance_kline_coinm_delivery_raw",
+        kind="kline",
+        endpoint="coinm_continuous_klines",
+        key_fields=("pair", "contract_type", "interval"),
+        time_fields=("timestamp",),
+        interval_field="interval",
+        compare_fields=("timestamp", "open"),
+        request_limit=1000,
+        pair_field="pair",
+        contract_type_field="contract_type",
+    )
+
+    lifecycle = source.market_lifecycle(
+        spec,
+        ValidationKey(
+            {
+                "pair": "BTCUSD",
+                "contract_type": "NEXT_QUARTER",
+                "interval": "1h",
+            }
+        ),
+    )
+
+    assert lifecycle == MarketLifecycle(
+        is_known=True,
+        status="TRADING",
+        onboard_ms=1704067200000,
+        delivery_ms=1719532800000,
+    )
+    assert coinm.calls == [("get_exchange_info", {})]
+
+
 def test_source_uses_coinm_specific_kline_volume_fields():
     source, _, _, _ = _source()
     spec = TableSpec(
@@ -543,13 +668,13 @@ def test_accuracy_runner_filters_tables_and_continues_after_table_error(monkeypa
                 )
             ]
 
-    monkeypatch.setattr("tests.db_accuracy.runner.load_table_specs", lambda: specs)
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
 
-    result = AccuracyRunner(db=FakeDB(), source=FakeSource()).run(
+    result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(
         safety_hours=24,
         include_tables=None,
     )
-    filtered_result = AccuracyRunner(db=FakeDB(), source=FakeSource()).run(
+    filtered_result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(
         safety_hours=24,
         include_tables=["binance_futures_symbols"],
     )
@@ -567,9 +692,9 @@ def test_accuracy_runner_filters_tables_and_continues_after_table_error(monkeypa
 
 
 def test_accuracy_runner_reports_unknown_include_table(monkeypatch):
-    monkeypatch.setattr("tests.db_accuracy.runner.load_table_specs", lambda: [])
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: [])
 
-    result = AccuracyRunner(db=object(), source=object()).run(
+    result = DirectAccuracyService(db=object(), source=object()).run(
         safety_hours=24,
         include_tables=["missing_table"],
     )
@@ -603,12 +728,396 @@ def test_accuracy_runner_reports_no_stable_rows_for_time_series_table(monkeypatc
                 return []
             raise AssertionError(f"unexpected SQL: {sql}")
 
-    monkeypatch.setattr("tests.db_accuracy.runner.load_table_specs", lambda: specs)
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
 
-    result = AccuracyRunner(db=FakeDB(), source=object()).run(safety_hours=24)
+    result = DirectAccuracyService(db=FakeDB(), source=object()).run(safety_hours=24)
 
     assert not result.passed
     assert result.tables[0].differences[0].reason == "no_stable_db_rows"
+
+
+def test_accuracy_runner_skips_time_series_window_before_market_onboard(monkeypatch):
+    first_hour = 1704067200000
+    second_hour = 1704070800000
+    third_hour = 1704074400000
+
+    specs = [
+        TableSpec(
+            table="binance_1h_usdm_kline_raw",
+            kind="kline",
+            endpoint="usdm_klines",
+            key_fields=("symbol",),
+            time_fields=("timestamp",),
+            interval_field=None,
+            compare_fields=("timestamp", "open"),
+            request_limit=1000,
+            fixed_interval="1h",
+        )
+    ]
+
+    class FakeDB:
+        def query(self, sql, params=()):
+            if sql.startswith("SHOW COLUMNS"):
+                return [{"Field": "symbol"}, {"Field": "timestamp"}, {"Field": "open"}]
+            if "GROUP BY" in sql:
+                return [
+                    {
+                        "symbol": "AIAUSDT",
+                        "min_time_ms": first_hour,
+                        "max_time_ms": third_hour,
+                    }
+                ]
+            if sql.startswith("SELECT"):
+                assert params == (second_hour, third_hour, "AIAUSDT")
+                return [
+                    {"symbol": "AIAUSDT", "timestamp": second_hour, "open": "2"},
+                    {"symbol": "AIAUSDT", "timestamp": third_hour, "open": "3"},
+                ]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    class FakeSource:
+        def __init__(self):
+            self.calls = []
+
+        def market_lifecycle(self, spec, key):
+            return MarketLifecycle(
+                is_known=True,
+                status="TRADING",
+                onboard_ms=second_hour,
+                delivery_ms=None,
+            )
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            self.calls.append((key.values["symbol"], start_ms, end_ms))
+            return [
+                SourceRow(key=second_hour, fields={"timestamp": second_hour, "open": "2"}),
+                SourceRow(key=third_hour, fields={"timestamp": third_hour, "open": "3"}),
+            ]
+
+    source = FakeSource()
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
+
+    result = DirectAccuracyService(db=FakeDB(), source=source).run(safety_hours=24)
+
+    assert result.passed
+    assert result.tables[0].windows_checked == 1
+    assert result.tables[0].db_rows_checked == 2
+    assert result.tables[0].source_rows_checked == 2
+    assert source.calls == [("AIAUSDT", second_hour, third_hour)]
+
+
+def test_accuracy_runner_reports_mismatch_inside_lifecycle_window(monkeypatch):
+    first_hour = 1704067200000
+    second_hour = 1704070800000
+
+    specs = [
+        TableSpec(
+            table="binance_1h_usdm_kline_raw",
+            kind="kline",
+            endpoint="usdm_klines",
+            key_fields=("symbol",),
+            time_fields=("timestamp",),
+            interval_field=None,
+            compare_fields=("timestamp", "open"),
+            request_limit=1000,
+            fixed_interval="1h",
+        )
+    ]
+
+    class FakeDB:
+        def query(self, sql, params=()):
+            if sql.startswith("SHOW COLUMNS"):
+                return [{"Field": "symbol"}, {"Field": "timestamp"}, {"Field": "open"}]
+            if "GROUP BY" in sql:
+                return [
+                    {
+                        "symbol": "AIAUSDT",
+                        "min_time_ms": first_hour,
+                        "max_time_ms": second_hour,
+                    }
+                ]
+            if sql.startswith("SELECT"):
+                assert params == (second_hour, second_hour, "AIAUSDT")
+                return [{"symbol": "AIAUSDT", "timestamp": second_hour, "open": "2"}]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    class FakeSource:
+        def market_lifecycle(self, spec, key):
+            return MarketLifecycle(
+                is_known=True,
+                status="TRADING",
+                onboard_ms=second_hour,
+                delivery_ms=None,
+            )
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            return [SourceRow(key=second_hour, fields={"timestamp": second_hour, "open": "9"})]
+
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
+
+    result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(safety_hours=24)
+
+    assert not result.passed
+    assert len(result.tables[0].differences) == 1
+    assert result.tables[0].differences[0].reason == "value_mismatch"
+    assert result.tables[0].differences[0].row_key == second_hour
+
+
+def test_accuracy_runner_skips_non_trading_market_without_source_fetch(monkeypatch):
+    specs = [
+        TableSpec(
+            table="binance_1h_usdm_kline_raw",
+            kind="kline",
+            endpoint="usdm_klines",
+            key_fields=("symbol",),
+            time_fields=("timestamp",),
+            interval_field=None,
+            compare_fields=("timestamp", "open"),
+            request_limit=1000,
+            fixed_interval="1h",
+        )
+    ]
+
+    class FakeDB:
+        def query(self, sql, params=()):
+            if sql.startswith("SHOW COLUMNS"):
+                return [{"Field": "symbol"}, {"Field": "timestamp"}, {"Field": "open"}]
+            if "GROUP BY" in sql:
+                return [
+                    {
+                        "symbol": "PENDINGUSDT",
+                        "min_time_ms": 1704067200000,
+                        "max_time_ms": 1704070800000,
+                    }
+                ]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    class FakeSource:
+        def market_lifecycle(self, spec, key):
+            return MarketLifecycle(
+                is_known=True,
+                status="PENDING_TRADING",
+                onboard_ms=1704067200000,
+                delivery_ms=None,
+            )
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            raise AssertionError("non-trading markets should not be fetched")
+
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
+
+    result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(safety_hours=24)
+
+    assert result.passed
+    assert result.tables[0].windows_checked == 0
+    assert result.tables[0].differences == []
+
+
+def test_accuracy_runner_crops_window_after_market_delivery(monkeypatch):
+    first_hour = 1704067200000
+    second_hour = 1704070800000
+    third_hour = 1704074400000
+
+    specs = [
+        TableSpec(
+            table="binance_kline_coinm_delivery_raw",
+            kind="kline",
+            endpoint="coinm_continuous_klines",
+            key_fields=("pair", "contract_type", "interval"),
+            time_fields=("timestamp",),
+            interval_field="interval",
+            compare_fields=("timestamp", "open"),
+            request_limit=1000,
+            pair_field="pair",
+            contract_type_field="contract_type",
+        )
+    ]
+
+    class FakeDB:
+        def query(self, sql, params=()):
+            if sql.startswith("SHOW COLUMNS"):
+                return [
+                    {"Field": "pair"},
+                    {"Field": "contract_type"},
+                    {"Field": "interval"},
+                    {"Field": "timestamp"},
+                    {"Field": "open"},
+                ]
+            if "GROUP BY" in sql:
+                return [
+                    {
+                        "pair": "BTCUSD",
+                        "contract_type": "CURRENT_QUARTER",
+                        "interval": "1h",
+                        "min_time_ms": first_hour,
+                        "max_time_ms": third_hour,
+                    }
+                ]
+            if sql.startswith("SELECT"):
+                assert params == (
+                    first_hour,
+                    second_hour,
+                    "BTCUSD",
+                    "CURRENT_QUARTER",
+                    "1h",
+                )
+                return [
+                    {
+                        "pair": "BTCUSD",
+                        "contract_type": "CURRENT_QUARTER",
+                        "interval": "1h",
+                        "timestamp": first_hour,
+                        "open": "1",
+                    },
+                    {
+                        "pair": "BTCUSD",
+                        "contract_type": "CURRENT_QUARTER",
+                        "interval": "1h",
+                        "timestamp": second_hour,
+                        "open": "2",
+                    },
+                ]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    class FakeSource:
+        def __init__(self):
+            self.calls = []
+
+        def market_lifecycle(self, spec, key):
+            return MarketLifecycle(
+                is_known=True,
+                status="TRADING",
+                onboard_ms=None,
+                delivery_ms=second_hour,
+            )
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            self.calls.append((start_ms, end_ms))
+            return [
+                SourceRow(key=first_hour, fields={"timestamp": first_hour, "open": "1"}),
+                SourceRow(key=second_hour, fields={"timestamp": second_hour, "open": "2"}),
+            ]
+
+    source = FakeSource()
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
+
+    result = DirectAccuracyService(db=FakeDB(), source=source).run(safety_hours=24)
+
+    assert result.passed
+    assert result.tables[0].windows_checked == 1
+    assert result.tables[0].db_rows_checked == 2
+    assert source.calls == [(first_hour, second_hour)]
+
+
+def test_accuracy_runner_skips_window_after_market_delivery(monkeypatch):
+    specs = [
+        TableSpec(
+            table="binance_kline_coinm_delivery_raw",
+            kind="kline",
+            endpoint="coinm_continuous_klines",
+            key_fields=("pair", "contract_type", "interval"),
+            time_fields=("timestamp",),
+            interval_field="interval",
+            compare_fields=("timestamp", "open"),
+            request_limit=1000,
+            pair_field="pair",
+            contract_type_field="contract_type",
+        )
+    ]
+
+    class FakeDB:
+        def query(self, sql, params=()):
+            if sql.startswith("SHOW COLUMNS"):
+                return [
+                    {"Field": "pair"},
+                    {"Field": "contract_type"},
+                    {"Field": "interval"},
+                    {"Field": "timestamp"},
+                    {"Field": "open"},
+                ]
+            if "GROUP BY" in sql:
+                return [
+                    {
+                        "pair": "BTCUSD",
+                        "contract_type": "CURRENT_QUARTER",
+                        "interval": "1h",
+                        "min_time_ms": 1704070800000,
+                        "max_time_ms": 1704074400000,
+                    }
+                ]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    class FakeSource:
+        def market_lifecycle(self, spec, key):
+            return MarketLifecycle(
+                is_known=True,
+                status="TRADING",
+                onboard_ms=None,
+                delivery_ms=1704067200000,
+            )
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            raise AssertionError("post-delivery windows should not be fetched")
+
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
+
+    result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(safety_hours=24)
+
+    assert result.passed
+    assert result.tables[0].windows_checked == 0
+    assert result.tables[0].differences == []
+
+
+def test_accuracy_runner_skips_unavailable_market_without_source_fetch(monkeypatch):
+    specs = [
+        TableSpec(
+            table="binance_1h_usdm_kline_raw",
+            kind="kline",
+            endpoint="usdm_klines",
+            key_fields=("symbol",),
+            time_fields=("timestamp",),
+            interval_field=None,
+            compare_fields=("timestamp", "open"),
+            request_limit=1000,
+            fixed_interval="1h",
+        )
+    ]
+
+    class FakeDB:
+        def query(self, sql, params=()):
+            if sql.startswith("SHOW COLUMNS"):
+                return [{"Field": "symbol"}, {"Field": "timestamp"}, {"Field": "open"}]
+            if "GROUP BY" in sql:
+                return [
+                    {
+                        "symbol": "DELISTEDUSDT",
+                        "min_time_ms": 1704067200000,
+                        "max_time_ms": 1704070800000,
+                    }
+                ]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    class FakeSource:
+        def market_lifecycle(self, spec, key):
+            return MarketLifecycle(
+                is_known=False,
+                status=None,
+                onboard_ms=None,
+                delivery_ms=None,
+            )
+
+        def fetch_rows(self, spec, key, start_ms, end_ms):
+            raise AssertionError("unavailable markets should not be fetched")
+
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
+
+    result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(safety_hours=24)
+
+    assert result.passed
+    assert result.tables[0].windows_checked == 0
+    assert result.tables[0].db_rows_checked == 0
+    assert result.tables[0].source_rows_checked == 0
+    assert result.tables[0].differences == []
 
 
 def test_accuracy_runner_continues_after_window_planning_error(monkeypatch):
@@ -662,9 +1171,9 @@ def test_accuracy_runner_continues_after_window_planning_error(monkeypatch):
                 )
             ]
 
-    monkeypatch.setattr("tests.db_accuracy.runner.load_table_specs", lambda: specs)
+    monkeypatch.setattr("services.db_accuracy.direct.accuracy_service.load_table_specs", lambda: specs)
 
-    result = AccuracyRunner(db=FakeDB(), source=FakeSource()).run(safety_hours=24)
+    result = DirectAccuracyService(db=FakeDB(), source=FakeSource()).run(safety_hours=24)
 
     assert not result.passed
     assert result.tables[0].windows_checked == 1

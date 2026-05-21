@@ -1,3 +1,8 @@
+"""cached 模式本地缓存读写服务。
+
+本模块负责 cached 模式源数据 Parquet 与 manifest 文件的路径管理和读写。
+"""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +11,7 @@ from pathlib import Path
 
 import polars as pl
 
-from tests.db_accuracy.cache_models import CacheManifest, MarketShard, TimePartition
+from services.db_accuracy.cached.cache_models import CacheManifest, MarketShard, TimePartition
 
 
 @dataclass(frozen=True)
@@ -15,7 +20,7 @@ class CachePaths:
     manifest_path: Path
 
 
-class CacheStore:
+class CacheStoreService:
     def __init__(self, root: Path):
         self.root = Path(root)
 

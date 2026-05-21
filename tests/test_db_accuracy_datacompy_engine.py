@@ -2,7 +2,7 @@ import json
 
 import polars as pl
 
-from tests.db_accuracy.datacompy_engine import DataComPyEngine
+from services.db_accuracy.cached.datacompy_service import DataComPyCompareService
 
 
 JOIN_COLUMNS = ("symbol", "interval", "timestamp")
@@ -18,7 +18,7 @@ def test_datacompy_engine_passes_identical_frames(tmp_path):
             "close": ["2"],
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -53,7 +53,7 @@ def test_datacompy_engine_writes_diff_for_missing_rows(tmp_path):
             "close": pl.String,
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -91,7 +91,7 @@ def test_datacompy_engine_writes_diff_for_schema_less_empty_source(tmp_path):
             "close": ["2"],
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -115,7 +115,7 @@ def test_datacompy_engine_writes_diff_for_schema_less_empty_source(tmp_path):
 
 
 def test_datacompy_engine_passes_schema_less_empty_frames_with_artifacts(tmp_path):
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -157,7 +157,7 @@ def test_datacompy_engine_fails_common_payload_mismatch_with_stable_join(tmp_pat
             "open": ["1"],
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -195,7 +195,7 @@ def test_datacompy_engine_fails_joined_row_with_source_only_payload_column(tmp_p
             "close": ["2"],
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -233,7 +233,7 @@ def test_datacompy_engine_handles_payload_columns_that_end_with_source(tmp_path)
             "open__source": ["2"],
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     result = engine.compare(
         shard_label="symbol=BTCUSDT,interval=1m",
@@ -258,7 +258,7 @@ def test_datacompy_engine_safe_names_include_hash_for_sanitized_collisions(tmp_p
             "timestamp": ["1704067200000"],
         }
     )
-    engine = DataComPyEngine(report_root=tmp_path)
+    engine = DataComPyCompareService(report_root=tmp_path)
 
     slash_result = engine.compare(
         shard_label="a/b",

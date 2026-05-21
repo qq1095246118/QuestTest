@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from tests.db_accuracy.compare import compare_rows, normalize_value
+from services.db_accuracy.compare_service import compare_rows, normalize_value
 
 
 def test_normalize_value_treats_numeric_strings_and_decimals_as_equal():

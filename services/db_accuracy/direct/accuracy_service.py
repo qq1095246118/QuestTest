@@ -1,20 +1,27 @@
+"""direct 模式 DB accuracy 编排服务。
+
+本模块负责 direct 模式下表规格解析、DB/source 数据读取、生命周期过滤和差异汇总。
+"""
+
 from __future__ import annotations
 
 import json
 import time
 from typing import Any
 
-from tests.db_accuracy.binance_source import BinanceSource
-from tests.db_accuracy.compare import compare_rows, normalize_value
-from tests.db_accuracy.db_reader import DBAccuracyReader
-from tests.db_accuracy.models import (
+from services.db_accuracy.source_service import BinanceSourceService
+from services.db_accuracy.compare_service import compare_rows, normalize_value
+from services.db_accuracy.db_reader_service import DBAccuracyReaderService
+from services.db_accuracy.models import (
     AccuracyRunResult,
     Difference,
+    MarketLifecycle,
     ResolvedTableSpec,
     SourceRow,
     TableRunResult,
+    ValidationWindow,
 )
-from tests.db_accuracy.table_specs import load_table_specs, resolve_spec
+from services.db_accuracy.table_specs import load_table_specs, resolve_spec
 
 
 def compare_db_and_source_rows(
@@ -260,16 +267,16 @@ def _index_source_rows(
     return rows_by_key
 
 
-class AccuracyRunner:
-    def __init__(self, db: Any = None, source: BinanceSource | None = None):
+class DirectAccuracyService:
+    def __init__(self, db: Any = None, source: BinanceSourceService | None = None):
         if db is None:
             from infrastructure.database.db_client import DBClient
 
             db = DBClient()
 
         self.db = db
-        self.reader = DBAccuracyReader(db)
-        self.source = source if source is not None else BinanceSource()
+        self.reader = DBAccuracyReaderService(db)
+        self.source = source if source is not None else BinanceSourceService()
 
     def run(
         self,
@@ -402,20 +409,36 @@ class AccuracyRunner:
                 )
                 continue
 
+            try:
+                lifecycle = self.source.market_lifecycle(spec.spec, key_range.key)
+            except AttributeError:
+                lifecycle = MarketLifecycle(
+                    is_known=True,
+                    status="TRADING",
+                    onboard_ms=None,
+                    delivery_ms=None,
+                )
+
+            if not _market_is_comparable(lifecycle):
+                continue
+
             for window in windows:
+                comparable_window = _comparable_window(window, lifecycle)
+                if comparable_window is None:
+                    continue
                 table_result.windows_checked += 1
                 try:
                     db_rows = self.reader.rows_for_window(
                         spec,
                         key_range.key,
-                        window.start_ms,
-                        window.end_ms,
+                        comparable_window.start_ms,
+                        comparable_window.end_ms,
                     )
                     source_rows = self.source.fetch_rows(
                         spec.spec,
                         key_range.key,
-                        window.start_ms,
-                        window.end_ms,
+                        comparable_window.start_ms,
+                        comparable_window.end_ms,
                     )
                     table_result.db_rows_checked += len(db_rows)
                     table_result.source_rows_checked += len(source_rows)
@@ -489,3 +512,31 @@ def result_to_json(result: AccuracyRunResult) -> str:
         ],
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+
+
+def _market_is_comparable(lifecycle: MarketLifecycle) -> bool:
+    return lifecycle.is_known and lifecycle.status == "TRADING"
+
+
+def _comparable_window(
+    window: ValidationWindow,
+    lifecycle: MarketLifecycle,
+) -> ValidationWindow | None:
+    start_ms = window.start_ms
+    end_ms = window.end_ms
+    if start_ms is None or end_ms is None:
+        return None
+
+    if lifecycle.onboard_ms is not None:
+        start_ms = max(start_ms, lifecycle.onboard_ms)
+    if lifecycle.delivery_ms is not None:
+        end_ms = min(end_ms, lifecycle.delivery_ms)
+
+    if start_ms > end_ms:
+        return None
+    return ValidationWindow(
+        table=window.table,
+        key=window.key,
+        start_ms=start_ms,
+        end_ms=end_ms,
+    )

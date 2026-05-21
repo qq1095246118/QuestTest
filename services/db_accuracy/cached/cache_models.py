@@ -1,3 +1,8 @@
+"""cached 模式数据模型。
+
+本模块定义 cached DB accuracy 请求、分片、分区、缓存清单和运行结果结构。
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field

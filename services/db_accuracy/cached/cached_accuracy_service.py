@@ -1,3 +1,8 @@
+"""cached 模式 DB accuracy 编排服务。
+
+本模块负责 cached 模式的请求校验、分片规划、缓存读取和 DataComPy 对比。
+"""
+
 from __future__ import annotations
 
 import json
@@ -6,59 +11,59 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from tests.db_accuracy.binance_source import BinanceSource
-from tests.db_accuracy.cache_models import (
+from services.db_accuracy.source_service import BinanceSourceService
+from services.db_accuracy.cached.cache_models import (
     CachedCompareRequest,
     CachedRunResult,
     CachedShardResult,
     MarketShard,
 )
-from tests.db_accuracy.cache_store import CacheStore
-from tests.db_accuracy.cached_db_reader import CachedDBReader
-from tests.db_accuracy.cached_source import CachedBinanceSource
-from tests.db_accuracy.datacompy_engine import DataComPyEngine
-from tests.db_accuracy.db_reader import DBAccuracyReader
-from tests.db_accuracy.frame_normalizer import rows_to_normalized_frame
-from tests.db_accuracy.models import ResolvedTableSpec, TableSpec
-from tests.db_accuracy.shard_planner import (
+from services.db_accuracy.cached.cache_store_service import CacheStoreService
+from services.db_accuracy.cached.cached_db_reader_service import CachedDBReaderService
+from services.db_accuracy.cached.cached_source_service import CachedBinanceSourceService
+from services.db_accuracy.cached.datacompy_service import DataComPyCompareService
+from services.db_accuracy.db_reader_service import DBAccuracyReaderService
+from services.db_accuracy.cached.frame_normalizer_service import rows_to_normalized_frame
+from services.db_accuracy.models import ResolvedTableSpec, TableSpec
+from services.db_accuracy.cached.shard_planner_service import (
     explicit_market_key,
     split_time_partitions,
     validate_cached_request,
 )
-from tests.db_accuracy.table_specs import load_table_specs, resolve_spec
+from services.db_accuracy.table_specs import load_table_specs, resolve_spec
 
 
 SOURCE_FAILURE_STATUSES = {"source_market_unavailable", "source_request_failed"}
 
 
-class CachedAccuracyRunner:
+class CachedAccuracyService:
     def __init__(self, db: Any = None, source: Any = None) -> None:
         if db is None:
             from infrastructure.database.db_client import DBClient
 
             db = DBClient()
         self.db = db
-        self.source = source if source is not None else BinanceSource()
+        self.source = source if source is not None else BinanceSourceService()
 
     def run(self, request: CachedCompareRequest) -> CachedRunResult:
         try:
             validate_cached_request(request)
             spec = _find_spec(request.table)
-            columns = DBAccuracyReader(self.db).table_columns(spec.table)
+            columns = DBAccuracyReaderService(self.db).table_columns(spec.table)
             resolved = resolve_spec(spec, columns)
             if resolved.time_field is None:
                 raise ValueError(
                     f"{request.table} has no time field for cached comparison"
                 )
 
-            db_reader = CachedDBReader(self.db)
-            cached_source = CachedBinanceSource(
-                store=CacheStore(request.cache_root),
+            db_reader = CachedDBReaderService(self.db)
+            cached_source = CachedBinanceSourceService(
+                store=CacheStoreService(request.cache_root),
                 source=self.source,
             )
             cache_root = Path(request.cache_root)
             report_root = _run_report_root(cache_root)
-            engine = DataComPyEngine(report_root=report_root)
+            engine = DataComPyCompareService(report_root=report_root)
             shards = _build_shards(resolved, request, db_reader)
             partitions = split_time_partitions(
                 request.start_ms,
@@ -158,7 +163,7 @@ def _find_spec(table: str) -> TableSpec:
 def _build_shards(
     resolved: ResolvedTableSpec,
     request: CachedCompareRequest,
-    db_reader: CachedDBReader,
+    db_reader: CachedDBReaderService,
 ) -> list[MarketShard]:
     explicit = explicit_market_key(resolved, request)
     if explicit is not None:

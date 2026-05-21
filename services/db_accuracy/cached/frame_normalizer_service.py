@@ -1,12 +1,17 @@
+"""cached 模式 DataFrame 归一化服务。
+
+本模块负责把 DB 行和源数据行转换为 DataComPy 可比较的标准 DataFrame。
+"""
+
 from __future__ import annotations
 
 from typing import Any
 
 import polars as pl
 
-from tests.db_accuracy.cache_models import MarketShard
-from tests.db_accuracy.compare import normalize_value
-from tests.db_accuracy.models import SourceRow
+from services.db_accuracy.cached.cache_models import MarketShard
+from services.db_accuracy.compare_service import normalize_value
+from services.db_accuracy.models import SourceRow
 
 
 MISSING_FIELD_SENTINEL = "__DB_ACCURACY_MISSING__"

@@ -1,9 +1,14 @@
+"""DB 与源数据字段级比较服务。
+
+本模块负责标准化比较值，并生成字段级差异结果。
+"""
+
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from tests.db_accuracy.models import Difference
+from services.db_accuracy.models import Difference
 
 
 def _canonical_decimal(value: Decimal) -> tuple[str, int, tuple[int, ...], int]:

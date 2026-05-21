@@ -1,13 +1,13 @@
 import pytest
 
-from tests.db_accuracy.cache_models import CachedCompareRequest
-from tests.db_accuracy.shard_planner import (
+from services.db_accuracy.cached.cache_models import CachedCompareRequest
+from services.db_accuracy.cached.shard_planner_service import (
     explicit_market_key,
     split_time_partitions,
     validate_cached_request,
 )
-from tests.db_accuracy.models import TableSpec
-from tests.db_accuracy.table_specs import resolve_spec
+from services.db_accuracy.models import TableSpec
+from services.db_accuracy.table_specs import resolve_spec
 
 
 def _kline_spec():

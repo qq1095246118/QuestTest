@@ -1,9 +1,14 @@
+"""cached 模式市场分片和时间分区规划服务。
+
+本模块负责校验 cached 请求，并构造市场键与时间分区。
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from tests.db_accuracy.cache_models import CachedCompareRequest, TimePartition
-from tests.db_accuracy.models import ResolvedTableSpec
+from services.db_accuracy.cached.cache_models import CachedCompareRequest, TimePartition
+from services.db_accuracy.models import ResolvedTableSpec
 
 
 DAY_MS = 86_400_000

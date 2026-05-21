@@ -1,3 +1,8 @@
+"""DB 表结构、范围和窗口读取服务。
+
+本模块负责读取 DB 表字段、稳定时间范围、校验窗口和对账行数据。
+"""
+
 from __future__ import annotations
 
 from calendar import monthrange
@@ -5,7 +10,7 @@ from datetime import UTC, datetime
 import re
 from typing import Any
 
-from tests.db_accuracy.models import KeyTimeRange, ResolvedTableSpec, ValidationKey, ValidationWindow
+from services.db_accuracy.models import KeyTimeRange, ResolvedTableSpec, ValidationKey, ValidationWindow
 
 
 DEFAULT_FUNDING_INTERVAL = "8h"
@@ -41,7 +46,7 @@ def interval_to_ms(interval: str) -> int:
     return amount * multipliers[unit]
 
 
-class DBAccuracyReader:
+class DBAccuracyReaderService:
     def __init__(self, db: Any):
         self.db = db
 

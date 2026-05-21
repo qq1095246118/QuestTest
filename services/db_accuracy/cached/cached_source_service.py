@@ -1,3 +1,8 @@
+"""cached 模式源数据分区缓存服务。
+
+本模块负责按市场分片和时间分区获取 Binance 源数据，并写入本地缓存。
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -5,15 +10,15 @@ from typing import Any
 
 import polars as pl
 
-from tests.db_accuracy.binance_source import BinanceSource
-from tests.db_accuracy.cache_models import CacheManifest, MarketShard, TimePartition
-from tests.db_accuracy.cache_store import CacheStore
-from tests.db_accuracy.db_reader import DBAccuracyReader
-from tests.db_accuracy.frame_normalizer import (
+from services.db_accuracy.source_service import BinanceSourceService
+from services.db_accuracy.cached.cache_models import CacheManifest, MarketShard, TimePartition
+from services.db_accuracy.cached.cache_store_service import CacheStoreService
+from services.db_accuracy.db_reader_service import DBAccuracyReaderService
+from services.db_accuracy.cached.frame_normalizer_service import (
     normalized_compare_columns,
     source_rows_to_normalized_frame,
 )
-from tests.db_accuracy.models import (
+from services.db_accuracy.models import (
     KeyTimeRange,
     ResolvedTableSpec,
     TableSpec,
@@ -21,10 +26,10 @@ from tests.db_accuracy.models import (
 )
 
 
-class CachedBinanceSource:
-    def __init__(self, store: CacheStore, source: Any = None):
+class CachedBinanceSourceService:
+    def __init__(self, store: CacheStoreService, source: Any = None):
         self.store = store
-        self.source = source if source is not None else BinanceSource()
+        self.source = source if source is not None else BinanceSourceService()
 
     def ensure_partition(
         self,
@@ -157,5 +162,5 @@ def _source_windows(
     )
     return [
         (window.start_ms, window.end_ms)
-        for window in DBAccuracyReader(db=None).build_windows(resolved, time_range)
+        for window in DBAccuracyReaderService(db=None).build_windows(resolved, time_range)
     ]

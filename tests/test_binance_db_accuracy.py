@@ -3,10 +3,10 @@ from pathlib import Path
 import allure
 import pytest
 
-from tests.db_accuracy.cache_models import CachedCompareRequest
-from tests.db_accuracy.cached_runner import CachedAccuracyRunner, cached_result_to_json
-from tests.db_accuracy.runner import AccuracyRunner, result_to_json
-from tests.db_accuracy.shard_planner import validate_cached_request
+from services.db_accuracy.cached.cache_models import CachedCompareRequest
+from services.db_accuracy.cached.cached_accuracy_service import CachedAccuracyService, cached_result_to_json
+from services.db_accuracy.direct.accuracy_service import DirectAccuracyService, result_to_json
+from services.db_accuracy.cached.shard_planner_service import validate_cached_request
 
 
 pytestmark = pytest.mark.db_accuracy
@@ -23,7 +23,7 @@ def test_binance_raw_and_metadata_db_accuracy(request):
     if mode == "cached":
         cached_request = _cached_compare_request(request.config)
         validate_cached_request(cached_request)
-        result = CachedAccuracyRunner().run(cached_request)
+        result = CachedAccuracyService().run(cached_request)
 
         allure.attach(
             result.summary_text(),
@@ -42,7 +42,7 @@ def test_binance_raw_and_metadata_db_accuracy(request):
     safety_hours = request.config.getoption("--db-accuracy-safety-hours")
     include_tables = request.config.getoption("--db-accuracy-table")
 
-    result = AccuracyRunner().run(
+    result = DirectAccuracyService().run(
         safety_hours=safety_hours,
         include_tables=include_tables,
     )

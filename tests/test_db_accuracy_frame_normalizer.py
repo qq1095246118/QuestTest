@@ -2,15 +2,15 @@ from decimal import Decimal
 
 import pytest
 
-from tests.db_accuracy.cache_models import MarketShard
-from tests.db_accuracy.frame_normalizer import (
+from services.db_accuracy.cached.cache_models import MarketShard
+from services.db_accuracy.cached.frame_normalizer_service import (
     DuplicateJoinKeyError,
     MISSING_FIELD_SENTINEL,
     normalized_compare_columns,
     rows_to_normalized_frame,
     source_rows_to_normalized_frame,
 )
-from tests.db_accuracy.models import SourceRow
+from services.db_accuracy.models import SourceRow
 
 
 def _shard():

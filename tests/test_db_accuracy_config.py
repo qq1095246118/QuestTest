@@ -1,8 +1,8 @@
 import pytest
 
-from tests.db_accuracy.db_reader import DBAccuracyReader, interval_to_ms, quote_identifier
-from tests.db_accuracy.models import KeyTimeRange, ResolvedTableSpec, TableSpec, ValidationKey
-from tests.db_accuracy.table_specs import load_table_specs, resolve_spec
+from services.db_accuracy.db_reader_service import DBAccuracyReaderService, interval_to_ms, quote_identifier
+from services.db_accuracy.models import KeyTimeRange, ResolvedTableSpec, TableSpec, ValidationKey
+from services.db_accuracy.table_specs import load_table_specs, resolve_spec
 
 
 class FakeDB:
@@ -139,7 +139,7 @@ def test_reader_builds_key_ranges_from_configured_fields():
         request_limit=1000,
     )
     db = FakeDB()
-    reader = DBAccuracyReader(db)
+    reader = DBAccuracyReaderService(db)
     resolved = resolve_spec(spec, reader.table_columns("sample_kline"))
     ranges = reader.key_ranges(resolved, stable_before_ms=1704074400000)
 
@@ -169,7 +169,7 @@ def test_reader_returns_empty_for_specs_without_time_field():
         key_fields=("symbol",),
     )
     key = ValidationKey({"symbol": "BTCUSDT"})
-    reader = DBAccuracyReader(FakeDB())
+    reader = DBAccuracyReaderService(FakeDB())
 
     assert reader.key_ranges(resolved, stable_before_ms=1704074400000) == []
     assert reader.rows_for_window(resolved, key, 1704067200000, 1704070800000) == []
@@ -195,7 +195,7 @@ def test_reader_builds_windows_from_fixed_interval():
         end_ms=1704078000000,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (1704067200000, 1704077999999),
@@ -223,7 +223,7 @@ def test_reader_builds_single_row_windows_when_request_limit_is_one():
         end_ms=1704070800000,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (1704067200000, 1704070799999),
@@ -252,7 +252,7 @@ def test_reader_rejects_non_positive_request_limit():
     )
 
     with pytest.raises(ValueError, match="request_limit must be >= 1"):
-        DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+        DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
 
 def test_reader_rejects_zero_key_interval_without_hanging():
@@ -275,7 +275,7 @@ def test_reader_rejects_zero_key_interval_without_hanging():
     )
 
     with pytest.raises(ValueError, match="Unsupported Binance interval"):
-        DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+        DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
 
 def test_reader_slices_funding_windows_with_default_eight_hour_cadence():
@@ -298,7 +298,7 @@ def test_reader_slices_funding_windows_with_default_eight_hour_cadence():
         end_ms=24 * hour_ms,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (0, 24 * hour_ms - 1),
@@ -327,7 +327,7 @@ def test_reader_slices_funding_windows_from_explicit_fixed_interval():
         end_ms=5 * hour_ms,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (0, 3 * hour_ms - 1),
@@ -356,7 +356,7 @@ def test_reader_slices_funding_windows_with_request_limit_one():
         end_ms=2 * hour_ms,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (0, hour_ms - 1),
@@ -385,7 +385,7 @@ def test_reader_caps_coinm_kline_windows_at_two_hundred_days():
         end_ms=250 * 86_400_000,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (0, 200 * 86_400_000 - 1),
@@ -413,7 +413,7 @@ def test_reader_builds_calendar_month_windows():
         end_ms=1709251200000,
     )
 
-    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (1704067200000, 1709251199999),
@@ -441,4 +441,4 @@ def test_reader_rejects_windows_without_interval_source():
     )
 
     with pytest.raises(ValueError, match="fixed_interval or interval_field"):
-        DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+        DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)

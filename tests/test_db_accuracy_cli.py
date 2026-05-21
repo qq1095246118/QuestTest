@@ -193,7 +193,7 @@ def test_db_accuracy_pytest_configure_scopes_default_allure_dir(pytester):
 def test_cached_mode_validates_single_table_before_runner_construction(monkeypatch):
     monkeypatch.setattr(
         db_accuracy_entry,
-        "CachedAccuracyRunner",
+        "CachedAccuracyService",
         _runner_that_must_not_be_constructed,
     )
     monkeypatch.setattr(db_accuracy_entry.allure, "attach", _no_op_attach)
@@ -217,7 +217,7 @@ def test_cached_mode_validates_single_table_before_runner_construction(monkeypat
 def test_cached_mode_validates_time_range_before_runner_construction(monkeypatch):
     monkeypatch.setattr(
         db_accuracy_entry,
-        "CachedAccuracyRunner",
+        "CachedAccuracyService",
         _runner_that_must_not_be_constructed,
     )
     monkeypatch.setattr(db_accuracy_entry.allure, "attach", _no_op_attach)
@@ -239,7 +239,7 @@ def test_cached_mode_validates_time_range_before_runner_construction(monkeypatch
 
 
 def _runner_that_must_not_be_constructed(*_args, **_kwargs):
-    raise AssertionError("CachedAccuracyRunner was constructed before validation")
+    raise AssertionError("CachedAccuracyService was constructed before validation")
 
 
 def _no_op_attach(*_args, **_kwargs):

@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tests.db_accuracy.cache_models import CachedCompareRequest
-from tests.db_accuracy.cached_runner import CachedAccuracyRunner, cached_result_to_json
-from tests.db_accuracy.models import SourceRow, TableSpec
+from services.db_accuracy.cached.cache_models import CachedCompareRequest
+from services.db_accuracy.cached.cached_accuracy_service import CachedAccuracyService, cached_result_to_json
+from services.db_accuracy.models import SourceRow, TableSpec
 
 
 class FakeDB:
@@ -80,11 +80,11 @@ class MarketUnavailableSource:
 
 def test_cached_runner_passes_single_explicit_shard(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setattr(
-        "tests.db_accuracy.cached_runner.load_table_specs",
+        "services.db_accuracy.cached.cached_accuracy_service.load_table_specs",
         lambda: [_kline_spec()],
     )
     db = FakeDB()
-    runner = CachedAccuracyRunner(db=db, source=FakeSource())
+    runner = CachedAccuracyService(db=db, source=FakeSource())
 
     result = runner.run(
         CachedCompareRequest(
@@ -115,10 +115,10 @@ def test_cached_runner_passes_single_explicit_shard(tmp_path: Path, monkeypatch:
 
 def test_cached_runner_discovers_market_shards_from_db(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setattr(
-        "tests.db_accuracy.cached_runner.load_table_specs",
+        "services.db_accuracy.cached.cached_accuracy_service.load_table_specs",
         lambda: [_kline_spec()],
     )
-    runner = CachedAccuracyRunner(db=FakeDB(), source=FakeSource())
+    runner = CachedAccuracyService(db=FakeDB(), source=FakeSource())
 
     result = runner.run(
         CachedCompareRequest(
@@ -146,10 +146,10 @@ def test_cached_runner_fails_when_discovery_finds_no_shards(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(
-        "tests.db_accuracy.cached_runner.load_table_specs",
+        "services.db_accuracy.cached.cached_accuracy_service.load_table_specs",
         lambda: [_kline_spec()],
     )
-    runner = CachedAccuracyRunner(db=FakeDB(market_keys=[]), source=FakeSource())
+    runner = CachedAccuracyService(db=FakeDB(market_keys=[]), source=FakeSource())
 
     result = runner.run(
         CachedCompareRequest(
@@ -173,8 +173,8 @@ def test_cached_runner_returns_failed_result_for_setup_errors(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    monkeypatch.setattr("tests.db_accuracy.cached_runner.load_table_specs", lambda: [])
-    runner = CachedAccuracyRunner(db=FakeDB(), source=FakeSource())
+    monkeypatch.setattr("services.db_accuracy.cached.cached_accuracy_service.load_table_specs", lambda: [])
+    runner = CachedAccuracyService(db=FakeDB(), source=FakeSource())
 
     result = runner.run(
         CachedCompareRequest(
@@ -198,10 +198,10 @@ def test_cached_runner_rejects_multi_value_discovery_filters(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(
-        "tests.db_accuracy.cached_runner.load_table_specs",
+        "services.db_accuracy.cached.cached_accuracy_service.load_table_specs",
         lambda: [_kline_spec()],
     )
-    runner = CachedAccuracyRunner(db=FakeDB(), source=FakeSource())
+    runner = CachedAccuracyService(db=FakeDB(), source=FakeSource())
 
     result = runner.run(
         CachedCompareRequest(
@@ -224,11 +224,11 @@ def test_cached_runner_counts_source_request_failed_as_operational_failure(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(
-        "tests.db_accuracy.cached_runner.load_table_specs",
+        "services.db_accuracy.cached.cached_accuracy_service.load_table_specs",
         lambda: [_kline_spec()],
     )
     db = FakeDB(rows=[_db_row(1704067200000), _db_row(1704067260000)])
-    runner = CachedAccuracyRunner(db=db, source=RequestFailedSource())
+    runner = CachedAccuracyService(db=db, source=RequestFailedSource())
 
     result = runner.run(_explicit_request(tmp_path))
 
@@ -246,11 +246,11 @@ def test_cached_runner_counts_market_unavailable_db_rows_as_differences(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(
-        "tests.db_accuracy.cached_runner.load_table_specs",
+        "services.db_accuracy.cached.cached_accuracy_service.load_table_specs",
         lambda: [_kline_spec()],
     )
     db = FakeDB(rows=[_db_row(1704067200000), _db_row(1704067260000)])
-    runner = CachedAccuracyRunner(db=db, source=MarketUnavailableSource())
+    runner = CachedAccuracyService(db=db, source=MarketUnavailableSource())
 
     result = runner.run(_explicit_request(tmp_path))
 

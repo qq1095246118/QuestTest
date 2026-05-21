@@ -1,3 +1,8 @@
+"""DB accuracy 表规格加载与解析服务。
+
+本模块负责把 YAML 表配置转换为服务层可使用的数据结构，并校验 DB 字段是否满足对账要求。
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from tests.db_accuracy.models import ResolvedTableSpec, TableSpec
+from services.db_accuracy.models import ResolvedTableSpec, TableSpec
 
 
 SPEC_PATH = Path(__file__).resolve().parents[2] / "data/binance_db_accuracy_tables.yaml"

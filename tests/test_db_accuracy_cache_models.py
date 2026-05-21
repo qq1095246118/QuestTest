@@ -1,4 +1,4 @@
-from tests.db_accuracy.cache_models import (
+from services.db_accuracy.cached.cache_models import (
     CacheManifest,
     CachedRunResult,
     CachedShardResult,

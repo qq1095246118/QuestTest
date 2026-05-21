@@ -1,5 +1,5 @@
-from tests.db_accuracy.cache_models import MarketShard, TimePartition
-from tests.db_accuracy.cached_db_reader import CachedDBReader
+from services.db_accuracy.cached.cache_models import MarketShard, TimePartition
+from services.db_accuracy.cached.cached_db_reader_service import CachedDBReaderService
 
 
 class FakeDB:
@@ -28,7 +28,7 @@ def _shard():
 
 def test_rows_for_partition_filters_by_time_and_market():
     db = FakeDB()
-    reader = CachedDBReader(db)
+    reader = CachedDBReaderService(db)
     partition = TimePartition(start_ms=1704067200000, end_ms=1704153599999)
 
     rows = reader.rows_for_partition(_shard(), partition)
@@ -45,7 +45,7 @@ def test_rows_for_partition_filters_by_time_and_market():
 
 def test_discover_market_keys_groups_by_key_fields():
     db = FakeDB()
-    reader = CachedDBReader(db)
+    reader = CachedDBReaderService(db)
 
     keys = reader.discover_market_keys(
         table="binance_kline_all_future_raw",

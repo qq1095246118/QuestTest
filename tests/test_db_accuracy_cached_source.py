@@ -3,10 +3,10 @@ import json
 import pytest
 import polars as pl
 
-from tests.db_accuracy.cache_models import CacheManifest, MarketShard, TimePartition
-from tests.db_accuracy.cache_store import CacheStore
-from tests.db_accuracy.cached_source import CachedBinanceSource
-from tests.db_accuracy.models import SourceRow, TableSpec, ValidationKey
+from services.db_accuracy.cached.cache_models import CacheManifest, MarketShard, TimePartition
+from services.db_accuracy.cached.cache_store_service import CacheStoreService
+from services.db_accuracy.cached.cached_source_service import CachedBinanceSourceService
+from services.db_accuracy.models import SourceRow, TableSpec, ValidationKey
 
 
 def _spec():
@@ -65,8 +65,8 @@ def test_ensure_partition_fetches_and_writes_missing_partition(tmp_path):
             )
         ]
     )
-    store = CacheStore(tmp_path)
-    fetcher = CachedBinanceSource(store=store, source=source)
+    store = CacheStoreService(tmp_path)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
     partition = _small_partition()
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
@@ -120,8 +120,8 @@ def test_ensure_partition_splits_fetches_by_source_request_limit(tmp_path):
             return rows
 
     source = MinuteSource()
-    store = CacheStore(tmp_path)
-    fetcher = CachedBinanceSource(store=store, source=source)
+    store = CacheStoreService(tmp_path)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
 
@@ -143,7 +143,7 @@ def test_ensure_partition_reuses_complete_partition_without_refresh(tmp_path):
             )
         ]
     )
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = _partition()
     paths = store.paths_for(_shard(), partition)
     existing = CacheManifest(
@@ -171,7 +171,7 @@ def test_ensure_partition_reuses_complete_partition_without_refresh(tmp_path):
         ),
     )
     store.write_manifest(paths, existing)
-    fetcher = CachedBinanceSource(store=store, source=source)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
 
@@ -183,7 +183,7 @@ def test_ensure_partition_reuses_complete_partition_without_refresh(tmp_path):
 
 def test_ensure_partition_records_empty_partition_and_removes_stale_data(tmp_path):
     source = RecordingSource([])
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = _partition()
     paths = store.paths_for(_shard(), partition)
     store.write_frame(
@@ -199,7 +199,7 @@ def test_ensure_partition_records_empty_partition_and_removes_stale_data(tmp_pat
             }
         ),
     )
-    fetcher = CachedBinanceSource(store=store, source=source)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=True)
 
@@ -227,7 +227,7 @@ def test_ensure_partition_reuses_empty_partition_with_stable_schema(tmp_path):
             )
         ]
     )
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = _partition()
     paths = store.paths_for(_shard(), partition)
     existing = CacheManifest(
@@ -242,7 +242,7 @@ def test_ensure_partition_reuses_empty_partition_with_stable_schema(tmp_path):
         created_at_utc="2026-05-18T12:00:00+00:00",
     )
     store.write_manifest(paths, existing)
-    fetcher = CachedBinanceSource(store=store, source=source)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
 
@@ -261,7 +261,7 @@ def test_ensure_partition_reuses_empty_partition_with_stable_schema(tmp_path):
 
 def test_ensure_partition_empty_cache_hit_ignores_stale_parquet(tmp_path):
     source = RecordingSource()
-    store = CacheStore(tmp_path)
+    store = CacheStoreService(tmp_path)
     partition = _partition()
     paths = store.paths_for(_shard(), partition)
     stale_frame = pl.DataFrame(
@@ -290,7 +290,7 @@ def test_ensure_partition_empty_cache_hit_ignores_stale_parquet(tmp_path):
         json.dumps(empty_manifest.to_dict()),
         encoding="utf-8",
     )
-    fetcher = CachedBinanceSource(store=store, source=source)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), partition, refresh=False)
 
@@ -316,8 +316,8 @@ def test_ensure_partition_empty_cache_hit_ignores_stale_parquet(tmp_path):
 )
 def test_ensure_partition_records_source_errors(tmp_path, error, status):
     source = RecordingSource(error=error)
-    store = CacheStore(tmp_path)
-    fetcher = CachedBinanceSource(store=store, source=source)
+    store = CacheStoreService(tmp_path)
+    fetcher = CachedBinanceSourceService(store=store, source=source)
 
     frame, manifest = fetcher.ensure_partition(_spec(), _shard(), _partition(), refresh=False)
 

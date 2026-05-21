@@ -1,15 +1,24 @@
+"""Binance 源数据获取与字段映射服务。
+
+本模块负责调用 Binance 行情接口、映射源字段，并提供市场生命周期查询。
+"""
+
 from __future__ import annotations
 
 from typing import Any
 
-from tests.db_accuracy.models import SourceRow, TableSpec, ValidationKey
+from services.db_accuracy.models import MarketLifecycle, SourceRow, TableSpec, ValidationKey
 
 
-class BinanceSource:
+PERPETUAL_DELIVERY_MS = 4_133_404_800_000
+
+
+class BinanceSourceService:
     def __init__(self, usdm: Any = None, spot: Any = None, coinm: Any = None):
         self.usdm = usdm if usdm is not None else _default_usdm_client()
         self.spot = spot if spot is not None else _default_spot_client()
         self.coinm = coinm if coinm is not None else _default_coinm_client()
+        self._exchange_info_cache: dict[str, dict[str, Any]] = {}
 
     def fetch_rows(
         self,
@@ -42,6 +51,34 @@ class BinanceSource:
             }
             rows.append(SourceRow(key=fields["symbol"], fields=fields))
         return rows
+
+    def market_lifecycle(self, spec: TableSpec, key: ValidationKey) -> MarketLifecycle:
+        market = _lifecycle_market_value(spec, key)
+        if market is None:
+            return MarketLifecycle(
+                is_known=True,
+                status="TRADING",
+                onboard_ms=None,
+                delivery_ms=None,
+            )
+
+        payload = self._exchange_info(spec.endpoint)
+        symbols = payload.get("symbols", []) if isinstance(payload, dict) else []
+        for item in symbols:
+            if _matches_market(spec, key, item, market):
+                return MarketLifecycle(
+                    is_known=True,
+                    status=_lifecycle_status(item),
+                    onboard_ms=_optional_int(item.get("onboardDate")),
+                    delivery_ms=_optional_delivery_ms(item.get("deliveryDate")),
+                )
+
+        return MarketLifecycle(
+            is_known=False,
+            status=None,
+            onboard_ms=None,
+            delivery_ms=None,
+        )
 
     def _fetch_kline_rows(
         self,
@@ -85,6 +122,20 @@ class BinanceSource:
             row_key = fields.get(spec.source_time_field or "timestamp")
             rows.append(SourceRow(key=row_key, fields=fields))
         return rows
+
+    def _exchange_info(self, endpoint: str) -> dict[str, Any]:
+        cache_key = _exchange_info_cache_key(endpoint)
+        if cache_key not in self._exchange_info_cache:
+            if cache_key == "usdm":
+                response = self.usdm.get_exchange_info()
+            elif cache_key == "spot":
+                response = self.spot.get_exchange_info()
+            elif cache_key == "coinm":
+                response = self.coinm.get_exchange_info()
+            else:
+                return {}
+            self._exchange_info_cache[cache_key] = _response_json(response)
+        return self._exchange_info_cache[cache_key]
 
     def _fetch_funding_rows(
         self,
@@ -157,6 +208,69 @@ def _key_value(spec: TableSpec, key: ValidationKey, field: str | None) -> str:
         return str(key.values[field])
     except KeyError as exc:
         raise ValueError(f"{spec.table} validation key missing field: {field}") from exc
+
+
+def _exchange_info_cache_key(endpoint: str) -> str | None:
+    if endpoint.startswith("usdm_"):
+        return "usdm"
+    if endpoint.startswith("spot_"):
+        return "spot"
+    if endpoint.startswith("coinm_"):
+        return "coinm"
+    return None
+
+
+def _lifecycle_market_value(spec: TableSpec, key: ValidationKey) -> str | None:
+    if spec.endpoint in {"usdm_continuous_klines", "coinm_continuous_klines"}:
+        return _key_value(spec, key, spec.pair_field or "pair")
+    if spec.kind in {"kline", "funding"}:
+        return _key_value(spec, key, spec.symbol_field)
+    return None
+
+
+def _matches_market(
+    spec: TableSpec,
+    key: ValidationKey,
+    item: dict[str, Any],
+    market: str,
+) -> bool:
+    if spec.endpoint in {"usdm_continuous_klines", "coinm_continuous_klines"}:
+        contract_type = _key_value(
+            spec,
+            key,
+            spec.contract_type_field or "contract_type",
+        )
+        return (
+            _optional_text(item.get("pair")) == market
+            and _optional_text(item.get("contractType")) == contract_type
+        )
+    return _optional_text(item.get("symbol")) == market
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _lifecycle_status(item: dict[str, Any]) -> str | None:
+    return _optional_text(item.get("status") or item.get("contractStatus"))
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_delivery_ms(value: Any) -> int | None:
+    delivery_ms = _optional_int(value)
+    if delivery_ms in {None, 0, PERPETUAL_DELIVERY_MS}:
+        return None
+    return delivery_ms
 
 
 def _kline_fields(raw: list[Any] | tuple[Any, ...]) -> dict[str, Any]:
