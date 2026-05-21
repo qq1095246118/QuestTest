@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from services.db_accuracy.cached.cache_models import CachedCompareRequest
-from services.db_accuracy.cached.cached_accuracy_service import CachedAccuracyService, cached_result_to_json
+from services.db_accuracy.cached.cached_accuracy_service import CachedAccuracyService
 from services.db_accuracy.models import SourceRow, TableSpec
+from services.db_accuracy.reporting.result_serializer_service import ResultSerializerService
 
 
 class FakeDB:
@@ -131,7 +132,7 @@ def test_cached_runner_discovers_market_shards_from_db(tmp_path: Path, monkeypat
         )
     )
 
-    payload = json.loads(cached_result_to_json(result))
+    payload = json.loads(ResultSerializerService.cached_to_json(result))
 
     assert result.passed
     assert len(result.shards) == 1

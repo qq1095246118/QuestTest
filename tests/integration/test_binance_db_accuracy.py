@@ -3,10 +3,11 @@ from pathlib import Path
 import allure
 import pytest
 
+from services.db_accuracy.cached.cached_accuracy_service import CachedAccuracyService
 from services.db_accuracy.cached.cache_models import CachedCompareRequest
-from services.db_accuracy.cached.cached_accuracy_service import CachedAccuracyService, cached_result_to_json
-from services.db_accuracy.direct.accuracy_service import DirectAccuracyService, result_to_json
 from services.db_accuracy.cached.shard_planner_service import validate_cached_request
+from services.db_accuracy.direct.accuracy_service import DirectAccuracyService
+from services.db_accuracy.reporting.result_serializer_service import ResultSerializerService
 
 
 pytestmark = pytest.mark.db_accuracy
@@ -31,7 +32,7 @@ def test_binance_raw_and_metadata_db_accuracy(request):
             attachment_type=allure.attachment_type.TEXT,
         )
         allure.attach(
-            cached_result_to_json(result),
+            ResultSerializerService.cached_to_json(result),
             name="db_accuracy_cached_details",
             attachment_type=allure.attachment_type.JSON,
         )
@@ -53,7 +54,7 @@ def test_binance_raw_and_metadata_db_accuracy(request):
         attachment_type=allure.attachment_type.TEXT,
     )
     allure.attach(
-        result_to_json(result),
+        ResultSerializerService.direct_to_json(result),
         name="db_accuracy_details",
         attachment_type=allure.attachment_type.JSON,
     )

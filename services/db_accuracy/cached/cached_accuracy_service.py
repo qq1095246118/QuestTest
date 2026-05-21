@@ -5,8 +5,7 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -138,19 +137,6 @@ class CachedAccuracyService:
                     )
 
         return result
-
-
-def cached_result_to_json(result: CachedRunResult) -> str:
-    return json.dumps(
-        {
-            "passed": result.passed,
-            "summary": result.summary_text(),
-            "shards": [asdict(shard) for shard in result.shards],
-        },
-        ensure_ascii=False,
-        indent=2,
-        default=str,
-    )
 
 
 def _find_spec(table: str) -> TableSpec:

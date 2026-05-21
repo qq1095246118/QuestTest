@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
@@ -483,35 +482,6 @@ class DirectAccuracyService:
                 source_rows=source_rows,
             )
         )
-
-
-def result_to_json(result: AccuracyRunResult) -> str:
-    payload = {
-        "passed": result.passed,
-        "tables": [
-            {
-                "table": table.table,
-                "passed": table.passed,
-                "windows_checked": table.windows_checked,
-                "db_rows_checked": table.db_rows_checked,
-                "source_rows_checked": table.source_rows_checked,
-                "differences": [
-                    {
-                        "table": difference.table,
-                        "key_label": difference.key_label,
-                        "row_key": difference.row_key,
-                        "field": difference.field,
-                        "db_value": difference.db_value,
-                        "source_value": difference.source_value,
-                        "reason": difference.reason,
-                    }
-                    for difference in table.differences
-                ],
-            }
-            for table in result.tables
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
 
 
 def _market_is_comparable(lifecycle: MarketLifecycle) -> bool:
