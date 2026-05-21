@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import tests.test_binance_db_accuracy as db_accuracy_entry
+import tests.integration.test_binance_db_accuracy as db_accuracy_entry
 
 
 pytest_plugins = ("pytester",)
@@ -30,7 +30,7 @@ def _install_project_cli_options(pytester):
 
 
 def _project_conftest_path():
-    return Path(__file__).with_name("conftest.py")
+    return Path(__file__).parents[2] / "conftest.py"
 
 
 def _load_project_conftest():

@@ -290,7 +290,7 @@ def pytest_collection_modifyitems(session, config, items):
         reason="database accuracy validation requires --run-db-accuracy"
     )
     for item in items:
-        if "db_accuracy" in item.keywords:
+        if item.get_closest_marker("db_accuracy") is not None:
             item.add_marker(skip_db_accuracy)
 
 
