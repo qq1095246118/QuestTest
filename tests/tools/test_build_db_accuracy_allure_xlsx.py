@@ -8,7 +8,11 @@ from pathlib import Path
 
 
 def _load_script_module():
-    script = Path(__file__).resolve().parents[1] / "scripts" / "build_db_accuracy_allure_xlsx.py"
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "build_db_accuracy_allure_xlsx.py"
+    )
     spec = importlib.util.spec_from_file_location("build_db_accuracy_allure_xlsx", script)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
