@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 from collections import Counter
@@ -19,7 +20,6 @@ from openpyxl.utils import get_column_letter
 
 WORKSPACE = Path(__file__).resolve().parents[2]
 REPORT_DIR = WORKSPACE / "artifacts" / "reports"
-MANIFEST = REPORT_DIR / "binance_usdm_1m_kline_5symbols_latest_manifest.json"
 EXCEL_MAX_ROWS = 1_048_576
 
 
@@ -69,6 +69,63 @@ SOURCE_HEADERS_ZH = {
 
 DIFF_HEADERS = ["symbol", "timestamp", "timestamp_utc", "field", "reason", "db_value", "source_value", "note"]
 DIFF_HEADERS_ZH = ["市场", "开盘时间(ms)", "开盘时间(UTC)", "异常字段", "异常类型", "DB值", "源值", "异常点说明"]
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build a Chinese xlsx report from selected USDM kline CSV/JSON outputs.")
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="专项报告 latest manifest 路径；不传则读取 --report-dir 下最新的 *_latest_manifest.json",
+    )
+    parser.add_argument(
+        "--report-dir",
+        type=Path,
+        default=REPORT_DIR,
+        help="CSV/JSON 和 xlsx 报告目录，默认 ./artifacts/reports",
+    )
+    return parser.parse_args(argv)
+
+
+def find_latest_manifest(report_dir: Path) -> Path:
+    candidates = sorted(
+        Path(report_dir).glob("*_latest_manifest.json"),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+        reverse=True,
+    )
+    if not candidates:
+        raise FileNotFoundError(f"未在 {report_dir} 找到 *_latest_manifest.json")
+    return candidates[0]
+
+
+def infer_output_base(meta: dict, manifest: Path) -> str:
+    outputs = meta.get("outputs")
+    if isinstance(outputs, dict):
+        for key in ("base", "report_base", "xlsx_base"):
+            value = outputs.get(key)
+            if value:
+                return str(value)
+        for key in ("latest_xlsx", "stamped_xlsx"):
+            value = outputs.get(key)
+            if value:
+                name = Path(str(value)).name
+                if name.endswith("_latest_zh.xlsx"):
+                    return name[: -len("_latest_zh.xlsx")]
+                if name.endswith("_zh.xlsx"):
+                    return name[: -len("_zh.xlsx")]
+
+    name = Path(manifest).name
+    if name.endswith("_latest_manifest.json"):
+        return name[: -len("_latest_manifest.json")]
+    return Path(manifest).stem
+
+
+def output_paths(report_dir: Path, base: str, stamp: str) -> tuple[Path, Path]:
+    return (
+        report_dir / f"{base}_latest_zh.xlsx",
+        report_dir / f"{base}_{stamp}_zh.xlsx",
+    )
 
 
 def styled_cell(ws, value, *, title=False, header=False, text_format=False):
@@ -135,8 +192,11 @@ def append_csv_sheet(wb, sheet_name: str, title: str, csv_path: Path, header_map
     return ws
 
 
-def main() -> int:
-    meta = json.loads(MANIFEST.read_text(encoding="utf-8"))
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    report_dir = Path(args.report_dir)
+    manifest = Path(args.manifest) if args.manifest else find_latest_manifest(report_dir)
+    meta = json.loads(manifest.read_text(encoding="utf-8"))
     diff_csv = Path(meta["files"]["differences_csv"])
     db_csv = Path(meta["files"]["db_raw_csv"])
     source_csv = Path(meta["files"]["source_raw_csv"])
@@ -224,8 +284,8 @@ def main() -> int:
         [16, 14, 22, 24, 18, 18, 18, 18, 24, 22, 24, 24, 18, 28, 28],
     )
 
-    latest_xlsx = REPORT_DIR / "binance_usdm_1m_kline_5symbols_20240101_to_now_latest_zh.xlsx"
-    stamped_xlsx = REPORT_DIR / f"binance_usdm_1m_kline_5symbols_20240101_to_now_{stamp}_zh.xlsx"
+    latest_xlsx, stamped_xlsx = output_paths(report_dir, infer_output_base(meta, manifest), stamp)
+    latest_xlsx.parent.mkdir(parents=True, exist_ok=True)
     wb.save(latest_xlsx)
     stamped_xlsx.write_bytes(latest_xlsx.read_bytes())
 
