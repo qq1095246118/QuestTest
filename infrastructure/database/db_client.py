@@ -1,3 +1,8 @@
+"""数据库基础设施模块。
+
+本模块封装 MySQL 连接、查询和写入能力，供服务层和测试入口复用。
+"""
+
 import pymysql
 import logging
 from config.settings import settings

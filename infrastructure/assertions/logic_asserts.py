@@ -1,3 +1,8 @@
+"""金融逻辑断言基础设施。
+
+本模块提供 K 线 OHLC 关系和时间序列连续性等金融数据逻辑校验。
+"""
+
 def assert_ohlc_logic(open_price: float, high_price: float, low_price: float, close_price: float):
     """
     Financial Logic: Validate OHLC relationships.

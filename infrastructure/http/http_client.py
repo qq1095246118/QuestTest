@@ -1,3 +1,8 @@
+"""HTTP 基础设施模块。
+
+本模块只负责统一 HTTP 请求、超时和可重试状态码处理，不承载业务判断。
+"""
+
 import logging
 
 import requests

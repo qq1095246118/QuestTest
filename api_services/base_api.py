@@ -1,4 +1,4 @@
-from core.http_client import HTTPClient
+from infrastructure.http.http_client import HTTPClient
 from config.settings import settings
 
 class BaseAPI:

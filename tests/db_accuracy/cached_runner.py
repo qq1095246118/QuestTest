@@ -34,7 +34,7 @@ SOURCE_FAILURE_STATUSES = {"source_market_unavailable", "source_request_failed"}
 class CachedAccuracyRunner:
     def __init__(self, db: Any = None, source: Any = None) -> None:
         if db is None:
-            from core.db_client import DBClient
+            from infrastructure.database.db_client import DBClient
 
             db = DBClient()
         self.db = db

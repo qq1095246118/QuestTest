@@ -1,3 +1,8 @@
+"""数据质量断言基础设施。
+
+本模块提供可复用的数据结构、数值精度和时间戳校验断言。
+"""
+
 from jsonschema import validate
 
 def assert_schema(instance: dict, schema: dict):

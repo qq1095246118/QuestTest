@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from config.settings import settings
-from core.http_client import HTTPClient
+from infrastructure.http.http_client import HTTPClient
 
 
 class OpenInterestAPI:

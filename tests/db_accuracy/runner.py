@@ -263,7 +263,7 @@ def _index_source_rows(
 class AccuracyRunner:
     def __init__(self, db: Any = None, source: BinanceSource | None = None):
         if db is None:
-            from core.db_client import DBClient
+            from infrastructure.database.db_client import DBClient
 
             db = DBClient()
 

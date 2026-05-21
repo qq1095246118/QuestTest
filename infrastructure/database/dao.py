@@ -1,6 +1,11 @@
+"""数据库 DAO 基础模块。
+
+本模块放置通用数据访问封装，避免业务层直接重复拼接基础查询逻辑。
+"""
+
 import logging
 from typing import List, Dict, Any, Optional
-from core.db_client import DBClient
+from infrastructure.database.db_client import DBClient
 
 logger = logging.getLogger(__name__)
 
