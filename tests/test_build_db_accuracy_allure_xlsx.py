@@ -122,6 +122,22 @@ def test_direct_payload_xlsx_has_chinese_headers_and_text_values(tmp_path):
     assert "<t xml:space=\"preserve\">2024-01-01 00:00:00</t>" in sheet_xml
 
 
+def test_describes_known_missing_source_row_reason():
+    module = _load_script_module()
+
+    assert module._describe_difference("missing_source_row", "timestamp") == (
+        "DB 中存在该 key，但源接口未返回对应行，需确认第三方接口口径或 DB 是否保留了旧数据。"
+    )
+
+
+def test_describes_unknown_reason_as_unclassified():
+    module = _load_script_module()
+
+    assert module._describe_difference("new_reason", "funding_time") == (
+        "未归类异常；字段 funding_time 的异常类型为 new_reason。"
+    )
+
+
 def test_default_output_paths_follow_db_accuracy_allure_subdirectory(tmp_path, monkeypatch):
     module = _load_script_module()
     allure_root = tmp_path / "allure-results"

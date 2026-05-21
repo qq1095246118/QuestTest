@@ -61,6 +61,12 @@ def test_loaded_specs_have_key_and_compare_fields():
             assert "symbol" in spec.compare_fields
 
 
+def test_loaded_one_hour_usdm_funding_spec_declares_fixed_interval():
+    specs = {spec.table: spec for spec in load_table_specs()}
+
+    assert specs["binance_1h_usdm_funding_rate_raw"].fixed_interval == "1h"
+
+
 def test_load_table_specs_rejects_scalar_list_fields(tmp_path):
     config_path = tmp_path / "tables.yaml"
     config_path.write_text(
@@ -272,7 +278,8 @@ def test_reader_rejects_zero_key_interval_without_hanging():
         DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
 
 
-def test_reader_slices_funding_windows_at_ninety_days():
+def test_reader_slices_funding_windows_with_default_eight_hour_cadence():
+    hour_ms = 3_600_000
     spec = TableSpec(
         table="sample_funding",
         kind="funding",
@@ -281,21 +288,80 @@ def test_reader_slices_funding_windows_at_ninety_days():
         time_fields=("fundingTime",),
         interval_field=None,
         compare_fields=("fundingTime", "fundingRate"),
-        request_limit=1000,
+        request_limit=3,
     )
     resolved = resolve_spec(spec, {"symbol", "fundingTime", "fundingRate"})
     time_range = KeyTimeRange(
         table="sample_funding",
         key=ValidationKey({"symbol": "BTCUSDT"}),
         start_ms=0,
-        end_ms=91 * 86_400_000,
+        end_ms=24 * hour_ms,
     )
 
     windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
 
     assert [(window.start_ms, window.end_ms) for window in windows] == [
-        (0, 90 * 86_400_000),
-        (90 * 86_400_000 + 1, 91 * 86_400_000),
+        (0, 24 * hour_ms - 1),
+        (24 * hour_ms, 24 * hour_ms),
+    ]
+
+
+def test_reader_slices_funding_windows_from_explicit_fixed_interval():
+    hour_ms = 3_600_000
+    spec = TableSpec(
+        table="sample_one_hour_funding",
+        kind="funding",
+        endpoint="usdm_funding",
+        key_fields=("symbol",),
+        time_fields=("funding_time",),
+        interval_field=None,
+        compare_fields=("funding_time", "funding_rate", "mark_price"),
+        request_limit=3,
+        fixed_interval="1h",
+    )
+    resolved = resolve_spec(spec, {"symbol", "funding_time", "funding_rate", "mark_price"})
+    time_range = KeyTimeRange(
+        table="sample_one_hour_funding",
+        key=ValidationKey({"symbol": "0GUSDT"}),
+        start_ms=0,
+        end_ms=5 * hour_ms,
+    )
+
+    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+
+    assert [(window.start_ms, window.end_ms) for window in windows] == [
+        (0, 3 * hour_ms - 1),
+        (3 * hour_ms, 5 * hour_ms),
+    ]
+
+
+def test_reader_slices_funding_windows_with_request_limit_one():
+    hour_ms = 3_600_000
+    spec = TableSpec(
+        table="sample_one_hour_funding",
+        kind="funding",
+        endpoint="usdm_funding",
+        key_fields=("symbol",),
+        time_fields=("funding_time",),
+        interval_field=None,
+        compare_fields=("funding_time", "funding_rate", "mark_price"),
+        request_limit=1,
+        fixed_interval="1h",
+    )
+    resolved = resolve_spec(spec, {"symbol", "funding_time", "funding_rate", "mark_price"})
+    time_range = KeyTimeRange(
+        table="sample_one_hour_funding",
+        key=ValidationKey({"symbol": "0GUSDT"}),
+        start_ms=0,
+        end_ms=2 * hour_ms,
+    )
+
+    windows = DBAccuracyReader(FakeDB()).build_windows(resolved, time_range)
+
+    assert [(window.start_ms, window.end_ms) for window in windows] == [
+        (0, hour_ms - 1),
+        (hour_ms, 2 * hour_ms - 1),
+        (2 * hour_ms, 2 * hour_ms),
     ]
 
 

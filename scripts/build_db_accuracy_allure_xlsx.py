@@ -338,6 +338,8 @@ def _describe_difference(reason: str, field: str) -> str:
         return "表级校验失败，请结合异常类型中的错误信息定位配置或读取问题。"
     if reason.startswith("unknown_table:"):
         return "命令指定的表未出现在 DB accuracy 配置中。"
+    if reason in notes:
+        return notes[reason]
     if reason:
         return f"未归类异常；字段 {field or '-'} 的异常类型为 {reason}。"
     return "未提供异常类型，请检查源 JSON。"

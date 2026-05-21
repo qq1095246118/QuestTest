@@ -8,6 +8,7 @@ from typing import Any
 from tests.db_accuracy.models import KeyTimeRange, ResolvedTableSpec, ValidationKey, ValidationWindow
 
 
+DEFAULT_FUNDING_INTERVAL = "8h"
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -120,11 +121,13 @@ class DBAccuracyReader:
         spec: ResolvedTableSpec,
         time_range: KeyTimeRange,
     ) -> list[ValidationWindow]:
+        if spec.spec.request_limit < 1:
+            raise ValueError("request_limit must be >= 1")
+
         if spec.spec.kind == "funding":
-            window_end = lambda start_ms: start_ms + 90 * 86_400_000
+            interval = spec.spec.fixed_interval or DEFAULT_FUNDING_INTERVAL
+            window_end = _funding_window_end(interval, spec.spec.request_limit)
         else:
-            if spec.spec.request_limit < 1:
-                raise ValueError("request_limit must be >= 1")
             interval = spec.spec.fixed_interval
             if interval is None:
                 if spec.interval_field is None:
@@ -153,6 +156,15 @@ class DBAccuracyReader:
 
 def _dedupe(fields: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(fields))
+
+
+def _funding_window_end(interval: str, request_limit: int):
+    window_span_ms = interval_to_ms(interval) * request_limit
+
+    def window_end(start_ms: int) -> int:
+        return start_ms + window_span_ms - 1
+
+    return window_end
 
 
 def _fixed_window_end(window_span_ms: int):
