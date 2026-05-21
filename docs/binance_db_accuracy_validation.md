@@ -862,7 +862,7 @@ cache_root: 外部大盘
 新增表后至少运行：
 
 ```bash
-$PYTHON -m pytest tests/test_db_accuracy_config.py -q
+$PYTHON -m pytest tests/services/db_accuracy/test_table_specs_and_reader.py -q
 $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py --collect-only -q --run-db-accuracy
 ```
 
@@ -871,7 +871,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py --collect-only -
 修改脚本后建议跑：
 
 ```bash
-$PYTHON -m pytest tests/test_db_accuracy*.py tests/integration/test_binance_db_accuracy.py -q
+$PYTHON -m pytest tests/services/db_accuracy tests/integration/test_binance_db_accuracy.py -q
 $PYTHON -m compileall services/db_accuracy tests/integration/test_binance_db_accuracy.py
 ```
 

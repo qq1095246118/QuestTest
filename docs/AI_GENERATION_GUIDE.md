@@ -7,6 +7,7 @@ To ensure framework stability and strict quality standards, the following rules 
 
 1. **Respect Layer Boundaries**
    - `infrastructure/` holds low-level HTTP, database, and assertion foundations.
+   - `infrastructure/` is protected infrastructure and should not be modified unless the user explicitly asks.
    - `api/` holds raw API request wrappers only.
    - `services/` holds intermediate logic, judgment, comparison, caching, and report data preparation.
    - `tools/` holds directly runnable utilities and temporary Python files.
