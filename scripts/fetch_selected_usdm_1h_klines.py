@@ -13,7 +13,7 @@ from typing import Any
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE))
 
-from api_services.binance.usdm_market_api import USDMMarketAPI
+from api.external.binance.usdm_market_api import USDMMarketAPI
 from infrastructure.database.db_client import DBClient
 from tests.db_accuracy.compare import normalize_value
 

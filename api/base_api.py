@@ -1,3 +1,8 @@
+"""基础 API 调用封装。
+
+本模块只负责拼接请求参数并发起 HTTP 调用，不做业务判断或断言。
+"""
+
 from infrastructure.http.http_client import HTTPClient
 from config.settings import settings
 

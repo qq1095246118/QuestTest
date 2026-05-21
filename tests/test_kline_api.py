@@ -7,7 +7,7 @@ import allure
 import pytest
 from requests.exceptions import HTTPError
 
-from api_services.kline_data_api import KlineDataAPI
+from api.platform.kline_data_api import KlineDataAPI
 from config.settings import settings
 
 SYMBOL = "BTCUSDT"

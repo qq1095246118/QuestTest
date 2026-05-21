@@ -6,7 +6,7 @@ import allure
 import pytest
 from requests.exceptions import HTTPError
 
-from api_services.factor_data_api import FactorDataAPI
+from api.platform.factor_data_api import FactorDataAPI
 from config.settings import settings
 
 SYMBOLS_SINGLE = ["BTCUSDT"]

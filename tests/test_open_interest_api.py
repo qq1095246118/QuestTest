@@ -6,7 +6,7 @@ import allure
 import pytest
 from requests.exceptions import HTTPError
 
-from api_services.open_interest_api import OpenInterestAPI
+from api.platform.open_interest_api import OpenInterestAPI
 from config.settings import settings
 
 CONTRACT_SYMBOL = "BTCUSDT"

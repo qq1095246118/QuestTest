@@ -7,7 +7,7 @@ import allure
 import pytest
 from requests.exceptions import HTTPError
 
-from api_services.binance_usdm_api import BinanceUSDMAPI
+from api.platform.binance_usdm_api import BinanceUSDMAPI
 from config.settings import settings
 
 LIMIT_NORMAL = 10

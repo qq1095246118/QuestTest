@@ -121,19 +121,19 @@ class BinanceSource:
 
 
 def _default_usdm_client() -> Any:
-    from api_services.binance.usdm_market_api import USDMMarketAPI
+    from api.external.binance.usdm_market_api import USDMMarketAPI
 
     return USDMMarketAPI()
 
 
 def _default_spot_client() -> Any:
-    from api_services.binance.spot_market_api import SpotMarketAPI
+    from api.external.binance.spot_market_api import SpotMarketAPI
 
     return SpotMarketAPI()
 
 
 def _default_coinm_client() -> Any:
-    from api_services.binance.coinm_market_api import COINMMarketAPI
+    from api.external.binance.coinm_market_api import COINMMarketAPI
 
     return COINMMarketAPI()
 

@@ -7,7 +7,7 @@ import allure
 import pytest
 from requests.exceptions import HTTPError
 
-from api_services.binance_full_api import BinanceFullAPI
+from api.platform.binance_full_api import BinanceFullAPI
 from config.settings import settings
 
 USDM_SYMBOL = "BTCUSDT"

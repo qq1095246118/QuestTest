@@ -1,4 +1,9 @@
-from api_services.base_api import BaseAPI
+"""Binance Spot 外部原始 API 调用封装。
+
+本模块只负责拼接请求参数并发起 HTTP 调用，不做业务判断或断言。
+"""
+
+from api.base_api import BaseAPI
 from config.settings import settings
 
 class SpotMarketAPI(BaseAPI):

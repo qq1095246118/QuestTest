@@ -6,7 +6,7 @@ import allure
 import pytest
 from requests.exceptions import HTTPError
 
-from api_services.coinglass_api import CoinGlassAPI
+from api.platform.coinglass_api import CoinGlassAPI
 from config.settings import settings
 
 SYMBOL = "BTCUSDT"
