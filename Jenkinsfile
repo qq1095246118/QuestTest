@@ -49,7 +49,7 @@ pipeline {
                 // Placeholder for IM Alert logic (DingTalk / WeCom)
                 def buildStatus = currentBuild.currentResult
                 echo "Sending IM Alert: API Test Pipeline finished with status: ${buildStatus}"
-                // sh "python3 scripts/send_alert.py --status ${buildStatus}"
+                // sh "python3 tools/send_alert.py --status ${buildStatus}"
             }
         }
     }

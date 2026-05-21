@@ -4,8 +4,8 @@
 - Test style: traditional pytest functions
 - Assertion style: each case contains its own request, response parsing, and assertions
 - API source: `docs/x.json`
-- API service wrapper: `api_services/kline_data_api.py`
-- Test file: `tests/test_kline_api.py`
+- API service wrapper: `api/platform/kline_data_api.py`
+- Test file: `tests/api/test_kline_api.py`
 
 ## Implemented Coverage
 

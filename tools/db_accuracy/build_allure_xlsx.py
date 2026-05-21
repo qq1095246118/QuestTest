@@ -11,7 +11,6 @@ import re
 import shutil
 import zipfile
 from collections import Counter
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -66,13 +65,22 @@ TIMESTAMP_FIELDS = {
 }
 
 
-@dataclass(frozen=True)
 class SheetSpec:
-    name: str
-    rows: Sequence[Sequence[Any]]
-    widths: Sequence[int]
-    freeze_header: bool = True
-    autofilter: bool = True
+    __slots__ = ("name", "rows", "widths", "freeze_header", "autofilter")
+
+    def __init__(
+        self,
+        name: str,
+        rows: Sequence[Sequence[Any]],
+        widths: Sequence[int],
+        freeze_header: bool = True,
+        autofilter: bool = True,
+    ) -> None:
+        self.name = name
+        self.rows = rows
+        self.widths = widths
+        self.freeze_header = freeze_header
+        self.autofilter = autofilter
 
 
 def load_json_payload(path: Path) -> dict[str, Any]:
