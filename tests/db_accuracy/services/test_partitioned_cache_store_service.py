@@ -63,7 +63,10 @@ def _manifest(
         schema_fingerprint=task.schema_fingerprint,
         error_type=None,
         error_message=None,
-        artifact_path="db/table=binance_kline_all_future_raw/symbol=BTCUSDT/interval=1m/date=2024-01-01/data.parquet",
+        artifact_path=(
+            "db/table=binance_kline_all_future_raw/symbol=BTCUSDT/interval=1m/"
+            f"date=2024-01-01/range={task.partition_label}/data.parquet"
+        ),
         created_at_utc="2026-05-22T00:00:00+00:00",
     )
 
@@ -83,6 +86,7 @@ def test_store_builds_stable_db_source_and_compare_paths(tmp_path: Path) -> None
         / "symbol=BTCUSDT"
         / "interval=1m"
         / "date=2024-01-01"
+        / "range=1704067200000-1704153599999"
         / "data.parquet"
     )
     assert source_paths.data_path == (
@@ -92,6 +96,7 @@ def test_store_builds_stable_db_source_and_compare_paths(tmp_path: Path) -> None
         / "symbol=BTCUSDT"
         / "interval=1m"
         / "date=2024-01-01"
+        / "range=1704067200000-1704153599999"
         / "data.parquet"
     )
     assert compare_paths.report_path.name == "report.txt"
@@ -362,7 +367,7 @@ def test_path_values_are_slugged_to_safe_segments(tmp_path: Path) -> None:
         request_limit=1000,
         start_ms=1704067200000,
         end_ms=1704153599999,
-        partition_label="1704067200000-1704153599999",
+        partition_label="../1704067200000\\1704153599999\x02",
         partition_bucket="date=2024-01-01",
     )
 
@@ -370,6 +375,7 @@ def test_path_values_are_slugged_to_safe_segments(tmp_path: Path) -> None:
 
     assert "symbol=BTC_USDT" in paths.data_path.parts
     assert "interval=_" in paths.data_path.parts
+    assert "range=1704067200000_1704153599999" in paths.data_path.parts
     assert ".." not in paths.data_path.parts
 
 
@@ -396,6 +402,7 @@ def test_path_parts_sanitize_table_key_names_and_partition_bucket(tmp_path: Path
         assert "/" not in part
         assert "\\" not in part
         assert ".." not in part
+    assert any(part.startswith("range=") for part in task.path_parts)
     assert paths.data_path.is_relative_to(tmp_path)
 
 

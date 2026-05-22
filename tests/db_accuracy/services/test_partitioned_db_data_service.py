@@ -221,6 +221,9 @@ def test_larger_cache_satisfies_smaller_range_and_manifest_matches_filtered_fram
         large_frame,
         _manifest(large_task, large_frame),
     )
+    large_paths = store.data_paths(CacheSide.DB, large_task)
+    small_paths = store.data_paths(CacheSide.DB, small_task)
+    assert large_paths.data_path != small_paths.data_path
     service = PartitionedDBDataService(db, store)
 
     frame, manifest = service.ensure_db_frame(small_task, CachePolicy(use_db_cache=True))
@@ -233,11 +236,15 @@ def test_larger_cache_satisfies_smaller_range_and_manifest_matches_filtered_fram
     assert manifest.fingerprint == fingerprint_frame(frame)
     assert manifest.schema_fingerprint == small_task.schema_fingerprint
 
-    small_paths = store.data_paths(CacheSide.DB, small_task)
     assert small_paths.data_path.exists()
     assert manifest.artifact_path == store.relative_to_root(small_paths.data_path)
     assert pl.read_parquet(small_paths.data_path).to_dict(as_series=False)["timestamp"] == [
         "1704070800000"
+    ]
+    assert pl.read_parquet(large_paths.data_path).to_dict(as_series=False)["timestamp"] == [
+        "1704067200000",
+        "1704070800000",
+        "1704074400000",
     ]
 
 

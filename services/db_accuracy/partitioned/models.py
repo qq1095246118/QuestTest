@@ -134,6 +134,8 @@ class PartitionTask:
             f"{_path_value(key)}={_path_value(self.key_values[key])}" for key in self.key_values
         )
         parts.append(_path_value(self.partition_bucket))
+        if not self.is_registry:
+            parts.append(f"range={_path_value(self.partition_label)}")
         return tuple(parts)
 
     @property
