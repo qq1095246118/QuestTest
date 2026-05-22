@@ -373,6 +373,32 @@ def test_path_values_are_slugged_to_safe_segments(tmp_path: Path) -> None:
     assert ".." not in paths.data_path.parts
 
 
+def test_path_parts_sanitize_table_key_names_and_partition_bucket(tmp_path: Path) -> None:
+    store = PartitionedCacheStoreService(tmp_path)
+    task = PartitionTask(
+        table="../binance\\table\x02",
+        kind="kline",
+        endpoint="usdm_klines",
+        key_values={"../symbol\\name\x03": "BTCUSDT", "interval": "1m"},
+        time_field="timestamp",
+        source_time_field="timestamp",
+        compare_fields=("timestamp", "open", "close"),
+        request_limit=1000,
+        start_ms=1704067200000,
+        end_ms=1704153599999,
+        partition_label="1704067200000-1704153599999",
+        partition_bucket="../date\\2024-01-01\x04",
+    )
+
+    paths = store.data_paths(CacheSide.DB, task)
+
+    for part in task.path_parts:
+        assert "/" not in part
+        assert "\\" not in part
+        assert ".." not in part
+    assert paths.data_path.is_relative_to(tmp_path)
+
+
 def test_read_compare_manifest_misses_when_report_or_diff_is_missing(tmp_path: Path) -> None:
     store = PartitionedCacheStoreService(tmp_path)
     task = _task()

@@ -129,9 +129,11 @@ class PartitionTask:
 
     @property
     def path_parts(self) -> tuple[str, ...]:
-        parts = [f"table={self.table}"]
-        parts.extend(f"{key}={_path_value(self.key_values[key])}" for key in self.key_values)
-        parts.append(self.partition_bucket)
+        parts = [f"table={_path_value(self.table)}"]
+        parts.extend(
+            f"{_path_value(key)}={_path_value(self.key_values[key])}" for key in self.key_values
+        )
+        parts.append(_path_value(self.partition_bucket))
         return tuple(parts)
 
     @property
