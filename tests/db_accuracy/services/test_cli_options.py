@@ -43,7 +43,7 @@ def _load_project_conftest():
     return module
 
 
-def test_cached_db_accuracy_options_are_registered(pytester):
+def test_partitioned_db_accuracy_options_are_registered(pytester):
     _install_project_cli_options(pytester)
     pytester.makepyfile(
         """
@@ -57,7 +57,12 @@ def test_cached_db_accuracy_options_are_registered(pytester):
             assert request.config.getoption("--db-accuracy-start-ms") == 1704067200000
             assert request.config.getoption("--db-accuracy-end-ms") == 1704153599999
             assert request.config.getoption("--db-accuracy-partition-days") == 2
-            assert request.config.getoption("--db-accuracy-refresh-cache") is True
+            assert request.config.getoption("--db-accuracy-use-db-cache") is False
+            assert request.config.getoption("--db-accuracy-use-source-cache") is False
+            assert request.config.getoption("--db-accuracy-workers") == 12
+            assert request.config.getoption("--db-accuracy-source-retries") == 5
+            assert request.config.getoption("--db-accuracy-source-retry-backoff-ms") == 500
+            assert request.config.getoption("--db-accuracy-stop-on-source-failure") is True
             assert request.config.getoption("--db-accuracy-max-shards") == 20
         """
     )
@@ -81,7 +86,18 @@ def test_cached_db_accuracy_options_are_registered(pytester):
         "1704153599999",
         "--db-accuracy-partition-days",
         "2",
-        "--db-accuracy-refresh-cache",
+        "--db-accuracy-use-db-cache",
+        "false",
+        "--db-accuracy-use-source-cache",
+        "false",
+        "--db-accuracy-workers",
+        "12",
+        "--db-accuracy-source-retries",
+        "5",
+        "--db-accuracy-source-retry-backoff-ms",
+        "500",
+        "--db-accuracy-stop-on-source-failure",
+        "true",
         "--db-accuracy-max-shards",
         "20",
     )
@@ -103,14 +119,29 @@ def test_cached_db_accuracy_defaults_are_registered(pytester):
             assert request.config.getoption("--db-accuracy-start-ms") is None
             assert request.config.getoption("--db-accuracy-end-ms") is None
             assert request.config.getoption("--db-accuracy-partition-days") == 1
-            assert request.config.getoption("--db-accuracy-refresh-cache") is False
             assert request.config.getoption("--db-accuracy-max-shards") == 100
+            assert request.config.getoption("--db-accuracy-use-db-cache") is True
+            assert request.config.getoption("--db-accuracy-use-source-cache") is True
+            assert request.config.getoption("--db-accuracy-workers") == 8
+            assert request.config.getoption("--db-accuracy-source-retries") == 5
+            assert request.config.getoption("--db-accuracy-source-retry-backoff-ms") == 1000
+            assert request.config.getoption("--db-accuracy-stop-on-source-failure") is True
         """
     )
 
     result = pytester.runpytest()
 
     result.assert_outcomes(passed=1)
+
+
+def test_old_refresh_cache_option_is_removed(pytester):
+    _install_project_cli_options(pytester)
+    pytester.makepyfile("def test_placeholder(): pass")
+
+    result = pytester.runpytest("--db-accuracy-refresh-cache")
+
+    assert result.ret != 0
+    result.stderr.fnmatch_lines(["*unrecognized arguments: --db-accuracy-refresh-cache*"])
 
 
 def test_db_accuracy_default_allure_dir_is_scoped_to_single_table(tmp_path):
@@ -190,60 +221,26 @@ def test_db_accuracy_pytest_configure_scopes_default_allure_dir(pytester):
     result.assert_outcomes(passed=1)
 
 
-def test_cached_mode_validates_single_table_before_runner_construction(monkeypatch):
-    monkeypatch.setattr(
-        db_accuracy_entry,
-        "CachedAccuracyService",
-        _runner_that_must_not_be_constructed,
-    )
-    monkeypatch.setattr(db_accuracy_entry.allure, "attach", _no_op_attach)
-
-    request = _fake_request(
-        {
-            "--db-accuracy-mode": "cached",
-            "--db-accuracy-table": [],
-            "--db-accuracy-start-ms": 1704067200000,
-            "--db-accuracy-end-ms": 1704153599999,
-        }
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="cached DB accuracy mode requires exactly one --db-accuracy-table",
-    ):
-        db_accuracy_entry.test_binance_raw_and_metadata_db_accuracy(request)
-
-
-def test_cached_mode_validates_time_range_before_runner_construction(monkeypatch):
-    monkeypatch.setattr(
-        db_accuracy_entry,
-        "CachedAccuracyService",
-        _runner_that_must_not_be_constructed,
-    )
-    monkeypatch.setattr(db_accuracy_entry.allure, "attach", _no_op_attach)
-
+def test_partitioned_request_builder_populates_cache_and_execution_options():
     request = _fake_request(
         {
             "--db-accuracy-mode": "cached",
             "--db-accuracy-table": ["binance_kline_all_future_raw"],
-            "--db-accuracy-start-ms": None,
-            "--db-accuracy-end-ms": None,
+            "--db-accuracy-start-ms": 1704067200000,
+            "--db-accuracy-end-ms": 1704153599999,
+            "--db-accuracy-use-db-cache": False,
+            "--db-accuracy-use-source-cache": True,
+            "--db-accuracy-workers": 12,
         }
     )
 
-    with pytest.raises(
-        ValueError,
-        match="start_ms and end_ms are required for cached DB accuracy comparison",
-    ):
-        db_accuracy_entry.test_binance_raw_and_metadata_db_accuracy(request)
+    built = db_accuracy_entry._partitioned_compare_request(request.config)
 
-
-def _runner_that_must_not_be_constructed(*_args, **_kwargs):
-    raise AssertionError("CachedAccuracyService was constructed before validation")
-
-
-def _no_op_attach(*_args, **_kwargs):
-    return None
+    assert built.mode.value == "cached"
+    assert built.tables == ("binance_kline_all_future_raw",)
+    assert built.cache_policy.use_db_cache is False
+    assert built.cache_policy.use_source_cache is True
+    assert built.execution.workers == 12
 
 
 def _fake_request(options):
@@ -254,9 +251,14 @@ def _fake_request(options):
         "--db-accuracy-contract-type": [],
         "--db-accuracy-interval": [],
         "--db-accuracy-partition-days": 1,
-        "--db-accuracy-refresh-cache": False,
         "--db-accuracy-max-shards": 100,
         "--db-accuracy-safety-hours": 24,
+        "--db-accuracy-use-db-cache": True,
+        "--db-accuracy-use-source-cache": True,
+        "--db-accuracy-workers": 8,
+        "--db-accuracy-source-retries": 5,
+        "--db-accuracy-source-retry-backoff-ms": 1000,
+        "--db-accuracy-stop-on-source-failure": True,
     }
     defaults.update(options)
     return _FakeRequest(_FakeConfig(defaults))

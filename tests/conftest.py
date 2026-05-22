@@ -35,6 +35,15 @@ DB_ACCURACY_ALLURE_ROOT = DEFAULT_ALLURE_DIR / "db_accuracy"
 DEFAULT_ALLURE_DIR_NAMES = {"allure-results", "./allure-results"}
 
 
+def _parse_bool_option(value: str) -> bool:
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y"}:
+        return True
+    if text in {"false", "0", "no", "n"}:
+        return False
+    raise pytest.UsageError(f"expected true or false, got: {value}")
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--env", action="store", default="test", help="Environment to run tests against (e.g., test, prod)"
@@ -117,17 +126,53 @@ def pytest_addoption(parser):
         help="Time partition size in days for cached DB accuracy validation",
     )
     parser.addoption(
-        "--db-accuracy-refresh-cache",
-        action="store_true",
-        default=False,
-        help="Refresh cached Binance source partitions before comparing",
-    )
-    parser.addoption(
         "--db-accuracy-max-shards",
         action="store",
         type=int,
         default=100,
         help="Maximum DB-discovered market shards for cached DB accuracy validation",
+    )
+    parser.addoption(
+        "--db-accuracy-use-db-cache",
+        action="store",
+        type=_parse_bool_option,
+        default=True,
+        help="Reuse local DB partition cache when it covers the requested range",
+    )
+    parser.addoption(
+        "--db-accuracy-use-source-cache",
+        action="store",
+        type=_parse_bool_option,
+        default=True,
+        help="Reuse local Binance source partition cache when it covers the requested range",
+    )
+    parser.addoption(
+        "--db-accuracy-workers",
+        action="store",
+        type=int,
+        default=8,
+        help="Maximum concurrent partition workers for DB/source/compare stages",
+    )
+    parser.addoption(
+        "--db-accuracy-source-retries",
+        action="store",
+        type=int,
+        default=5,
+        help="Retries for each Binance request window before pausing the run",
+    )
+    parser.addoption(
+        "--db-accuracy-source-retry-backoff-ms",
+        action="store",
+        type=int,
+        default=1000,
+        help="Linear retry backoff base in milliseconds for Binance requests",
+    )
+    parser.addoption(
+        "--db-accuracy-stop-on-source-failure",
+        action="store",
+        type=_parse_bool_option,
+        default=True,
+        help="Pause the run after a source request exhausts retries",
     )
 
 @pytest.hookimpl(tryfirst=True)
