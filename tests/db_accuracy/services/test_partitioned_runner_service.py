@@ -230,7 +230,7 @@ def test_runner_uses_prepared_source_cache_before_compare(
     assert compared_after_source_cache == [True]
 
 
-def test_runner_aggregates_historical_compare_manifest_when_paused(
+def test_runner_does_not_count_historical_compare_when_refreshed_source_fails(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
@@ -255,5 +255,5 @@ def test_runner_aggregates_historical_compare_manifest_when_paused(
     assert result.pause_reason is not None
     assert result.pause_reason.reason == "source_request_failed"
     assert result.tasks_total == 1
-    assert result.tasks_compared == 1
+    assert result.tasks_compared == 0
     assert result.differences == 0

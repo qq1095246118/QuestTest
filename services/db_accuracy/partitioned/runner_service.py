@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+import json
 from typing import Any, Iterable
 
 from services.db_accuracy.partitioned.aggregation_service import PartitionedAggregationService
@@ -43,6 +44,8 @@ class PartitionedAccuracyService:
         store.cleanup_tmp()
         run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         tasks: list[PartitionTask] = []
+        db_manifests: dict[str, CacheManifest] = {}
+        source_manifests: dict[str, CacheManifest] = {}
         pause_reason: RunPauseReason | None = None
         compare_manifests: list[CompareManifest] = []
 
@@ -67,13 +70,19 @@ class PartitionedAccuracyService:
                     compare_service=compare_service,
                     request=request,
                 )
-            else:
-                compare_manifests = _historical_complete_manifests(store, tasks)
         finally:
             store.cleanup_tmp()
 
         manifests = _dedupe_compare_manifests(
-            (*_historical_complete_manifests(store, tasks), *compare_manifests)
+            (
+                *_historical_complete_manifests(
+                    store,
+                    tasks,
+                    db_manifests,
+                    source_manifests,
+                ),
+                *compare_manifests,
+            )
         )
         return PartitionedAggregationService(request.cache_root).aggregate(
             run_id=run_id,
@@ -186,8 +195,10 @@ def _workers(request: PartitionedAccuracyRequest) -> int:
 def _historical_complete_manifests(
     store: PartitionedCacheStoreService,
     tasks: list[PartitionTask],
+    db_manifests: dict[str, CacheManifest],
+    source_manifests: dict[str, CacheManifest],
 ) -> list[CompareManifest]:
-    task_keys = {_task_key(task) for task in tasks}
+    tasks_by_key = {_task_key(task): task for task in tasks}
     manifests: list[CompareManifest] = []
     compare_root = store.root / "compare"
     if not compare_root.exists():
@@ -202,7 +213,18 @@ def _historical_complete_manifests(
         manifest = store.read_compare_manifest(paths)
         if manifest is None or not manifest.complete:
             continue
-        if _manifest_key(manifest) in task_keys:
+        task = tasks_by_key.get(_manifest_key(manifest))
+        if task is None:
+            continue
+        db_manifest = db_manifests.get(task.label)
+        source_manifest = source_manifests.get(task.label)
+        if db_manifest is None or source_manifest is None:
+            continue
+        if manifest.reusable_for(
+            task,
+            db_manifest.fingerprint,
+            source_manifest.fingerprint,
+        ):
             manifests.append(manifest)
     return manifests
 
@@ -237,4 +259,9 @@ def _manifest_key(manifest: CompareManifest) -> tuple[Any, ...]:
 
 
 def _market_key_items(market_key: dict[str, Any]) -> tuple[tuple[str, str], ...]:
-    return tuple(sorted((str(key), str(value)) for key, value in market_key.items()))
+    return tuple(
+        sorted(
+            (str(key), json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+            for key, value in market_key.items()
+        )
+    )
