@@ -24,6 +24,7 @@ class FakeDB:
                 {"Field": "open"},
                 {"Field": "close"},
                 {"Field": "status"},
+                {"Field": "fundingRate"},
             ]
         if "MIN(" in sql and "MAX(" in sql:
             return [
@@ -69,6 +70,20 @@ def _kline_spec() -> TableSpec:
         interval_field="interval",
         compare_fields=("timestamp", "open", "close"),
         request_limit=1000,
+    )
+
+
+def _fixed_interval_spec() -> TableSpec:
+    return TableSpec(
+        table="binance_funding_rate_raw",
+        kind="funding",
+        endpoint="usdm_funding_rate",
+        key_fields=("symbol",),
+        time_fields=("timestamp",),
+        interval_field=None,
+        compare_fields=("timestamp", "fundingRate"),
+        request_limit=1000,
+        fixed_interval="1h",
     )
 
 
@@ -166,8 +181,53 @@ def test_explicit_range_filters_multi_value_discovery_results(
     assert [task.key_values["symbol"] for task in tasks] == ["BTCUSDT"]
     group_by_params = [params for sql, params in planner.db.queries if "GROUP BY" in sql]
     assert any("BTCUSDT" in params for params in group_by_params)
-    assert any("ETHUSDT" in params for params in group_by_params)
+    assert not any("ETHUSDT" in params for params in group_by_params)
     assert all("SOLUSDT" not in params for params in group_by_params)
+
+
+def test_fixed_interval_filter_mismatch_plans_no_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_fixed_interval_spec()],
+    )
+    planner = PartitionPlannerService(FakeDB())
+
+    tasks = planner.plan(
+        PartitionedAccuracyRequest(
+            mode=AccuracyMode.DIRECT,
+            tables=("binance_funding_rate_raw",),
+            cache_root=tmp_path,
+            intervals=("1m",),
+        )
+    )
+
+    assert tasks == []
+
+
+def test_fixed_interval_filter_match_plans_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_fixed_interval_spec()],
+    )
+    planner = PartitionPlannerService(FakeDB())
+
+    tasks = planner.plan(
+        PartitionedAccuracyRequest(
+            mode=AccuracyMode.DIRECT,
+            tables=("binance_funding_rate_raw",),
+            cache_root=tmp_path,
+            intervals=("1h",),
+        )
+    )
+
+    assert tasks
+    assert tasks[0].fixed_interval == "1h"
 
 
 def test_cached_mode_requires_single_table_and_explicit_range(tmp_path: Path) -> None:

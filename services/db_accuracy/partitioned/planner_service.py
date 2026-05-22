@@ -38,6 +38,9 @@ class PartitionPlannerService:
             if resolved.time_field is None:
                 raise ValueError(f"{spec.table} has no resolved time field")
 
+            if not _matches_fixed_interval_filter(resolved, request):
+                continue
+
             if request.start_ms is None or request.end_ms is None:
                 tasks.extend(self._plan_discovered_ranges(resolved, request))
             else:
@@ -109,6 +112,10 @@ class PartitionPlannerService:
                     continue
                 seen_keys.add(key)
                 key_values.append(values)
+                if len(seen_keys) >= request.max_shards:
+                    break
+            if len(seen_keys) >= request.max_shards:
+                break
         key_values = [
             values for values in key_values if _matches_filters(values, spec, request)
         ][: request.max_shards]
@@ -211,6 +218,16 @@ def _matches_filters(
 ) -> bool:
     filters = _filter_sets(spec, request)
     return all(key_values.get(field) in values for field, values in filters.items())
+
+
+def _matches_fixed_interval_filter(
+    spec: ResolvedTableSpec,
+    request: PartitionedAccuracyRequest,
+) -> bool:
+    fixed_interval = spec.spec.fixed_interval
+    if fixed_interval is None or not request.intervals:
+        return True
+    return fixed_interval in request.intervals
 
 
 def _discovery_filter_sets(
