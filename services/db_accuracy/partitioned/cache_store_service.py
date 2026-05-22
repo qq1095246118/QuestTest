@@ -71,21 +71,32 @@ class PartitionedCacheStoreService:
     def read_data_manifest(self, paths: DataCachePaths) -> CacheManifest | None:
         if not paths.manifest_path.exists():
             return None
-        payload = json.loads(paths.manifest_path.read_text(encoding="utf-8"))
-        return CacheManifest.from_dict(payload)
+        try:
+            payload = json.loads(paths.manifest_path.read_text(encoding="utf-8"))
+            return CacheManifest.from_dict(payload)
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
 
     def read_compare_manifest(self, paths: CompareCachePaths) -> CompareManifest | None:
         if not paths.manifest_path.exists():
             return None
-        payload = json.loads(paths.manifest_path.read_text(encoding="utf-8"))
-        return CompareManifest.from_dict(payload)
+        if not paths.report_path.exists() or not paths.diff_path.exists():
+            return None
+        try:
+            payload = json.loads(paths.manifest_path.read_text(encoding="utf-8"))
+            return CompareManifest.from_dict(payload)
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
 
     def find_covering_data_cache(self, side: CacheSide, task: PartitionTask) -> DataCacheHit | None:
         exact_paths = self.data_paths(side, task)
         exact_manifest = self.read_data_manifest(exact_paths)
-        if exact_manifest is not None and exact_manifest.reusable_for(task):
-            if exact_manifest.status == CacheStatus.COMPLETE and not exact_paths.data_path.exists():
-                return None
+        if exact_manifest is not None and self._data_cache_is_reusable(
+            side,
+            task,
+            exact_paths,
+            exact_manifest,
+        ):
             return DataCacheHit(paths=exact_paths, manifest=exact_manifest)
 
         base = self.root / side.value
@@ -97,9 +108,7 @@ class PartitionedCacheStoreService:
                 manifest_path=manifest_path,
             )
             manifest = self.read_data_manifest(paths)
-            if manifest is None or not manifest.reusable_for(task):
-                continue
-            if manifest.status == CacheStatus.COMPLETE and not paths.data_path.exists():
+            if manifest is None or not self._data_cache_is_reusable(side, task, paths, manifest):
                 continue
             return DataCacheHit(paths=paths, manifest=manifest)
         return None
@@ -116,8 +125,10 @@ class PartitionedCacheStoreService:
         if not paths.data_path.exists():
             return pl.DataFrame()
         frame = pl.read_parquet(paths.data_path)
-        if task.is_registry or time_field is None or frame.is_empty() or time_field not in frame.columns:
+        if task.is_registry or time_field is None or frame.is_empty():
             return frame
+        if time_field not in frame.columns:
+            raise ValueError(f"Time field {time_field!r} is missing from cached frame")
         if task.start_ms is None or task.end_ms is None:
             return frame
         time_expr = pl.col(time_field).cast(pl.Int64)
@@ -133,6 +144,8 @@ class PartitionedCacheStoreService:
         manifest: CacheManifest,
     ) -> None:
         paths.data_path.parent.mkdir(parents=True, exist_ok=True)
+        if manifest.status in {CacheStatus.FAILED, CacheStatus.CANCELLED}:
+            return
         tmp_dir = self._tmp_dir()
         tmp_dir.mkdir(parents=True, exist_ok=True)
         tmp_data = tmp_dir / "data.parquet"
@@ -141,7 +154,7 @@ class PartitionedCacheStoreService:
             if manifest.status == CacheStatus.COMPLETE:
                 frame.write_parquet(tmp_data)
                 tmp_data.replace(paths.data_path)
-            elif paths.data_path.exists():
+            elif manifest.status == CacheStatus.EMPTY and paths.data_path.exists():
                 paths.data_path.unlink()
             tmp_manifest.write_text(
                 json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2, sort_keys=True),
@@ -193,6 +206,25 @@ class PartitionedCacheStoreService:
 
     def _tmp_dir(self) -> Path:
         return self.tmp_root / datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ") / uuid4().hex
+
+    def _data_cache_is_reusable(
+        self,
+        side: CacheSide,
+        task: PartitionTask,
+        paths: DataCachePaths,
+        manifest: CacheManifest,
+    ) -> bool:
+        if manifest.side != side:
+            return False
+        if not manifest.reusable_for(task):
+            return False
+        if manifest.status == CacheStatus.EMPTY:
+            return True
+        if not paths.data_path.exists():
+            return False
+        if manifest.fingerprint is None:
+            return False
+        return fingerprint_frame(pl.read_parquet(paths.data_path)) == manifest.fingerprint
 
 
 def fingerprint_frame(frame: pl.DataFrame) -> DataFingerprint:

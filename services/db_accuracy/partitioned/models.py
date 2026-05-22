@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+import hashlib
+import json
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -131,6 +134,26 @@ class PartitionTask:
         parts.append(self.partition_bucket)
         return tuple(parts)
 
+    @property
+    def schema_fingerprint(self) -> str:
+        payload = {
+            "key_fields": self.key_fields,
+            "key_values": tuple(self.key_values.keys()),
+            "time_field": self.time_field,
+            "source_time_field": self.source_time_field,
+            "compare_fields": self.compare_fields,
+            "interval_field": self.interval_field,
+            "fixed_interval": self.fixed_interval,
+            "symbol_field": self.symbol_field,
+            "pair_field": self.pair_field,
+            "contract_type_field": self.contract_type_field,
+            "kind": self.kind,
+            "endpoint": self.endpoint,
+            "is_registry": self.is_registry,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
 
 @dataclass(frozen=True)
 class DataFingerprint:
@@ -153,6 +176,7 @@ class CacheManifest:
     status: CacheStatus
     row_count: int
     fingerprint: DataFingerprint | None
+    schema_fingerprint: str | None
     error_type: str | None
     error_message: str | None
     artifact_path: str | None
@@ -160,6 +184,8 @@ class CacheManifest:
 
     def reusable_for(self, task: PartitionTask) -> bool:
         if self.schema_version != SCHEMA_VERSION:
+            return False
+        if self.schema_fingerprint != task.schema_fingerprint:
             return False
         if not self.status.reusable:
             return False
@@ -188,6 +214,7 @@ class CacheManifest:
         data["status"] = CacheStatus(data["status"])
         fingerprint = data.get("fingerprint")
         data["fingerprint"] = DataFingerprint(**fingerprint) if fingerprint else None
+        data.setdefault("schema_fingerprint", None)
         return cls(**data)
 
 
@@ -284,4 +311,10 @@ class PartitionedRunResult:
 
 
 def _path_value(value: Any) -> str:
-    return str(value).replace("/", "_").replace(" ", "_")
+    text = str(value).replace("\\", "_").replace("/", "_")
+    text = "".join("_" if ord(char) < 32 or ord(char) == 127 else char for char in text)
+    text = re.sub(r"\s+", "_", text)
+    text = re.sub(r"[^A-Za-z0-9._=-]+", "_", text)
+    text = text.replace("..", "_")
+    text = text.strip("._")
+    return text or "_"
