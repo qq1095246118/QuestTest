@@ -38,6 +38,26 @@ class FakeDB:
         return []
 
 
+class MultiKeyFakeDB(FakeDB):
+    def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        self.queries.append((sql, params))
+        if sql.startswith("SHOW COLUMNS"):
+            return [
+                {"Field": "symbol"},
+                {"Field": "interval"},
+                {"Field": "timestamp"},
+                {"Field": "open"},
+                {"Field": "close"},
+            ]
+        if "GROUP BY" in sql:
+            return [
+                {"symbol": "BTCUSDT", "interval": "1m"},
+                {"symbol": "ETHUSDT", "interval": "1m"},
+                {"symbol": "SOLUSDT", "interval": "1m"},
+            ]
+        return []
+
+
 def _kline_spec() -> TableSpec:
     return TableSpec(
         table="binance_kline_all_future_raw",
@@ -117,6 +137,32 @@ def test_direct_with_explicit_range_and_filters_uses_discovery_filters(
     assert tasks[0].start_ms == 1704110400000
     assert tasks[0].end_ms == 1704113999999
     assert any("GROUP BY `symbol`, `interval`" in sql for sql, _ in db.queries)
+
+
+def test_explicit_range_filters_multi_value_discovery_results(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_kline_spec()],
+    )
+    planner = PartitionPlannerService(MultiKeyFakeDB())
+
+    tasks = planner.plan(
+        PartitionedAccuracyRequest(
+            mode=AccuracyMode.DIRECT,
+            tables=("binance_kline_all_future_raw",),
+            cache_root=tmp_path,
+            symbols=("BTCUSDT", "ETHUSDT"),
+            intervals=("1m",),
+            start_ms=1704110400000,
+            end_ms=1704113999999,
+            max_shards=10,
+        )
+    )
+
+    assert [task.key_values["symbol"] for task in tasks] == ["BTCUSDT", "ETHUSDT"]
 
 
 def test_cached_mode_requires_single_table_and_explicit_range(tmp_path: Path) -> None:

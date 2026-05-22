@@ -99,6 +99,9 @@ class PartitionPlannerService:
             filters=_discovery_filters(spec, request),
             limit=request.max_shards,
         )
+        key_values = [
+            values for values in key_values if _matches_filters(values, spec, request)
+        ][: request.max_shards]
 
         tasks: list[PartitionTask] = []
         for values in key_values:
