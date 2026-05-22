@@ -51,15 +51,11 @@ class MultiKeyFakeDB(FakeDB):
                 {"Field": "close"},
             ]
         if "GROUP BY" in sql:
-            rows = [
-                {"symbol": "SOLUSDT", "interval": "1m"},
-                {"symbol": "XRPUSDT", "interval": "1m"},
-                {"symbol": "BTCUSDT", "interval": "1m"},
-                {"symbol": "ETHUSDT", "interval": "1m"},
-            ]
-            if sql.endswith("LIMIT 1"):
-                return rows[:1]
-            return rows
+            if "BTCUSDT" in params:
+                return [{"symbol": "BTCUSDT", "interval": "1m"}]
+            if "ETHUSDT" in params:
+                return [{"symbol": "ETHUSDT", "interval": "1m"}]
+            return [{"symbol": "SOLUSDT", "interval": "1m"}]
         return []
 
 
@@ -168,6 +164,10 @@ def test_explicit_range_filters_multi_value_discovery_results(
     )
 
     assert [task.key_values["symbol"] for task in tasks] == ["BTCUSDT"]
+    group_by_params = [params for sql, params in planner.db.queries if "GROUP BY" in sql]
+    assert any("BTCUSDT" in params for params in group_by_params)
+    assert any("ETHUSDT" in params for params in group_by_params)
+    assert all("SOLUSDT" not in params for params in group_by_params)
 
 
 def test_cached_mode_requires_single_table_and_explicit_range(tmp_path: Path) -> None:

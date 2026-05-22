@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from itertools import product
 from typing import Any
 
 from services.db_accuracy.cached.cached_db_reader_service import CachedDBReaderService
@@ -90,15 +91,24 @@ class PartitionPlannerService:
         if spec.time_field is None:
             raise ValueError(f"{spec.spec.table} has no resolved time field")
 
-        key_values = self.cached_reader.discover_market_keys(
-            table=spec.spec.table,
-            key_fields=spec.key_fields,
-            time_field=spec.time_field,
-            start_ms=request.start_ms,
-            end_ms=request.end_ms,
-            filters=_discovery_filters(spec, request),
-            limit=_discovery_limit(spec, request),
-        )
+        key_values: list[dict[str, Any]] = []
+        seen_keys: set[tuple[Any, ...]] = set()
+        for filters in _discovery_filter_sets(spec, request):
+            discovered = self.cached_reader.discover_market_keys(
+                table=spec.spec.table,
+                key_fields=spec.key_fields,
+                time_field=spec.time_field,
+                start_ms=request.start_ms,
+                end_ms=request.end_ms,
+                filters=filters,
+                limit=request.max_shards,
+            )
+            for values in discovered:
+                key = tuple(values.get(field) for field in spec.key_fields)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                key_values.append(values)
         key_values = [
             values for values in key_values if _matches_filters(values, spec, request)
         ][: request.max_shards]
@@ -203,25 +213,19 @@ def _matches_filters(
     return all(key_values.get(field) in values for field, values in filters.items())
 
 
-def _discovery_filters(
+def _discovery_filter_sets(
     spec: ResolvedTableSpec,
     request: PartitionedAccuracyRequest,
-) -> dict[str, Any]:
-    return {
-        field: next(iter(values))
-        for field, values in _filter_sets(spec, request).items()
-        if len(values) == 1
-    }
-
-
-def _discovery_limit(spec: ResolvedTableSpec, request: PartitionedAccuracyRequest) -> int:
+) -> list[dict[str, Any]]:
     filter_sets = _filter_sets(spec, request)
-    has_multi_value_filter = any(len(values) > 1 for values in filter_sets.values())
-    if not has_multi_value_filter:
-        return request.max_shards
+    if not filter_sets:
+        return [{}]
 
-    filter_value_count = sum(len(values) for values in filter_sets.values())
-    return max(request.max_shards * 10, request.max_shards + filter_value_count + 100)
+    fields = tuple(filter_sets.keys())
+    return [
+        dict(zip(fields, values, strict=True))
+        for values in product(*(sorted(filter_sets[field]) for field in fields))
+    ]
 
 
 def _filter_sets(
