@@ -1,5 +1,6 @@
 from services.db_accuracy.cached.cache_models import CachedRunResult, CachedShardResult
 from services.db_accuracy.models import AccuracyRunResult, Difference, TableRunResult
+from services.db_accuracy.partitioned.models import PartitionedRunResult, RunStatus
 from services.db_accuracy.reporting.result_serializer_service import ResultSerializerService
 
 
@@ -50,3 +51,22 @@ def test_cached_to_json_includes_shard_status():
 
     assert '"passed": true' in payload
     assert '"status": "passed"' in payload
+
+
+def test_partitioned_to_json_serializes_details_without_recomputing_summary():
+    result = PartitionedRunResult(
+        status=RunStatus.PASSED,
+        tasks_total=1,
+        tasks_compared=1,
+        tasks_with_differences=0,
+        db_rows=2,
+        source_rows=2,
+        differences=0,
+        summary_text="status=passed",
+        details={"status": "passed", "partitions": [{"label": "p1"}]},
+    )
+
+    payload = ResultSerializerService.partitioned_to_json(result)
+
+    assert '"status": "passed"' in payload
+    assert '"label": "p1"' in payload

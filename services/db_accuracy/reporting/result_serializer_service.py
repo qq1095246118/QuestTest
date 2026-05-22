@@ -10,6 +10,7 @@ from dataclasses import asdict
 
 from services.db_accuracy.cached.cache_models import CachedRunResult
 from services.db_accuracy.models import AccuracyRunResult
+from services.db_accuracy.partitioned.models import PartitionedRunResult
 
 
 class ResultSerializerService:
@@ -58,3 +59,8 @@ class ResultSerializerService:
             indent=2,
             default=str,
         )
+
+    @staticmethod
+    def partitioned_to_json(result: PartitionedRunResult) -> str:
+        """把 partitioned 模式结果明细转换为稳定的 JSON 字符串。"""
+        return json.dumps(result.details, ensure_ascii=False, indent=2, default=str)
