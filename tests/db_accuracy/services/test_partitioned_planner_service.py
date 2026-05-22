@@ -23,6 +23,7 @@ class FakeDB:
                 {"Field": "timestamp"},
                 {"Field": "open"},
                 {"Field": "close"},
+                {"Field": "status"},
             ]
         if "MIN(" in sql and "MAX(" in sql:
             return [
@@ -50,11 +51,15 @@ class MultiKeyFakeDB(FakeDB):
                 {"Field": "close"},
             ]
         if "GROUP BY" in sql:
-            return [
+            rows = [
+                {"symbol": "SOLUSDT", "interval": "1m"},
+                {"symbol": "XRPUSDT", "interval": "1m"},
                 {"symbol": "BTCUSDT", "interval": "1m"},
                 {"symbol": "ETHUSDT", "interval": "1m"},
-                {"symbol": "SOLUSDT", "interval": "1m"},
             ]
+            if sql.endswith("LIMIT 1"):
+                return rows[:1]
+            return rows
         return []
 
 
@@ -158,11 +163,11 @@ def test_explicit_range_filters_multi_value_discovery_results(
             intervals=("1m",),
             start_ms=1704110400000,
             end_ms=1704113999999,
-            max_shards=10,
+            max_shards=1,
         )
     )
 
-    assert [task.key_values["symbol"] for task in tasks] == ["BTCUSDT", "ETHUSDT"]
+    assert [task.key_values["symbol"] for task in tasks] == ["BTCUSDT"]
 
 
 def test_cached_mode_requires_single_table_and_explicit_range(tmp_path: Path) -> None:
@@ -212,3 +217,5 @@ def test_registry_table_becomes_single_registry_partition(
     assert tasks[0].start_ms is None
     assert tasks[0].end_ms is None
     assert tasks[0].partition_bucket == "registry"
+    assert tasks[0].key_fields == ("symbol",)
+    assert tasks[0].compare_fields == ("symbol", "status")

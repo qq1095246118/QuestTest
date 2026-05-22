@@ -29,11 +29,11 @@ class PartitionPlannerService:
 
         tasks: list[PartitionTask] = []
         for spec in specs:
+            resolved = self._resolve(spec)
             if spec.kind == "registry":
-                tasks.append(_registry_task(spec))
+                tasks.append(_registry_task(resolved))
                 continue
 
-            resolved = self._resolve(spec)
             if resolved.time_field is None:
                 raise ValueError(f"{spec.table} has no resolved time field")
 
@@ -97,7 +97,7 @@ class PartitionPlannerService:
             start_ms=request.start_ms,
             end_ms=request.end_ms,
             filters=_discovery_filters(spec, request),
-            limit=request.max_shards,
+            limit=_discovery_limit(spec, request),
         )
         key_values = [
             values for values in key_values if _matches_filters(values, spec, request)
@@ -134,16 +134,16 @@ def _validate_request(request: PartitionedAccuracyRequest) -> None:
         raise ValueError("start_ms and end_ms must be provided together")
 
 
-def _registry_task(spec: TableSpec) -> PartitionTask:
+def _registry_task(spec: ResolvedTableSpec) -> PartitionTask:
     return PartitionTask(
-        table=spec.table,
-        kind=spec.kind,
-        endpoint=spec.endpoint,
+        table=spec.spec.table,
+        kind=spec.spec.kind,
+        endpoint=spec.spec.endpoint,
         key_values={},
         time_field=None,
-        source_time_field=spec.source_time_field,
+        source_time_field=spec.spec.source_time_field,
         compare_fields=spec.compare_fields,
-        request_limit=spec.request_limit,
+        request_limit=spec.spec.request_limit,
         start_ms=None,
         end_ms=None,
         partition_label="registry",
@@ -151,10 +151,10 @@ def _registry_task(spec: TableSpec) -> PartitionTask:
         is_registry=True,
         key_fields=spec.key_fields,
         interval_field=spec.interval_field,
-        fixed_interval=spec.fixed_interval,
-        symbol_field=spec.symbol_field,
-        pair_field=spec.pair_field,
-        contract_type_field=spec.contract_type_field,
+        fixed_interval=spec.spec.fixed_interval,
+        symbol_field=spec.spec.symbol_field,
+        pair_field=spec.spec.pair_field,
+        contract_type_field=spec.spec.contract_type_field,
     )
 
 
@@ -212,6 +212,16 @@ def _discovery_filters(
         for field, values in _filter_sets(spec, request).items()
         if len(values) == 1
     }
+
+
+def _discovery_limit(spec: ResolvedTableSpec, request: PartitionedAccuracyRequest) -> int:
+    filter_sets = _filter_sets(spec, request)
+    has_multi_value_filter = any(len(values) > 1 for values in filter_sets.values())
+    if not has_multi_value_filter:
+        return request.max_shards
+
+    filter_value_count = sum(len(values) for values in filter_sets.values())
+    return max(request.max_shards * 10, request.max_shards + filter_value_count + 100)
 
 
 def _filter_sets(
