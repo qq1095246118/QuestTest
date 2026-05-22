@@ -49,6 +49,8 @@ class PartitionPlannerService:
 
     def _selected_specs(self, tables: tuple[str, ...]) -> list[TableSpec]:
         specs_by_table = {spec.table: spec for spec in load_table_specs()}
+        if not tables:
+            return list(specs_by_table.values())
         unknown = [table for table in tables if table not in specs_by_table]
         if unknown:
             raise ValueError(f"unknown DB accuracy table(s): {unknown}")

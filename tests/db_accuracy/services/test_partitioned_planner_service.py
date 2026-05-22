@@ -126,6 +126,30 @@ def test_direct_without_range_discovers_db_ranges_and_splits_partitions(
     assert tasks[0].key_values == {"symbol": "BTCUSDT", "interval": "1m"}
 
 
+def test_direct_without_table_filter_selects_all_specs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_kline_spec(), _fixed_interval_spec()],
+    )
+    planner = PartitionPlannerService(FakeDB())
+
+    tasks = planner.plan(
+        PartitionedAccuracyRequest(
+            mode=AccuracyMode.DIRECT,
+            tables=(),
+            cache_root=tmp_path,
+        )
+    )
+
+    assert {task.table for task in tasks} == {
+        "binance_kline_all_future_raw",
+        "binance_funding_rate_raw",
+    }
+
+
 def test_direct_with_explicit_range_and_filters_uses_discovery_filters(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

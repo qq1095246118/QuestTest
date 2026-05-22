@@ -62,8 +62,13 @@ class PartitionedAccuracyService:
                 request,
             )
             if pause_reason is None:
+                compare_tasks = [
+                    task
+                    for task in tasks
+                    if task.label in db_manifests and task.label in source_manifests
+                ]
                 compare_manifests = self._compare_all(
-                    tasks=tasks,
+                    tasks=compare_tasks,
                     db_manifests=db_manifests,
                     source_manifests=source_manifests,
                     store=store,
@@ -135,15 +140,17 @@ class PartitionedAccuracyService:
                 try:
                     _, manifest = future.result()
                 except SourceRequestFailed as exc:
-                    for pending in futures:
-                        if not pending.done():
-                            pending.cancel()
-                    failed_task = exc.task or task
-                    return manifests, RunPauseReason(
-                        reason="source_request_failed",
-                        task_label=getattr(failed_task, "label", task.label),
-                        message=str(exc),
-                    )
+                    if request.execution.stop_on_source_failure:
+                        for pending in futures:
+                            if not pending.done():
+                                pending.cancel()
+                        failed_task = exc.task or task
+                        return manifests, RunPauseReason(
+                            reason="source_request_failed",
+                            task_label=getattr(failed_task, "label", task.label),
+                            message=str(exc),
+                        )
+                    continue
                 manifests[task.label] = manifest
         return manifests, None
 

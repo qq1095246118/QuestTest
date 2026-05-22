@@ -102,6 +102,7 @@ def _request(
     *,
     source_retries: int = 5,
     cache_policy: CachePolicy | None = None,
+    stop_on_source_failure: bool = True,
 ) -> PartitionedAccuracyRequest:
     return PartitionedAccuracyRequest(
         mode=AccuracyMode.DIRECT,
@@ -116,7 +117,7 @@ def _request(
             workers=4,
             source_retries=source_retries,
             source_retry_backoff_ms=0,
-            stop_on_source_failure=True,
+            stop_on_source_failure=stop_on_source_failure,
         ),
     )
 
@@ -161,6 +162,31 @@ def test_runner_pauses_on_source_failure_and_leaves_no_source_or_compare_cache(
     assert "network down" in result.pause_reason.message
     assert not list((tmp_path / "source").glob("**/data.parquet"))
     assert not list((tmp_path / "source").glob("**/manifest.json"))
+    assert not list((tmp_path / "compare").glob("**/manifest.json"))
+
+
+def test_runner_can_continue_without_pause_after_source_failure(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_spec()],
+    )
+    runner = PartitionedAccuracyService(db=FakeDB(), source=FailingSource())
+
+    result = runner.run(
+        _request(
+            tmp_path,
+            source_retries=2,
+            stop_on_source_failure=False,
+        )
+    )
+
+    assert result.status == RunStatus.FAILED
+    assert result.pause_reason is None
+    assert result.tasks_total == 1
+    assert result.tasks_compared == 0
     assert not list((tmp_path / "compare").glob("**/manifest.json"))
 
 

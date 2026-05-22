@@ -231,6 +231,7 @@ def test_partitioned_request_builder_populates_cache_and_execution_options():
             "--db-accuracy-use-db-cache": False,
             "--db-accuracy-use-source-cache": True,
             "--db-accuracy-workers": 12,
+            "--db-accuracy-stop-on-source-failure": False,
         }
     )
 
@@ -241,6 +242,7 @@ def test_partitioned_request_builder_populates_cache_and_execution_options():
     assert built.cache_policy.use_db_cache is False
     assert built.cache_policy.use_source_cache is True
     assert built.execution.workers == 12
+    assert built.execution.stop_on_source_failure is False
 
 
 def _fake_request(options):
