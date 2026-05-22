@@ -22,17 +22,33 @@
 
 ## 核心功能
 
-### 1. direct 全历史校验模式
+### 1. 统一分区 runner
 
-`direct` 是默认模式。它从配置表中读取需要校验的所有表，对每张表扫描数据库中的稳定历史范围，并按 Binance REST 请求限制拆分窗口后逐段比较。
+当前入口统一使用 partitioned runner。无论 `direct` 还是 `cached`，执行顺序都固定为：
+
+1. 规划 `table + market shard + time partition` 任务。
+2. 准备 DB 分区数据，写入或复用本地 DB Parquet/manifest。
+3. 准备 Binance source 分区数据，写入或复用本地 source Parquet/manifest。
+4. 等 DB 和 source 都准备完成后，再进入 compare 阶段。
+5. 对每个分区用 DataComPy 生成 `report.txt` 和 `diff.json`。
+6. 按 run 汇总 `summary.txt` 和 `summary.json`，并写入 Allure 附件。
+
+这个设计解决两个核心问题：
+
+- 网络中断后不需要从头开始。已完成的 DB/source/compare 分区会保留，下次运行可从缺失分区继续。
+- DB 数据和 source 数据的缓存策略可以独立控制。你可以只刷新 DB、只刷新 source，或两侧都复用。
+
+### 2. direct 全历史校验模式
+
+`direct` 是默认模式。没有传时间范围时，它会从配置表中读取需要校验的表，对每张时间序列表扫描数据库中的稳定历史范围，再拆成市场分片和时间分区执行；registry/metadata 表按整表分区执行。
 
 特点：
 
 - 支持一次跑所有已配置表。
 - 支持用 `--db-accuracy-table` 限定一张或多张表。
-- 对时间序列表按 DB 中实际存在的市场 key 发现范围。
-- 对 metadata/registry 表一次性比较全表。
-- 输出 Allure 附件 `db_accuracy_summary` 和 `db_accuracy_details`。
+- 支持用 `--db-accuracy-safety-hours` 避开近期仍可能变化的数据。
+- 支持复用 DB/source/compare 分区缓存。
+- 输出 Allure 附件 `db_accuracy_partitioned_summary` 和 `db_accuracy_partitioned_details`。
 
 适合：
 
@@ -40,44 +56,25 @@
 - 需要完整扫描配置范围的人工验收。
 - `binance_futures_symbols` 这类 metadata 表。
 
-不适合：
+### 3. cached 范围分片校验模式
 
-- 数亿行级别大表的一次性全历史对比。
-- 需要随时指定某个市场、某个时间段反复对比的场景。
-
-### 2. cached 范围分片校验模式
-
-`cached` 是大表优先使用的模式。它要求明确指定一张表和时间范围，然后把校验拆成：
-
-```text
-市场分片 + 时间分区
-```
-
-每个分片的流程是：
-
-1. 计算市场 shard，例如 `symbol + interval` 或 `pair + contract_type + interval`。
-2. 按 `--db-accuracy-partition-days` 切时间分区。
-3. 对每个分区拉 Binance 上游数据。
-4. Binance 上游数据写入本地 Parquet 和 manifest。
-5. 查询同一市场、同一时间分区内的 DB 数据。
-6. 用 Polars DataFrame 归一化 DB 和 source。
-7. 用 DataComPy 生成文本报告，并额外生成 JSON diff 摘要。
+`cached` 是大表和指定时间范围优先使用的模式。它要求明确指定一张表和时间范围，然后按市场分片和时间分区执行。
 
 特点：
 
 - 支持按市场、interval、合约类型、时间范围定向对比。
 - 支持 DB 自动发现市场 shard，并用 `--db-accuracy-max-shards` 控制数量。
-- Binance 源数据本地缓存，默认不重复请求已完成分区。
-- 缓存按市场和日期分目录，避免单文件过大。
-- 报告按 `run_id` 分目录，重复运行不会覆盖旧报告。
-- 对已下架或上游不可用市场会记录 manifest 状态，不会把这类失败伪装成成功。
+- 默认复用已完成的 DB/source 分区缓存。
+- 对比结果也会按 DB/source 数据 fingerprint 复用，避免重复生成相同报告。
+- 缓存按数据侧、市场和时间分目录，避免单文件过大。
+- 每次运行都会生成独立 `run_id` 汇总目录。
 
 适合：
 
 - 大表。
 - 指定时间范围的抽样、复核、回归。
-- 先拉源数据到本地，再多次和 DB 对比。
-- 已知某个市场或某个日期有问题，需要反复定位。
+- 先把 DB 和 source 数据拉到本地，再多次对比。
+- 网络中断后复用已完成分区继续执行。
 
 ## 执行入口
 
@@ -168,8 +165,15 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 |---|---:|---|---|
 | `--run-db-accuracy` | `False` | direct/cached | 必须显式传入，否则 `db_accuracy` 测试会被跳过。 |
 | `--env` | `test` | direct/cached | 选择项目环境配置。 |
-| `--db-accuracy-mode` | `direct` | direct/cached | 执行模式，可选 `direct` 或 `cached`。 |
+| `--db-accuracy-mode` | `direct` | direct/cached | 执行模式，可选 `direct` 或 `cached`，两种模式都由统一分区 runner 执行。 |
 | `--db-accuracy-table` | `[]` | direct/cached | 限定表。direct 可传多个；cached 必须且只能传一个。 |
+| `--db-accuracy-cache-root` | `.cache/binance_accuracy` | direct/cached | DB/source/compare 缓存和 run 汇总根目录。大表建议放到大容量磁盘。 |
+| `--db-accuracy-use-db-cache` | `True` | direct/cached | 是否允许复用本地 DB 分区缓存。传 `false` 会重新查询 DB 并覆盖对应 DB 分区缓存。 |
+| `--db-accuracy-use-source-cache` | `True` | direct/cached | 是否允许复用本地 Binance source 分区缓存。传 `false` 会重新请求 Binance 并覆盖对应 source 分区缓存。 |
+| `--db-accuracy-workers` | `8` | direct/cached | DB 准备、source 准备、compare 阶段各自的最大并发分区 worker 数。 |
+| `--db-accuracy-source-retries` | `5` | direct/cached | 每个 Binance 请求窗口重试次数。 |
+| `--db-accuracy-source-retry-backoff-ms` | `1000` | direct/cached | Binance 请求窗口重试的线性等待基数，单位毫秒。 |
+| `--db-accuracy-stop-on-source-failure` | `True` | direct/cached | source 请求重试耗尽后是否暂停本次 run。传 `false` 会继续等待其他 source 分区完成，最终缺 compare 的 run 会失败。 |
 
 ### direct 模式参数
 
@@ -181,7 +185,6 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
-| `--db-accuracy-cache-root` | `.cache/binance_accuracy` | Binance 源数据缓存和本地报告根目录。大表建议放到大容量磁盘。 |
 | `--db-accuracy-symbol` | `[]` | 限定 symbol，例如 `BTCUSDT`。显式市场模式每次只能传一个。自动发现模式可作为过滤条件，但也只支持一个值。 |
 | `--db-accuracy-pair` | `[]` | 限定 delivery/continuous kline 的 pair，例如 `BTCUSDT` 或 `BTCUSD`。 |
 | `--db-accuracy-contract-type` | `[]` | 限定 delivery/continuous kline 的合约类型，例如 `CURRENT_QUARTER`。 |
@@ -189,7 +192,6 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 | `--db-accuracy-start-ms` | `None` | 起始时间戳，毫秒，闭区间。cached 必填。 |
 | `--db-accuracy-end-ms` | `None` | 结束时间戳，毫秒，闭区间。cached 必填。 |
 | `--db-accuracy-partition-days` | `1` | DB/source 对比的时间分区大小，单位天，必须大于等于 1。 |
-| `--db-accuracy-refresh-cache` | `False` | 强制刷新 Binance 源数据缓存。 |
 | `--db-accuracy-max-shards` | `100` | DB 自动发现市场分片时最多处理多少个 shard，必须大于等于 1。 |
 
 ## 快速开始
@@ -209,7 +211,7 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 
 - 能连接 MySQL。
 - 能请求 Binance USDM `exchangeInfo`。
-- Allure 中有 `db_accuracy_summary` 和 `db_accuracy_details`。
+- Allure 中有 `db_accuracy_partitioned_summary` 和 `db_accuracy_partitioned_details`。
 
 ### 2. direct 模式跑指定 raw 表
 
@@ -361,9 +363,15 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --db-accuracy-cache-root /Volumes/BigDisk/binance_accuracy_cache
 ```
 
-### 7. 强制刷新 Binance 源数据缓存
+### 7. 控制 DB/source 缓存复用
 
-默认情况下，已完成的缓存分区会复用，不重复请求 Binance。需要重新拉源数据时：
+默认情况下，已完成并可覆盖本次范围的 DB/source 分区缓存会复用。`true` 表示允许复用，不表示强制复用；缓存必须匹配 table、市场 key、数据侧、schema version、schema fingerprint，并且覆盖本次请求范围。
+
+如果本次范围比已有 DB/source 缓存小，runner 会复用覆盖范围更大的缓存，在读取时过滤到本次范围，并为本次精确范围写一份分区 manifest。compare 缓存更严格，只会在本次范围完全一致且 DB/source fingerprint 都一致时复用。
+
+如果本次范围比已有缓存大，已有分区会复用，缺失分区会重新拉取。
+
+需要重新查询 DB、但复用 Binance source 时：
 
 ```bash
 $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
@@ -375,8 +383,27 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --db-accuracy-interval 1m \
   --db-accuracy-start-ms 1704067200000 \
   --db-accuracy-end-ms 1704153599999 \
-  --db-accuracy-refresh-cache
+  --db-accuracy-use-db-cache false \
+  --db-accuracy-use-source-cache true
 ```
+
+需要重新请求 Binance source、但复用 DB 时：
+
+```bash
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
+  --env=test \
+  --run-db-accuracy \
+  --db-accuracy-mode cached \
+  --db-accuracy-table binance_kline_all_future_raw \
+  --db-accuracy-symbol BTCUSDT \
+  --db-accuracy-interval 1m \
+  --db-accuracy-start-ms 1704067200000 \
+  --db-accuracy-end-ms 1704153599999 \
+  --db-accuracy-use-db-cache true \
+  --db-accuracy-use-source-cache false
+```
+
+需要两侧都重新获取时，把两个参数都传 `false`。
 
 ## direct 与 cached 如何选择
 
@@ -386,8 +413,8 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 | 想跑所有配置表做人工验收 | direct | direct 支持多表和全配置扫描。 |
 | 数千万或数亿行 raw 表 | cached | 可以按市场和时间切片，并复用本地源数据。 |
 | 只想看某个 symbol 某一天 | cached | 指定范围更直接，报告更小。 |
-| 想反复对同一段数据做对比 | cached | 上游源数据缓存后可以重复复用。 |
-| 已下架市场较多 | cached | manifest 会记录不可用市场状态，便于逐个处理。 |
+| 想反复对同一段数据做对比 | cached | DB/source/compare 分区缓存后可以重复复用。 |
+| 网络可能中断 | cached | 明确范围更利于续跑；已完成分区会保留。 |
 
 对于 `binance_kline_all_future_raw` 这类大表，优先使用 cached。不要直接尝试全表全历史 direct 跑完。
 
@@ -399,26 +426,44 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 .cache/binance_accuracy/
 ```
 
-cached 模式会写两类内容：
+partitioned runner 会写四类内容：
 
 ```text
 .cache/binance_accuracy/
+  db/
+    table=binance_kline_all_future_raw/
+      symbol=BTCUSDT/
+        interval=1m/
+          date=2024-01-01/
+            range=1704067200000-1704153599999/
+              data.parquet
+              manifest.json
   source/
     table=binance_kline_all_future_raw/
       symbol=BTCUSDT/
         interval=1m/
           date=2024-01-01/
-            data.parquet
-            manifest.json
-  reports/
+            range=1704067200000-1704153599999/
+              data.parquet
+              manifest.json
+  compare/
+    table=binance_kline_all_future_raw/
+      symbol=BTCUSDT/
+        interval=1m/
+          date=2024-01-01/
+            range=1704067200000-1704153599999/
+              report.txt
+              diff.json
+              manifest.json
+  runs/
     run_id=20260519T030000123456Z/
-      table=...__<hash>.report.txt
-      table=...__<hash>.diff.json
+      summary.txt
+      summary.json
 ```
 
 ### `data.parquet`
 
-保存 Binance 上游源数据的归一化结果。它已经按 join columns 和 compare columns 整理，后续复用缓存时不需要重新请求 Binance。
+保存 DB 或 Binance source 的归一化结果。它已经按 join columns 和 compare columns 整理，后续复用缓存时不需要重新查询 DB 或重新请求 Binance。
 
 ### `manifest.json`
 
@@ -426,21 +471,22 @@ cached 模式会写两类内容：
 
 | status | 含义 |
 |---|---|
-| `complete` | 源数据成功拉取并写入 `data.parquet`。 |
-| `empty` | Binance 上游返回空数据。 |
-| `source_market_unavailable` | 市场不存在、已下架、symbol/pair/contract 无效等。 |
-| `source_request_failed` | 网络、限流、超时或其他源端请求失败。 |
+| `complete` | 分区数据成功写入 `data.parquet`。 |
+| `empty` | 分区查询或请求结果为空。 |
+| `failed` | 分区准备失败，不会作为可复用缓存。 |
+| `cancelled` | 分区任务被取消，不会作为可复用缓存。 |
 
-`source_market_unavailable` 会被缓存复用。也就是说，除非传 `--db-accuracy-refresh-cache`，后续不会重复请求这个不可用市场。
+DB/source manifest 会记录 side、table、endpoint、market key、时间范围、row count、data fingerprint、schema fingerprint 和相对 artifact path。只有 `complete` 与 `empty` 状态可复用。
 
-### `.cache/binance_accuracy/reports/run_id=...`
+### `.cache/binance_accuracy/compare/...`
 
-每次 cached 运行都会生成一个新的 `run_id` 目录，避免覆盖历史报告。
+每个分区会生成：
 
-每个 shard partition 会生成：
+- `report.txt`: DataComPy 文本报告。
+- `diff.json`: 结构化 diff 摘要。
+- `manifest.json`: compare 状态、DB/source fingerprint、行数、差异数和报告路径。
 
-- `*.report.txt`: DataComPy 文本报告。
-- `*.diff.json`: 结构化 diff 摘要。
+compare manifest 只有在本次分区范围完全一致，并且 DB/source fingerprint 都一致时才会复用。
 
 `diff.json` 中包含：
 
@@ -451,25 +497,29 @@ cached 模式会写两类内容：
 - `source_only_sample`: 最多 20 条 source-only 样例。
 - `unequal_sample`: 最多 20 条字段不一致样例。
 
+### `.cache/binance_accuracy/runs/run_id=...`
+
+每次运行都会生成一个新的 `run_id` 目录，避免覆盖历史汇总。
+
+run 汇总包括：
+
+- `summary.txt`: status、任务数、已对比任务数、行数、差异数和暂停原因。
+- `summary.json`: 同样信息的结构化版本，包含每个已完成 compare 分区的报告路径和 diff 路径。
+
 ## Allure 附件
 
-direct 模式输出：
+统一分区 runner 输出：
 
-- `db_accuracy_summary`: 每张表的窗口数、DB 行数、source 行数、差异数。
-- `db_accuracy_details`: JSON 明细，包含每个 mismatch 的 reason。
-
-cached 模式输出：
-
-- `db_accuracy_cached_summary`: shard partition 汇总。
-- `db_accuracy_cached_details`: JSON 明细，包含每个 shard partition 的状态、行数、差异数、报告路径、diff 路径和 message。
+- `db_accuracy_partitioned_summary`: status、任务数、已对比任务数、DB/source 行数、差异数和暂停原因。
+- `db_accuracy_partitioned_details`: JSON 明细，包含每个已完成 compare 分区的状态、行数、差异数、报告路径、diff 路径和 message。
 
 示例 summary：
 
 ```text
-shards=1
-passed=1
-failed=0
-skipped=0
+status=passed
+tasks_total=1
+tasks_compared=1
+tasks_with_differences=0
 db_rows=1440
 source_rows=1440
 differences=0
@@ -483,11 +533,13 @@ direct 模式：
 
 - 时间序列表按表配置的 key fields 和时间字段对齐。
 - registry 表按 `symbol` 对齐。
+- 如果不传 `--db-accuracy-start-ms/--db-accuracy-end-ms`，runner 会按 DB 中稳定历史范围规划分区。
 
 cached 模式：
 
 - join columns = 市场 key fields + resolved time field。
 - 例如 `binance_kline_all_future_raw` 是 `symbol, interval, timestamp`。
+- 必须传一张表和明确时间范围。
 
 ### 字段比较
 
@@ -513,6 +565,8 @@ cached 模式会在 DataFrame 构建阶段校验 join key 唯一性。如果同�
 ## 源端请求窗口规则
 
 脚本不会无限制地请求 Binance。它会按表配置和 Binance 约束拆源端请求窗口。
+
+每个请求窗口默认最多重试 5 次，可通过 `--db-accuracy-source-retries` 调整。重试之间默认按 `--db-accuracy-source-retry-backoff-ms` 等待。
 
 Kline：
 
@@ -547,7 +601,10 @@ Registry：
      --db-accuracy-symbol BTCUSDT \
      --db-accuracy-interval 1m \
      --db-accuracy-start-ms 1704067200000 \
-     --db-accuracy-end-ms 1704153599999
+     --db-accuracy-end-ms 1704153599999 \
+     --db-accuracy-use-db-cache true \
+     --db-accuracy-use-source-cache true \
+     --db-accuracy-workers 8
    ```
 
 2. 再扩大时间范围，例如 7 天。
@@ -562,7 +619,10 @@ Registry：
      --db-accuracy-interval 1m \
      --db-accuracy-start-ms 1704067200000 \
      --db-accuracy-end-ms 1704671999999 \
-     --db-accuracy-cache-root /Volumes/BigDisk/binance_accuracy_cache
+     --db-accuracy-cache-root /Volumes/BigDisk/binance_accuracy_cache \
+     --db-accuracy-use-db-cache true \
+     --db-accuracy-use-source-cache true \
+     --db-accuracy-workers 8
    ```
 
 3. 再用 DB discovery 批量发现市场，但限制 shard 数量。
@@ -577,7 +637,10 @@ Registry：
      --db-accuracy-start-ms 1704067200000 \
      --db-accuracy-end-ms 1704153599999 \
      --db-accuracy-max-shards 50 \
-     --db-accuracy-cache-root /Volumes/BigDisk/binance_accuracy_cache
+     --db-accuracy-cache-root /Volumes/BigDisk/binance_accuracy_cache \
+     --db-accuracy-use-db-cache true \
+     --db-accuracy-use-source-cache true \
+     --db-accuracy-workers 8
    ```
 
 4. 按日期或市场批量调度时，保持单次任务可控。
@@ -586,7 +649,6 @@ Registry：
 
 - `partition_days=1` 作为默认值即可，尤其是 `1m` 数据。
 - 单次 `max_shards` 先从 10、20、50 逐步增加。
-- 对已知下架市场，优先显式单市场跑，确认 manifest 状态。
 - 缓存根目录放到大盘，不要放到仓库目录。
 - 对比失败时先看 `diff.json`，再看 DataComPy `report.txt`。
 
@@ -620,7 +682,10 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --db-accuracy-table binance_1h_usdm_kline_raw \
   --db-accuracy-symbol BTCUSDT \
   --db-accuracy-start-ms 1704067200000 \
-  --db-accuracy-end-ms 1706745599999
+  --db-accuracy-end-ms 1706745599999 \
+  --db-accuracy-use-db-cache true \
+  --db-accuracy-use-source-cache true \
+  --db-accuracy-workers 8
 ```
 
 ### cached 跑 COIN-M funding
@@ -633,7 +698,10 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --db-accuracy-table binance_funding_rate_coinm_perp_raw \
   --db-accuracy-symbol BTCUSD_PERP \
   --db-accuracy-start-ms 1704067200000 \
-  --db-accuracy-end-ms 1706745599999
+  --db-accuracy-end-ms 1706745599999 \
+  --db-accuracy-use-db-cache true \
+  --db-accuracy-use-source-cache true \
+  --db-accuracy-workers 8
 ```
 
 ### 只收集测试确认入口存在
@@ -646,16 +714,20 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py --co
 
 pytest 通过代表：
 
-- 至少有实际表或 shard partition 被检查。
-- 所有被检查对象都没有差异。
-- cached 模式没有源端请求失败、不可用市场带来的 DB 行差异、重复 join key 等失败状态。
+- 至少有实际分区任务被检查。
+- 所有被检查分区都完成 compare。
+- 所有 compare 分区都没有差异。
+- 没有 source 请求重试耗尽、参数错误、缓存读写错误等运行问题。
 
 pytest 失败代表：
 
-- direct 模式中至少一张表有 differences。
-- cached 模式中至少一个 shard partition 失败。
+- 运行状态为 `completed_with_differences`、`paused` 或 `failed`。
+- 至少一个分区存在 DB-only、source-only 或字段值差异。
+- source 请求重试耗尽并暂停。
 - 参数或表配置不合法。
 - MySQL、Binance、DataComPy、缓存读写等任一关键步骤失败。
+
+数据差异不是“脚本异常”，但会让 pytest 失败，目的是阻止有差异的数据进入后续开发结论。
 
 ## 常见失败和处理方式
 
@@ -697,25 +769,24 @@ DB 自动发现市场 shard 时没有找到任何 key。
 - 去 DB 直接查一下该范围是否有数据。
 - 改成显式市场 key 跑一次。
 
-### `source_market_unavailable`
-
-Binance 返回市场不存在、已下架或无效。
-
-处理：
-
-- 如果 DB 中确实还有该市场数据，这会被计为失败，用于提示 DB 和上游可取数状态不一致。
-- 如果这是预期下架市场，可以把这类市场单独列表化处理，避免和正常市场混在一次任务里。
-- 如需重新确认，使用 `--db-accuracy-refresh-cache` 刷新 manifest。
-
 ### `source_request_failed`
 
 源端请求失败，常见原因包括网络错误、超时、限流。
 
+行为：
+
+- 每个 Binance 请求窗口会先按 `--db-accuracy-source-retries` 重试。
+- 重试耗尽后，会清理当前 source 分区的正式 `data.parquet`、`manifest.json` 和临时文件。
+- 默认 `--db-accuracy-stop-on-source-failure true` 会暂停本次 run，状态为 `paused`。
+- 已经完成的 DB/source/compare 分区缓存会保留。
+- 下次运行默认复用已完成缓存，从缺失分区继续。
+
 处理：
 
-- 缩小时间范围或降低 `--db-accuracy-max-shards`。
-- 分批运行。
-- 等待 Binance 限流恢复后加 `--db-accuracy-refresh-cache` 重跑失败分区。
+- 确认网络和 Binance REST 可访问。
+- 必要时缩小时间范围或降低 `--db-accuracy-max-shards`。
+- 如果要继续等待其他 source 分区完成，可以传 `--db-accuracy-stop-on-source-failure false`，但缺失 source 的分区不会进入 compare，最终 run 会失败。
+- 如果怀疑本地 source 缓存有问题，传 `--db-accuracy-use-source-cache false` 重拉对应分区。
 
 ### `missing_source_row`
 
@@ -767,16 +838,17 @@ flowchart TD
   A["pytest entry"] --> B["load table specs"]
   B --> C["SHOW COLUMNS resolve spec"]
   C --> D{"kind"}
-  D -->|"registry"| E["query DB registry rows"]
-  E --> F["fetch Binance exchangeInfo"]
-  F --> G["compare by symbol"]
-  D -->|"kline/funding"| H["discover DB key ranges"]
-  H --> I["build Binance request windows"]
-  I --> J["query DB rows per window"]
-  J --> K["fetch Binance rows per window"]
-  K --> L["strict row compare"]
-  G --> M["Allure summary/details"]
-  L --> M
+  D -->|"registry"| E["build registry partition"]
+  D -->|"kline/funding"| F["discover stable DB key ranges"]
+  F --> G["split market/time partitions"]
+  E --> H["prepare DB cache"]
+  G --> H
+  H --> I["prepare source cache"]
+  I --> J{"source failure?"}
+  J -->|"yes"| K["pause run and keep completed cache"]
+  J -->|"no"| L["compare partitions"]
+  L --> M["write compare artifacts"]
+  M --> N["Allure partitioned summary/details"]
 ```
 
 ### cached 模式流程
@@ -790,16 +862,14 @@ flowchart TD
   D -->|"no"| F["discover MarketShard from DB"]
   E --> G["split time partitions"]
   F --> G
-  G --> H{"source cache complete?"}
-  H -->|"yes"| I["read source parquet/manifest"]
-  H -->|"no or refresh"| J["fetch Binance by request windows"]
-  J --> K["write parquet + manifest"]
-  I --> L["query DB partition rows"]
-  K --> L
-  L --> M["normalize to Polars frames"]
-  M --> N["DataComPy compare"]
-  N --> O["write report/diff under cache reports/run_id"]
-  O --> P["Allure cached summary/details"]
+  G --> H["prepare DB cache"]
+  H --> I["prepare source cache"]
+  I --> J{"source failure?"}
+  J -->|"yes"| K["clear failed source partition and pause"]
+  J -->|"no"| L["DataComPy compare"]
+  L --> M["write compare/report/diff artifacts"]
+  M --> N["write runs/run_id summary"]
+  N --> O["Allure partitioned summary/details"]
 ```
 
 ## 实施建议
@@ -834,7 +904,7 @@ time batch: 每次 1 天或 7 天
 cache_root: 外部大盘
 ```
 
-当前脚本已经提供单次任务内部的 market shard 和 time partition 拆分，但没有内置任务队列。真正全量大表建议由外层调度器循环调用 pytest 命令。
+当前脚本已经提供单次任务内部的 market shard 和 time partition 拆分，也会用 `--db-accuracy-workers` 并发执行 DB/source/compare 阶段。真正全量大表仍建议由外层调度器循环调用 pytest 命令，避免单次任务过大。
 
 ## 修改表配置
 
@@ -879,33 +949,33 @@ $PYTHON -m compileall services/db_accuracy tests/db_accuracy/integration/test_bi
 
 - CLI 参数注册。
 - 表配置解析。
-- SQL 窗口规划。
+- 分区任务规划。
+- DB/source 分区缓存读写。
+- source request window 重试和失败清理。
 - direct runner 差异收集。
 - cached shard 规划。
-- 缓存 manifest/parquet 读写。
-- Binance 源端缓存拉取。
 - DB 分区查询。
 - DataComPy diff 生成。
-- cached runner 端到端行为。
+- partitioned runner 端到端行为。
 
 ## 最小排查顺序
 
 遇到失败时按这个顺序看：
 
 1. pytest assertion summary。
-2. Allure 的 `db_accuracy_cached_summary` 或 `db_accuracy_summary`。
-3. cached 模式下看 `db_accuracy_cached_details` 中的 `report_path` 和 `diff_path`。
-4. 打开 `.cache/binance_accuracy/reports/run_id=.../*.diff.json`。
-5. 看对应 source 分区的 `manifest.json`。
+2. Allure 的 `db_accuracy_partitioned_summary`。
+3. 看 `db_accuracy_partitioned_details` 中的 `report_path` 和 `diff_path`。
+4. 打开 `.cache/binance_accuracy/compare/.../diff.json`。
+5. 看对应 DB/source 分区的 `manifest.json`。
 6. 用 diff 样例里的 join key 回查 DB。
-7. 如怀疑缓存过期，用 `--db-accuracy-refresh-cache` 重跑同一 shard partition。
+7. 如怀疑 DB 缓存过期，用 `--db-accuracy-use-db-cache false` 重跑同一 shard partition。
+8. 如怀疑 source 缓存过期，用 `--db-accuracy-use-source-cache false` 重跑同一 shard partition。
 
 ## 重要限制
 
 - cached 模式一次只支持一张表。
 - cached 显式市场模式每次只支持一个完整市场 key。
 - cached 自动发现模式中的过滤条件每个字段只支持一个值。
-- 脚本不会自动并发执行。
 - 脚本不会自动清理旧缓存和旧报告。
 - 脚本不会绕过 Binance 限流。
 - 对比是严格对比，没有数值 tolerance。
