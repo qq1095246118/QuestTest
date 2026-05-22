@@ -40,6 +40,30 @@ from services.db_accuracy.source_service import BinanceSourceService
 class SourceRequestFailed(RuntimeError):
     """Raised after source retries are exhausted."""
 
+    def __init__(
+        self,
+        *,
+        task: PartitionTask,
+        window_start_ms: int | None,
+        window_end_ms: int | None,
+        attempts: int,
+        original_exception: Exception,
+    ) -> None:
+        self.task = task
+        self.window_start_ms = window_start_ms
+        self.window_end_ms = window_end_ms
+        self.attempts = attempts
+        self.original_exception = original_exception
+        window_label = (
+            "registry"
+            if window_start_ms is None or window_end_ms is None
+            else f"window={window_start_ms}-{window_end_ms}"
+        )
+        super().__init__(
+            f"source request failed for {task.label} {window_label} "
+            f"after {attempts} attempts: {original_exception}"
+        )
+
 
 class PartitionedSourceDataService:
     def __init__(self, store: PartitionedCacheStoreService, source: Any = None):
@@ -70,13 +94,10 @@ class PartitionedSourceDataService:
 
         paths = self.store.data_paths(CacheSide.SOURCE, task)
         try:
-            frame = self._fetch_with_retries(task, execution)
-        except Exception as exc:
+            frame = self._fetch_frame(task, execution)
+        except SourceRequestFailed:
             self.store.clear_data_cache(CacheSide.SOURCE, task)
-            self.store.cleanup_tmp()
-            if isinstance(exc, SourceRequestFailed):
-                raise
-            raise SourceRequestFailed(str(exc)) from exc
+            raise
 
         manifest = self._manifest(
             task=task,
@@ -86,29 +107,14 @@ class PartitionedSourceDataService:
         self.store.write_data_frame(paths, frame, manifest)
         return frame, manifest
 
-    def _fetch_with_retries(
+    def _fetch_frame(
         self,
         task: PartitionTask,
         execution: ExecutionOptions,
     ) -> pl.DataFrame:
-        attempts = max(1, int(execution.source_retries))
-        last_exc: Exception | None = None
-        for attempt in range(1, attempts + 1):
-            try:
-                return self._fetch_frame(task)
-            except Exception as exc:  # noqa: BLE001 - source adapters raise API/client exceptions
-                last_exc = exc
-                if attempt >= attempts:
-                    break
-                if execution.source_retry_backoff_ms > 0:
-                    time.sleep(execution.source_retry_backoff_ms / 1000)
-        message = str(last_exc) if last_exc is not None else "source request failed"
-        raise SourceRequestFailed(message) from last_exc
-
-    def _fetch_frame(self, task: PartitionTask) -> pl.DataFrame:
         spec = _table_spec(task)
         if task.is_registry:
-            rows = self.source.fetch_registry_rows(spec)
+            rows = self._fetch_registry_rows_with_retries(task, spec, execution)
             return _registry_rows_to_frame(task, rows)
 
         if task.start_ms is None or task.end_ms is None:
@@ -129,11 +135,13 @@ class PartitionedSourceDataService:
             if window.start_ms is None or window.end_ms is None:
                 continue
             rows.extend(
-                self.source.fetch_rows(
+                self._fetch_rows_with_retries(
+                    task,
                     spec,
                     key,
                     window.start_ms,
                     window.end_ms,
+                    execution,
                 )
             )
 
@@ -148,6 +156,57 @@ class PartitionedSourceDataService:
             request_limit=task.request_limit,
         )
         return source_rows_to_normalized_frame(shard, rows)
+
+    def _fetch_rows_with_retries(
+        self,
+        task: PartitionTask,
+        spec: TableSpec,
+        key: ValidationKey,
+        start_ms: int,
+        end_ms: int,
+        execution: ExecutionOptions,
+    ) -> list[SourceRow]:
+        attempts = max(1, int(execution.source_retries))
+        for attempt in range(1, attempts + 1):
+            try:
+                return self.source.fetch_rows(spec, key, start_ms, end_ms)
+            except Exception as exc:  # noqa: BLE001 - source adapters raise API/client exceptions
+                if attempt >= attempts:
+                    raise SourceRequestFailed(
+                        task=task,
+                        window_start_ms=start_ms,
+                        window_end_ms=end_ms,
+                        attempts=attempt,
+                        original_exception=exc,
+                    ) from exc
+                self._sleep_before_retry(execution)
+        raise RuntimeError("unreachable source retry state")
+
+    def _fetch_registry_rows_with_retries(
+        self,
+        task: PartitionTask,
+        spec: TableSpec,
+        execution: ExecutionOptions,
+    ) -> list[Any]:
+        attempts = max(1, int(execution.source_retries))
+        for attempt in range(1, attempts + 1):
+            try:
+                return self.source.fetch_registry_rows(spec)
+            except Exception as exc:  # noqa: BLE001 - source adapters raise API/client exceptions
+                if attempt >= attempts:
+                    raise SourceRequestFailed(
+                        task=task,
+                        window_start_ms=None,
+                        window_end_ms=None,
+                        attempts=attempt,
+                        original_exception=exc,
+                    ) from exc
+                self._sleep_before_retry(execution)
+        raise RuntimeError("unreachable source retry state")
+
+    def _sleep_before_retry(self, execution: ExecutionOptions) -> None:
+        if execution.source_retry_backoff_ms > 0:
+            time.sleep(execution.source_retry_backoff_ms / 1000)
 
     def _manifest(
         self,

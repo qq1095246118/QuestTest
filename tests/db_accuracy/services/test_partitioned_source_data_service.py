@@ -61,6 +61,36 @@ class RecordingSource:
         return self.registry_rows
 
 
+class WindowFailingSource(RecordingSource):
+    def __init__(
+        self,
+        rows: list[SourceRow],
+        *,
+        failures_by_window: dict[tuple[int, int], int],
+    ) -> None:
+        super().__init__(rows)
+        self.failures_by_window = dict(failures_by_window)
+
+    def fetch_rows(
+        self,
+        spec: Any,
+        key: ValidationKey,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[SourceRow]:
+        self.calls.append((spec, key, start_ms, end_ms))
+        window = (start_ms, end_ms)
+        remaining_failures = self.failures_by_window.get(window, 0)
+        if remaining_failures > 0:
+            self.failures_by_window[window] = remaining_failures - 1
+            raise RuntimeError(f"source down for {start_ms}-{end_ms}")
+        return [
+            row
+            for row in self.rows
+            if start_ms <= int(row.fields["timestamp"]) <= end_ms
+        ]
+
+
 def _task(
     start_ms: int = 1704067200000,
     end_ms: int = 1704067259999,
@@ -124,6 +154,54 @@ def _no_backoff(retries: int = 5) -> ExecutionOptions:
     return ExecutionOptions(source_retries=retries, source_retry_backoff_ms=0)
 
 
+def test_source_fetch_retries_each_window_without_repeating_completed_windows(
+    tmp_path: Path,
+) -> None:
+    task = _task(end_ms=1704067319999)
+    task = PartitionTask(
+        table=task.table,
+        kind=task.kind,
+        endpoint=task.endpoint,
+        key_values=task.key_values,
+        time_field=task.time_field,
+        source_time_field=task.source_time_field,
+        compare_fields=task.compare_fields,
+        request_limit=1,
+        start_ms=task.start_ms,
+        end_ms=task.end_ms,
+        partition_label=task.partition_label,
+        partition_bucket=task.partition_bucket,
+        key_fields=task.key_fields,
+        interval_field=task.interval_field,
+    )
+    first_window = (1704067200000, 1704067259999)
+    second_window = (1704067260000, 1704067319999)
+    source = WindowFailingSource(
+        _source_frame(
+            [
+                (1704067200000, "1", "2"),
+                (1704067260000, "3", "4"),
+            ]
+        ),
+        failures_by_window={second_window: 2},
+    )
+    service, _ = _service(tmp_path, source)
+
+    frame, _ = service.ensure_source_frame(
+        task,
+        CachePolicy(use_source_cache=False),
+        _no_backoff(),
+    )
+
+    windows_called = [(call[2], call[3]) for call in source.calls]
+    assert windows_called.count(first_window) == 1
+    assert windows_called.count(second_window) == 3
+    assert frame.to_dict(as_series=False)["timestamp"] == [
+        "1704067200000",
+        "1704067260000",
+    ]
+
+
 def test_source_fetch_retries_four_failures_then_writes_complete_cache(
     tmp_path: Path,
 ) -> None:
@@ -161,7 +239,7 @@ def test_source_fetch_retries_four_failures_then_writes_complete_cache(
     assert store.read_data_manifest(paths) == manifest
 
 
-def test_source_retry_exhaustion_raises_and_removes_formal_and_tmp_cache(
+def test_source_retry_exhaustion_raises_structured_error_and_clears_only_source_cache(
     tmp_path: Path,
 ) -> None:
     task = _task()
@@ -175,17 +253,52 @@ def test_source_retry_exhaustion_raises_and_removes_formal_and_tmp_cache(
     tmp_file.parent.mkdir(parents=True)
     tmp_file.write_text("partial", encoding="utf-8")
 
-    with pytest.raises(SourceRequestFailed, match="source down 5"):
+    with pytest.raises(SourceRequestFailed, match="source down 5") as exc_info:
         service.ensure_source_frame(
             task,
             CachePolicy(use_source_cache=False),
             _no_backoff(),
         )
 
+    exc = exc_info.value
     assert len(source.calls) == 5
+    assert exc.task == task
+    assert exc.window_start_ms == task.start_ms
+    assert exc.window_end_ms == task.end_ms
+    assert exc.attempts == 5
+    assert isinstance(exc.original_exception, RuntimeError)
     assert not paths.data_path.exists()
     assert not paths.manifest_path.exists()
-    assert not store.tmp_root.exists()
+    assert tmp_file.exists()
+
+
+def test_source_non_adapter_errors_are_not_wrapped_or_cleaned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = _task()
+    source = RecordingSource(_source_frame([(1704067200000, "1", "2")]))
+    service, store = _service(tmp_path, source)
+    paths = store.data_paths(CacheSide.SOURCE, task)
+    paths.data_path.parent.mkdir(parents=True)
+    paths.data_path.write_text("stale", encoding="utf-8")
+    paths.manifest_path.write_text('{"status": "complete"}', encoding="utf-8")
+
+    def fail_build_windows(*args: Any, **kwargs: Any) -> list[Any]:
+        raise ValueError("bad spec")
+
+    monkeypatch.setattr(service.window_builder, "build_windows", fail_build_windows)
+
+    with pytest.raises(ValueError, match="bad spec"):
+        service.ensure_source_frame(
+            task,
+            CachePolicy(use_source_cache=False),
+            _no_backoff(),
+        )
+
+    assert source.calls == []
+    assert paths.data_path.exists()
+    assert paths.manifest_path.exists()
 
 
 def test_use_source_cache_reuses_existing_complete_cache_without_fetching(
