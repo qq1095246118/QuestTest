@@ -22,7 +22,6 @@ class CachedCompareRequest:
     contract_types: tuple[str, ...] = ()
     intervals: tuple[str, ...] = ()
     partition_days: int = 1
-    refresh_cache: bool = False
     max_shards: int = 100
 
 

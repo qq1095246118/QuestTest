@@ -80,7 +80,7 @@ class CachedAccuracyService:
                         resolved.spec,
                         shard,
                         partition,
-                        refresh=request.refresh_cache,
+                        refresh=False,
                     )
                     db_rows = db_reader.rows_for_partition(shard, partition)
                     db_frame = rows_to_normalized_frame(shard, db_rows)
