@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+import pytest
 
 from services.db_accuracy.partitioned.cache_store_service import (
     PartitionedCacheStoreService,
@@ -22,9 +23,12 @@ from services.db_accuracy.partitioned.models import (
 class FakeDB:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
+        self.raise_on_query = False
 
     def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         self.calls.append((sql, params))
+        if self.raise_on_query:
+            raise RuntimeError("DB unavailable")
         if "FROM `binance_kline_all_future_raw`" in sql:
             return [
                 {
@@ -35,7 +39,7 @@ class FakeDB:
                     "close": "2",
                 }
             ]
-        if "FROM `binance_exchange_info_spot_raw`" in sql:
+        if "FROM `binance_futures_symbols`" in sql:
             return [
                 {
                     "symbol": "BTCUSDT",
@@ -65,6 +69,25 @@ def _task(
         partition_label=f"{start_ms}-{end_ms}",
         partition_bucket="date=2024-01-01",
         key_fields=("symbol", "interval"),
+    )
+
+
+def _registry_task() -> PartitionTask:
+    return PartitionTask(
+        table="binance_futures_symbols",
+        kind="registry",
+        endpoint="exchange_info",
+        key_values={},
+        time_field=None,
+        source_time_field=None,
+        compare_fields=("status",),
+        request_limit=1000,
+        start_ms=None,
+        end_ms=None,
+        partition_label="registry",
+        partition_bucket="registry",
+        is_registry=True,
+        key_fields=("symbol",),
     )
 
 
@@ -209,3 +232,62 @@ def test_larger_cache_satisfies_smaller_range_and_manifest_matches_filtered_fram
     assert manifest.row_count == 1
     assert manifest.fingerprint == fingerprint_frame(frame)
     assert manifest.schema_fingerprint == small_task.schema_fingerprint
+
+    small_paths = store.data_paths(CacheSide.DB, small_task)
+    assert small_paths.data_path.exists()
+    assert manifest.artifact_path == store.relative_to_root(small_paths.data_path)
+    assert pl.read_parquet(small_paths.data_path).to_dict(as_series=False)["timestamp"] == [
+        "1704070800000"
+    ]
+
+
+def test_use_db_cache_false_preserves_existing_cache_when_fetch_fails(tmp_path: Path) -> None:
+    db = FakeDB()
+    store = PartitionedCacheStoreService(tmp_path)
+    task = _task()
+    cached_frame = pl.DataFrame(
+        {
+            "symbol": ["BTCUSDT"],
+            "interval": ["1m"],
+            "timestamp": ["1704067200000"],
+            "timestamp__compare": ["1704067200000"],
+            "open": ["10"],
+            "close": ["20"],
+        }
+    )
+    exact_paths = store.data_paths(CacheSide.DB, task)
+    store.write_data_frame(exact_paths, cached_frame, _manifest(task, cached_frame))
+    db.raise_on_query = True
+    service = PartitionedDBDataService(db, store)
+
+    with pytest.raises(RuntimeError, match="DB unavailable"):
+        service.ensure_db_frame(task, CachePolicy(use_db_cache=False))
+
+    assert exact_paths.data_path.exists()
+    assert exact_paths.manifest_path.exists()
+    hit = store.find_covering_data_cache(CacheSide.DB, task)
+    assert hit is not None
+    assert store.read_data_frame(hit.paths, task, task.time_field).equals(cached_frame)
+
+
+def test_registry_task_queries_registry_rows_and_writes_complete_manifest(
+    tmp_path: Path,
+) -> None:
+    db = FakeDB()
+    store = PartitionedCacheStoreService(tmp_path)
+    service = PartitionedDBDataService(db, store)
+    task = _registry_task()
+
+    frame, manifest = service.ensure_db_frame(task, CachePolicy(use_db_cache=True))
+
+    sql, params = db.calls[0]
+    assert "SELECT `symbol`, `status`" in sql
+    assert "FROM `binance_futures_symbols`" in sql
+    assert params == ()
+    assert frame.to_dict(as_series=False) == {
+        "symbol": ["BTCUSDT"],
+        "status": ["TRADING"],
+    }
+    assert manifest.status == CacheStatus.COMPLETE
+    assert manifest.row_count == 1
+    assert manifest.fingerprint == fingerprint_frame(frame)

@@ -43,13 +43,16 @@ class PartitionedDBDataService:
             hit = self.store.find_covering_data_cache(CacheSide.DB, task)
             if hit is not None:
                 frame = self.store.read_data_frame(hit.paths, task, task.time_field)
-                return frame, self._manifest(
+                exact_paths = self.store.data_paths(CacheSide.DB, task)
+                manifest = self._manifest(
                     task=task,
                     frame=frame,
-                    artifact_path=self.store.relative_to_root(hit.paths.data_path),
+                    artifact_path=self.store.relative_to_root(exact_paths.data_path),
                 )
+                if hit.paths != exact_paths or _manifest_range_exceeds_task(hit.manifest, task):
+                    self.store.write_data_frame(exact_paths, frame, manifest)
+                return frame, manifest
 
-        self.store.clear_data_cache(CacheSide.DB, task)
         paths = self.store.data_paths(CacheSide.DB, task)
         frame = self._fetch_frame(task)
         manifest = self._manifest(
@@ -135,6 +138,10 @@ def _resolved_spec(task: PartitionTask) -> ResolvedTableSpec:
         compare_fields=task.compare_fields,
         key_fields=task.key_fields,
     )
+
+
+def _manifest_range_exceeds_task(manifest: CacheManifest, task: PartitionTask) -> bool:
+    return manifest.start_ms != task.start_ms or manifest.end_ms != task.end_ms
 
 
 def _registry_rows_to_frame(task: PartitionTask, rows: list[dict[str, Any]]) -> pl.DataFrame:
