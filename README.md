@@ -47,8 +47,11 @@
 ### 6. 测试用例层 (`tests/`)
 实际的自动化测试用例落盘处，只放可执行 pytest 测试文件。
 - **`conftest.py`**: Pytest 的全局 Hook 与 Fixture 配置文件。实现了基于命令行参数 `--env` 动态切换环境，并预埋了测试执行完毕后向企微/钉钉发送汇总告警信息的逻辑。
-- **`api/test_kline_api.py`**: Kline Data 七个 legacy 接口的传统 pytest 用例，每个接口保留 Normal、ParamError、Boundary、Response、Performance 五类用例。
-- **`integration/test_binance_db_accuracy.py`**: 手动触发的 Binance DB-to-source 准确性校验入口。
+- 测试目录按业务域优先组织，第一层表示业务或能力域，如 `kline/`、`binance/`、`coinglass/`、`factor_data/`、`open_interest/`、`db_accuracy/`。
+- 业务域下再按被测类型细分，如 `api/`、`services/`、`integration/`、`tools/`。
+- **`kline/api/test_kline_api.py`**: Kline Data 七个 legacy 接口的传统 pytest 用例，每个接口保留 Normal、ParamError、Boundary、Response、Performance 五类用例。
+- **`db_accuracy/integration/test_binance_db_accuracy.py`**: 手动触发的 Binance DB-to-source 准确性校验入口。
+- **`db_accuracy/tools/`**: 存放根目录 `tools/db_accuracy/` 工具脚本的测试用例，不存放工具实现。
 
 ### 7. 工具层 (`tools/`)
 直接可运行的工具脚本和临时 Python 文件。
@@ -90,12 +93,12 @@ def test_data_consistency():
 ```
 
 ### 3. Binance 数据库准确性全量校验
-`tests/integration/test_binance_db_accuracy.py` 提供手动触发的 Binance raw/metadata 表全量准确性校验。它会通过 `services/db_accuracy/` 从 MySQL 扫描 PDF 范围内的 Binance raw/metadata 表，并与 Binance REST 上游严格对账。
+`tests/db_accuracy/integration/test_binance_db_accuracy.py` 提供手动触发的 Binance raw/metadata 表全量准确性校验。它会通过 `services/db_accuracy/` 从 MySQL 扫描 PDF 范围内的 Binance raw/metadata 表，并与 Binance REST 上游严格对账。
 
 默认 `pytest` 不运行该套件；需要显式传入：
 
 ```bash
-python3 -m pytest tests/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+python3 -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
 大表优先使用 cached 范围分片校验模式。cached 模式会把 Binance 上游数据按市场和时间分片缓存成本地 Parquet，再查询同一 shard 的 DB 数据，并通过 DataComPy 生成文本报告和 JSON diff。

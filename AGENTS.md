@@ -18,7 +18,8 @@ consistency between platform database rows and upstream Binance REST data.
 - `services/` contains intermediate logic and DB accuracy services.
 - `infrastructure/` contains HTTP, database, DAO, and assertion foundations.
 - `tools/` contains directly runnable utility scripts and temporary Python files.
-- `tests/` contains executable pytest tests only.
+- `tests/` contains executable pytest tests only. It is organized by business
+  domain first, then by tested layer or entrypoint type.
 - `data/binance_db_accuracy_tables.yaml` defines the Binance DB accuracy table
   specs: table kind, endpoint, key fields, time fields, and compare fields.
 - `docs/` contains test case designs, project constraints, and DB accuracy usage docs.
@@ -81,13 +82,13 @@ Run against another environment:
 Run the manual Binance DB accuracy suite:
 
 ```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
 Run cached DB accuracy for one table and time range:
 
 ```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/integration/test_binance_db_accuracy.py -v \
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --run-db-accuracy \
   --db-accuracy-mode cached \
   --db-accuracy-table binance_kline_all_future_raw \
@@ -126,7 +127,11 @@ Start with `docs/binance_db_accuracy_validation.md` before changing this area.
 
 - Normal pytest collection currently discovers hundreds of tests across live API
   suites and DB accuracy unit tests.
-- `tests/integration/test_binance_db_accuracy.py` is skipped unless `--run-db-accuracy` is set.
+- Test directories are business-domain first: for example `tests/kline/api/`,
+  `tests/binance/api/`, and `tests/db_accuracy/services/`.
+- `tests/db_accuracy/tools/` contains tests for the runnable scripts in
+  root-level `tools/db_accuracy/`; tool implementation code stays under `tools/`.
+- `tests/db_accuracy/integration/test_binance_db_accuracy.py` is skipped unless `--run-db-accuracy` is set.
 - Live API tests skip or fail depending on whether `BASE_URL`, Binance network
   access, and DB settings are available.
 - `pytest.ini` writes Allure results to `./allure-results` and cleans that
@@ -147,7 +152,7 @@ Start with `docs/binance_db_accuracy_validation.md` before changing this area.
 - DB accuracy docs: `docs/binance_db_accuracy_validation.md`
 - DB accuracy specs: `data/binance_db_accuracy_tables.yaml`
 - Pytest hooks and CLI flags: `tests/conftest.py`
-- DB accuracy entrypoint: `tests/integration/test_binance_db_accuracy.py`
+- DB accuracy entrypoint: `tests/db_accuracy/integration/test_binance_db_accuracy.py`
 - Cached runner: `services/db_accuracy/cached/cached_accuracy_service.py`
 - Direct runner: `services/db_accuracy/direct/accuracy_service.py`
 - Binance source mapping: `services/db_accuracy/source_service.py`

@@ -178,8 +178,11 @@ Tools are run by file path, for example:
 ### `tests/`
 
 `tests/` stores only executable pytest test files and pytest support files such
-as `conftest.py`. Unit tests for services still belong under `tests/services/`
-because they are executable tests, not reusable production logic.
+as `conftest.py`. The first directory level is the business or capability
+domain, such as `kline/`, `binance/`, `coinglass/`, `factor_data/`,
+`open_interest/`, or `db_accuracy/`. Inside each domain, tests may be grouped by
+tested layer or entrypoint type, such as `api/`, `services/`, `integration/`, or
+`tools/`.
 
 ### `artifacts/`
 
@@ -236,10 +239,10 @@ tests/db_accuracy/frame_normalizer.py   -> services/db_accuracy/cached/frame_nor
 tests/db_accuracy/datacompy_engine.py   -> services/db_accuracy/cached/datacompy_service.py
 ```
 
-The integration pytest entrypoint moves from:
+The integration pytest entrypoint lives at:
 
 ```text
-tests/test_binance_db_accuracy.py -> tests/integration/test_binance_db_accuracy.py
+tests/db_accuracy/integration/test_binance_db_accuracy.py
 ```
 
 ### Tools
@@ -255,10 +258,12 @@ Report output paths in these tools should move from `reports/` to
 
 ### Tests
 
-Current root-level API tests move under `tests/api/`. DB accuracy service unit
-tests move under `tests/services/db_accuracy/`. Tool tests move under
-`tests/tools/`. The DB accuracy integration entrypoint moves under
-`tests/integration/`.
+Current root-level tests move under business-domain directories. For example,
+Kline API tests move under `tests/kline/api/`, Binance API tests move under
+`tests/binance/api/`, DB accuracy service unit tests move under
+`tests/db_accuracy/services/`, tool tests move under `tests/db_accuracy/tools/`,
+and the DB accuracy integration entrypoint moves under
+`tests/db_accuracy/integration/`.
 
 ## DB Accuracy Design
 
@@ -367,8 +372,8 @@ Expected behavior:
 4. Move DB accuracy engine modules into `services/db_accuracy/`.
 5. Rename service classes and update service imports.
 6. Move scripts into `tools/db_accuracy/`, moving reusable logic into services.
-7. Move pytest files into `tests/api/`, `tests/services/`, `tests/integration/`,
-   and `tests/tools/`.
+7. Move pytest files into business-domain directories under `tests/`, then group
+   them by `api/`, `services/`, `integration/`, or `tools/` inside each domain.
 8. Update report output paths to `artifacts/reports/`.
 9. Update documentation and `AGENTS.md`.
 10. Run collection and ordinary pytest validation.

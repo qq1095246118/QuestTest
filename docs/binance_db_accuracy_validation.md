@@ -1,6 +1,6 @@
 # Binance 数据库与上游数据准确性对比脚本使用文档
 
-本文档说明 `tests/integration/test_binance_db_accuracy.py` 这套手动校验脚本的能力、适用场景、运行方式、参数含义、报告产物和排错方法。
+本文档说明 `tests/db_accuracy/integration/test_binance_db_accuracy.py` 这套手动校验脚本的能力、适用场景、运行方式、参数含义、报告产物和排错方法。
 
 该脚本用于把 MySQL 中的 Binance raw/metadata 数据与 Binance REST 上游源数据做严格对账。它默认不参与普通 CI，只有显式传入 `--run-db-accuracy` 时才会执行。
 
@@ -84,7 +84,7 @@
 唯一 pytest 入口：
 
 ```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python -m pytest tests/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+/Users/wrh/.pyenv/versions/3.12.0/bin/python -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
 项目 `.python-version` 是 `3.12.0`。建议固定使用本机 Python 3.12：
@@ -96,7 +96,7 @@ PYTHON=/Users/wrh/.pyenv/versions/3.12.0/bin/python
 后续命令都可以写成：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
 ## 环境前置条件
@@ -132,7 +132,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v --run-db-accu
 示例：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-table binance_futures_symbols
@@ -199,7 +199,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 `binance_futures_symbols` 数据量小，适合作为连通性检查：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-table binance_futures_symbols
@@ -214,7 +214,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 ### 2. direct 模式跑指定 raw 表
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode direct \
@@ -228,7 +228,7 @@ direct 会扫描 DB 中该表每个市场的稳定历史范围，并按 Binance 
 如果近期数据写入有延迟，或 Binance 近期数据还可能变化，把稳定窗口从默认 24 小时改成 48 小时：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode direct \
@@ -243,7 +243,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 例如校验 `binance_kline_all_future_raw` 中 `BTCUSDT + 1m` 在 2024-01-01 这一天的数据：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -263,7 +263,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 ### 2. 显式校验一个 Funding 市场
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -278,7 +278,7 @@ Funding 表的市场 key 只有 `symbol`。源端请求窗口按 90 天规划。
 ### 3. 显式校验 USDM delivery/continuous Kline
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -299,7 +299,7 @@ pair + contract_type + interval
 ### 4. 显式校验 COIN-M perpetual Kline
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -319,7 +319,7 @@ COIN-M Kline 会额外遵守 Binance 的 200 天请求窗口上限。
 例如发现 `binance_kline_all_future_raw` 中 interval 为 `1m` 的前 20 个市场：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -349,7 +349,7 @@ LIMIT 20
 大表缓存建议不要放在项目目录。可以指定外部磁盘路径：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -366,7 +366,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 默认情况下，已完成的缓存分区会复用，不重复请求 Binance。需要重新拉源数据时：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -539,7 +539,7 @@ Registry：
 1. 先选小范围验证链路。
 
    ```bash
-   $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+   $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
      --env=test \
      --run-db-accuracy \
      --db-accuracy-mode cached \
@@ -553,7 +553,7 @@ Registry：
 2. 再扩大时间范围，例如 7 天。
 
    ```bash
-   $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+   $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
      --env=test \
      --run-db-accuracy \
      --db-accuracy-mode cached \
@@ -568,7 +568,7 @@ Registry：
 3. 再用 DB discovery 批量发现市场，但限制 shard 数量。
 
    ```bash
-   $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+   $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
      --env=test \
      --run-db-accuracy \
      --db-accuracy-mode cached \
@@ -595,7 +595,7 @@ Registry：
 ### 跑所有配置表
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy
 ```
@@ -603,7 +603,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 ### 跑多张指定表 direct
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-table binance_futures_symbols \
@@ -613,7 +613,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 ### cached 跑固定 1h 表
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -626,7 +626,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 ### cached 跑 COIN-M funding
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
   --env=test \
   --run-db-accuracy \
   --db-accuracy-mode cached \
@@ -639,7 +639,7 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v \
 ### 只收集测试确认入口存在
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py --collect-only -q --run-db-accuracy
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py --collect-only -q --run-db-accuracy
 ```
 
 ## 结果判断
@@ -666,7 +666,7 @@ pytest 失败代表：
 处理：
 
 ```bash
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
 ```
 
 ### `cached DB accuracy mode requires exactly one --db-accuracy-table`
@@ -862,8 +862,8 @@ cache_root: 外部大盘
 新增表后至少运行：
 
 ```bash
-$PYTHON -m pytest tests/services/db_accuracy/test_table_specs_and_reader.py -q
-$PYTHON -m pytest tests/integration/test_binance_db_accuracy.py --collect-only -q --run-db-accuracy
+$PYTHON -m pytest tests/db_accuracy/services/test_table_specs_and_reader.py -q
+$PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py --collect-only -q --run-db-accuracy
 ```
 
 ## 开发验证命令
@@ -871,8 +871,8 @@ $PYTHON -m pytest tests/integration/test_binance_db_accuracy.py --collect-only -
 修改脚本后建议跑：
 
 ```bash
-$PYTHON -m pytest tests/services/db_accuracy tests/integration/test_binance_db_accuracy.py -q
-$PYTHON -m compileall services/db_accuracy tests/integration/test_binance_db_accuracy.py
+$PYTHON -m pytest tests/db_accuracy/services tests/db_accuracy/integration/test_binance_db_accuracy.py -q
+$PYTHON -m compileall services/db_accuracy tests/db_accuracy/integration/test_binance_db_accuracy.py
 ```
 
 当前 DB accuracy 相关单测覆盖：

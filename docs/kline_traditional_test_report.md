@@ -5,7 +5,7 @@
 - Assertion style: each case contains its own request, response parsing, and assertions
 - API source: `docs/x.json`
 - API service wrapper: `api/platform/kline_data_api.py`
-- Test file: `tests/api/test_kline_api.py`
+- Test file: `tests/kline/api/test_kline_api.py`
 
 ## Implemented Coverage
 
@@ -37,7 +37,7 @@
 - `requirements.txt` allows `pytest>=8.2,<9`, `requests>=2.32.2,<3`, and `allure-pytest>=2.16.0,<3` so the local Python 3.12 environment remains compatible with existing packages and pytest's fixture API.
 - `config/settings.py` loads environment files from `config/.env.<env>`, matching the repository layout.
 - `tests/conftest.py` sets `TEST_ENV` before test modules import `config.settings`, so `--env` is applied during pytest collection.
-- `tests/api/test_kline_api.py` defines explicit `@allure.title(...)` above every test function, so case titles are visible in source code.
+- `tests/kline/api/test_kline_api.py` defines explicit `@allure.title(...)` above every test function, so case titles are visible in source code.
 - `tests/conftest.py` still injects shared Allure metadata from case docstrings and pytest markers: case id, description, feature, story, tag, severity, environment, and failure categories.
 - `pytest.ini` writes Allure raw results to `./allure-results` by default and cleans stale results before each run.
 - The active automated case scope is limited to the seven `Kline Data` legacy endpoints in `docs/x.json`.
