@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from services.db_accuracy.partitioned.cache_store_service import PartitionedCacheStoreService
 from services.db_accuracy.partitioned.models import (
@@ -27,11 +27,7 @@ class PartitionedAggregationService:
         manifests: Iterable[CompareManifest | None],
         pause_reason: RunPauseReason | None,
     ) -> PartitionedRunResult:
-        complete_manifests = [
-            manifest
-            for manifest in manifests
-            if manifest is not None and manifest.complete
-        ]
+        complete_manifests = _complete_manifests_for_tasks(tasks, manifests)
         tasks_total = len(tasks)
         tasks_compared = len(complete_manifests)
         tasks_with_differences = sum(
@@ -109,6 +105,53 @@ def _run_status(
     if differences > 0:
         return RunStatus.COMPLETED_WITH_DIFFERENCES
     return RunStatus.PASSED
+
+
+def _complete_manifests_for_tasks(
+    tasks: list[PartitionTask],
+    manifests: Iterable[CompareManifest | None],
+) -> list[CompareManifest]:
+    task_keys = {_task_key(task) for task in tasks}
+    manifests_by_key: dict[tuple[Any, ...], CompareManifest] = {}
+    for manifest in manifests:
+        if manifest is None or not manifest.complete:
+            continue
+        key = _manifest_key(manifest)
+        if key not in task_keys:
+            continue
+        if key in manifests_by_key:
+            del manifests_by_key[key]
+        manifests_by_key[key] = manifest
+    return list(manifests_by_key.values())
+
+
+def _task_key(task: PartitionTask) -> tuple[Any, ...]:
+    return (
+        task.table,
+        task.endpoint,
+        _market_key_items(task.key_values),
+        task.start_ms,
+        task.end_ms,
+    )
+
+
+def _manifest_key(manifest: CompareManifest) -> tuple[Any, ...]:
+    return (
+        manifest.table,
+        manifest.endpoint,
+        _market_key_items(manifest.market_key),
+        manifest.start_ms,
+        manifest.end_ms,
+    )
+
+
+def _market_key_items(market_key: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        sorted(
+            (str(key), json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+            for key, value in market_key.items()
+        )
+    )
 
 
 def _summary_text(

@@ -18,12 +18,15 @@ def _task(
     start_ms: int = 1704067200000,
     end_ms: int = 1704153599999,
     symbol: str = "BTCUSDT",
+    key_values: dict[str, str] | None = None,
 ) -> PartitionTask:
+    if key_values is None:
+        key_values = {"symbol": symbol, "interval": "1m"}
     return PartitionTask(
         table="binance_kline_all_future_raw",
         kind="kline",
         endpoint="usdm_klines",
-        key_values={"symbol": symbol, "interval": "1m"},
+        key_values=key_values,
         time_field="timestamp",
         source_time_field="timestamp",
         compare_fields=("timestamp", "open", "close"),
@@ -133,3 +136,87 @@ def test_aggregate_failed_when_not_all_tasks_compared_without_pause(tmp_path: Pa
     assert result.tasks_total == 2
     assert result.tasks_compared == 1
     assert result.tasks_with_differences == 0
+
+
+def test_aggregate_deduplicates_complete_manifests_by_task_identity(tmp_path: Path) -> None:
+    task = _task()
+    older_manifest = _manifest(task, differences=0)
+    latest_manifest = _manifest(task, differences=2)
+    service = PartitionedAggregationService(tmp_path)
+
+    result = service.aggregate(
+        run_id="run-4",
+        tasks=[task],
+        manifests=[older_manifest, latest_manifest],
+        pause_reason=None,
+    )
+
+    assert result.status == RunStatus.COMPLETED_WITH_DIFFERENCES
+    assert result.tasks_total == 1
+    assert result.tasks_compared == 1
+    assert result.tasks_with_differences == 1
+    assert result.db_rows == 2
+    assert result.source_rows == 2
+    assert result.differences == 2
+    assert len(result.details["partitions"]) == 1
+    assert result.details["partitions"][0]["differences"] == 2
+
+
+def test_aggregate_ignores_foreign_complete_manifests(tmp_path: Path) -> None:
+    task = _task(symbol="BTCUSDT")
+    foreign_task = _task(symbol="ETHUSDT")
+    service = PartitionedAggregationService(tmp_path)
+
+    result = service.aggregate(
+        run_id="run-5",
+        tasks=[task],
+        manifests=[_manifest(task), _manifest(foreign_task, differences=4)],
+        pause_reason=None,
+    )
+
+    assert result.status == RunStatus.PASSED
+    assert result.tasks_total == 1
+    assert result.tasks_compared == 1
+    assert result.tasks_with_differences == 0
+    assert result.differences == 0
+    assert result.details["partitions"][0]["market_key"] == {
+        "symbol": "BTCUSDT",
+        "interval": "1m",
+    }
+
+
+def test_aggregate_missing_current_task_is_failed_even_with_foreign_complete_manifest(
+    tmp_path: Path,
+) -> None:
+    task = _task(symbol="BTCUSDT")
+    foreign_task = _task(symbol="ETHUSDT")
+    service = PartitionedAggregationService(tmp_path)
+
+    result = service.aggregate(
+        run_id="run-6",
+        tasks=[task],
+        manifests=[_manifest(foreign_task)],
+        pause_reason=None,
+    )
+
+    assert result.status == RunStatus.FAILED
+    assert result.tasks_total == 1
+    assert result.tasks_compared == 0
+    assert result.tasks_with_differences == 0
+    assert result.details["partitions"] == []
+
+
+def test_aggregate_matches_task_identity_with_sorted_market_key_items(tmp_path: Path) -> None:
+    task = _task(key_values={"interval": "1m", "symbol": "BTCUSDT"})
+    manifest_task = _task(key_values={"symbol": "BTCUSDT", "interval": "1m"})
+    service = PartitionedAggregationService(tmp_path)
+
+    result = service.aggregate(
+        run_id="run-7",
+        tasks=[task],
+        manifests=[_manifest(manifest_task)],
+        pause_reason=None,
+    )
+
+    assert result.status == RunStatus.PASSED
+    assert result.tasks_compared == 1
