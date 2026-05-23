@@ -113,12 +113,12 @@ def _task(
     )
 
 
-def _registry_task() -> PartitionTask:
+def _registry_task(key_values: dict[str, str] | None = None) -> PartitionTask:
     return PartitionTask(
         table="binance_futures_symbols",
         kind="registry",
         endpoint="usdm_exchange_info",
-        key_values={},
+        key_values=key_values or {},
         time_field=None,
         source_time_field=None,
         compare_fields=("symbol", "status", "contract_type"),
@@ -237,6 +237,31 @@ def test_source_fetch_retries_four_failures_then_writes_complete_cache(
     paths = store.data_paths(CacheSide.SOURCE, task)
     assert paths.data_path.exists()
     assert store.read_data_manifest(paths) == manifest
+
+
+def test_source_retry_backoff_is_linear_by_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = _task()
+    source = RecordingSource(
+        _source_frame([(1704067200000, "1.0", "2.0")]),
+        fail_times=2,
+    )
+    service, _ = _service(tmp_path, source)
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.source_data_service.time.sleep",
+        sleeps.append,
+    )
+
+    service.ensure_source_frame(
+        task,
+        CachePolicy(use_source_cache=False),
+        ExecutionOptions(source_retries=3, source_retry_backoff_ms=100),
+    )
+
+    assert sleeps == [0.1, 0.2]
 
 
 def test_source_retry_exhaustion_raises_structured_error_and_clears_only_source_cache(
@@ -433,3 +458,39 @@ def test_registry_source_cache_path_has_no_range_and_can_be_reused(
     assert manifest.schema_fingerprint == task.schema_fingerprint
     assert cached_frame.equals(frame)
     assert cached_manifest.fingerprint == manifest.fingerprint
+
+
+def test_filtered_registry_source_task_keeps_only_matching_rows(tmp_path: Path) -> None:
+    task = _registry_task({"symbol": "BTCUSDT"})
+    source = RecordingSource(
+        registry_rows=[
+            SourceRow(
+                key="BTCUSDT",
+                fields={
+                    "symbol": "BTCUSDT",
+                    "status": "TRADING",
+                    "contract_type": "PERPETUAL",
+                },
+            ),
+            {
+                "symbol": "ETHUSDT",
+                "status": "BREAK",
+                "contract_type": "PERPETUAL",
+            },
+        ]
+    )
+    service, _ = _service(tmp_path, source)
+
+    frame, manifest = service.ensure_source_frame(
+        task,
+        CachePolicy(use_source_cache=False),
+        _no_backoff(),
+    )
+
+    assert frame.to_dict(as_series=False) == {
+        "symbol": ["BTCUSDT"],
+        "status": ["TRADING"],
+        "contract_type": ["PERPETUAL"],
+    }
+    assert manifest.market_key == {"symbol": "BTCUSDT"}
+    assert manifest.row_count == 1

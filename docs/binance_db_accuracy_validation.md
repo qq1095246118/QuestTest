@@ -170,7 +170,7 @@ $PYTHON -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
 | `--db-accuracy-cache-root` | `.cache/binance_accuracy` | direct/cached | DB/source/compare 缓存和 run 汇总根目录。大表建议放到大容量磁盘。 |
 | `--db-accuracy-use-db-cache` | `True` | direct/cached | 是否允许复用本地 DB 分区缓存。传 `false` 会重新查询 DB 并覆盖对应 DB 分区缓存。 |
 | `--db-accuracy-use-source-cache` | `True` | direct/cached | 是否允许复用本地 Binance source 分区缓存。传 `false` 会重新请求 Binance 并覆盖对应 source 分区缓存。 |
-| `--db-accuracy-workers` | `8` | direct/cached | DB 准备、source 准备、compare 阶段各自的最大并发分区 worker 数。 |
+| `--db-accuracy-workers` | `8` | direct/cached | source 准备和 compare 阶段的最大并发分区 worker 数。DB 准备阶段为避免共享连接并发使用，固定单 worker，但会与 source 准备阶段并行启动。 |
 | `--db-accuracy-source-retries` | `5` | direct/cached | 每个 Binance 请求窗口重试次数。 |
 | `--db-accuracy-source-retry-backoff-ms` | `1000` | direct/cached | Binance 请求窗口重试的线性等待基数，单位毫秒。 |
 | `--db-accuracy-stop-on-source-failure` | `True` | direct/cached | source 请求重试耗尽后是否暂停本次 run。传 `false` 会继续等待其他 source 分区完成，最终缺 compare 的 run 会失败。 |

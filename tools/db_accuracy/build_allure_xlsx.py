@@ -46,6 +46,20 @@ CACHED_SHARD_HEADER = [
     "差异文件",
     "异常信息",
 ]
+PARTITION_HEADER = [
+    "表名",
+    "接口",
+    "市场键",
+    "开始时间(UTC)",
+    "结束时间(UTC)",
+    "状态",
+    "DB行数",
+    "源行数",
+    "差异数",
+    "报告文件",
+    "差异文件",
+    "异常信息",
+]
 INVALID_XML_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 TIMESTAMP_PATTERN = re.compile(
     r"(?:timestamp|open_time|close_time|funding_time|time|start_ms|end_ms)=([0-9]{10,16})",
@@ -96,9 +110,12 @@ def load_json_payload(path: Path) -> dict[str, Any]:
 def is_accuracy_payload(payload: dict[str, Any]) -> bool:
     tables = payload.get("tables")
     shards = payload.get("shards")
+    partitions = payload.get("partitions")
     if isinstance(tables, list):
         return True
-    return isinstance(shards, list)
+    if isinstance(shards, list):
+        return True
+    return isinstance(partitions, list)
 
 
 def find_latest_accuracy_attachment(allure_dir: Path) -> Path:
@@ -130,8 +147,10 @@ def write_accuracy_workbook(payload: dict[str, Any], *, source_path: Path, outpu
         sheets = _build_direct_sheets(payload, source_path)
     elif isinstance(payload.get("shards"), list):
         sheets = _build_cached_sheets(payload, source_path)
+    elif isinstance(payload.get("partitions"), list):
+        sheets = _build_partitioned_sheets(payload, source_path)
     else:
-        raise ValueError("JSON 中没有 tables 或 shards，无法转换为 DB 准确性对比表")
+        raise ValueError("JSON 中没有 tables、shards 或 partitions，无法转换为 DB 准确性对比表")
 
     _write_xlsx(output_path, sheets)
     return output_path
@@ -217,6 +236,49 @@ def _build_cached_sheets(payload: dict[str, Any], source_path: Path) -> list[She
     return [
         SheetSpec("汇总", summary_rows, [22, 90], freeze_header=True, autofilter=False),
         SheetSpec("分片结果", [CACHED_SHARD_HEADER, *shard_rows], [34, 28, 16, 14, 14, 14, 54, 54, 80]),
+    ]
+
+
+def _build_partitioned_sheets(payload: dict[str, Any], source_path: Path) -> list[SheetSpec]:
+    partitions = [item for item in payload.get("partitions", []) if isinstance(item, dict)]
+    summary_rows: list[list[Any]] = [
+        ["项目", "值"],
+        ["源JSON", str(source_path)],
+        ["运行ID", _to_text(payload.get("run_id"))],
+        ["整体状态", _to_text(payload.get("status"))],
+        ["任务总数", _to_text(payload.get("tasks_total"))],
+        ["已对比任务数", _to_text(payload.get("tasks_compared"))],
+        ["有差异任务数", _to_text(payload.get("tasks_with_differences"))],
+        ["DB校验行数", _to_text(payload.get("db_rows"))],
+        ["源校验行数", _to_text(payload.get("source_rows"))],
+        ["差异总数", _to_text(payload.get("differences"))],
+        ["失败原因", _to_text(payload.get("failure_reason"))],
+        ["暂停原因", _to_text(payload.get("pause_reason"))],
+    ]
+    partition_rows = [
+        [
+            _to_text(partition.get("table")),
+            _to_text(partition.get("endpoint")),
+            _to_text(partition.get("market_key")),
+            _ms_to_utc_text(partition.get("start_ms")),
+            _ms_to_utc_text(partition.get("end_ms")),
+            _to_text(partition.get("status")),
+            _to_text(partition.get("db_rows")),
+            _to_text(partition.get("source_rows")),
+            _to_text(partition.get("differences")),
+            _to_text(partition.get("report_path")),
+            _to_text(partition.get("diff_path")),
+            _to_text(partition.get("message")),
+        ]
+        for partition in partitions
+    ]
+    return [
+        SheetSpec("汇总", summary_rows, [22, 90], freeze_header=True, autofilter=False),
+        SheetSpec(
+            "分区结果",
+            [PARTITION_HEADER, *partition_rows],
+            [34, 22, 34, 22, 22, 16, 14, 14, 14, 54, 54, 80],
+        ),
     ]
 
 
@@ -325,6 +387,10 @@ def _format_utc_ms(value: int | None) -> str:
         return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     except (OverflowError, OSError, ValueError):
         return ""
+
+
+def _ms_to_utc_text(value: Any) -> str:
+    return _format_utc_ms(_extract_timestamp(value))
 
 
 def _describe_difference(reason: str, field: str) -> str:

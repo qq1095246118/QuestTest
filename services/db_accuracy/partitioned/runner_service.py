@@ -55,11 +55,11 @@ class PartitionedAccuracyService:
             source_service = PartitionedSourceDataService(store, self.source)
             compare_service = PartitionedCompareDataService(store)
 
-            db_manifests = self._prepare_db(tasks, db_service, request)
-            source_manifests, pause_reason = self._prepare_source(
-                tasks,
-                source_service,
-                request,
+            db_manifests, source_manifests, pause_reason = self._prepare_inputs(
+                tasks=tasks,
+                db_service=db_service,
+                source_service=source_service,
+                request=request,
             )
             if pause_reason is None:
                 compare_tasks = [
@@ -96,6 +96,26 @@ class PartitionedAccuracyService:
             pause_reason=pause_reason,
         )
 
+    def _prepare_inputs(
+        self,
+        *,
+        tasks: list[PartitionTask],
+        db_service: PartitionedDBDataService,
+        source_service: PartitionedSourceDataService,
+        request: PartitionedAccuracyRequest,
+    ) -> tuple[dict[str, CacheManifest], dict[str, CacheManifest], RunPauseReason | None]:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            db_future = executor.submit(self._prepare_db, tasks, db_service, request)
+            source_future = executor.submit(
+                self._prepare_source,
+                tasks,
+                source_service,
+                request,
+            )
+            db_manifests = db_future.result()
+            source_manifests, pause_reason = source_future.result()
+        return db_manifests, source_manifests, pause_reason
+
     def _prepare_db(
         self,
         tasks: list[PartitionTask],
@@ -103,7 +123,7 @@ class PartitionedAccuracyService:
         request: PartitionedAccuracyRequest,
     ) -> dict[str, CacheManifest]:
         manifests: dict[str, CacheManifest] = {}
-        with ThreadPoolExecutor(max_workers=_workers(request)) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures: dict[Future[tuple[Any, CacheManifest]], PartitionTask] = {
                 executor.submit(
                     db_service.ensure_db_frame,

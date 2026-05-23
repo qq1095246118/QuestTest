@@ -146,18 +146,30 @@ def _manifest_range_exceeds_task(manifest: CacheManifest, task: PartitionTask) -
 
 def _registry_rows_to_frame(task: PartitionTask, rows: list[dict[str, Any]]) -> pl.DataFrame:
     columns = tuple(dict.fromkeys((*task.key_fields, *task.compare_fields)))
-    normalized_rows = [
-        {
-            column: _normalized_to_string(normalize_value(row.get(column)))
-            for column in columns
-        }
-        for row in rows
-    ]
+    normalized_rows = []
+    for row in rows:
+        if not _matches_task_key_values(row, task):
+            continue
+        normalized_rows.append(
+            {
+                column: _normalized_to_string(normalize_value(row.get(column)))
+                for column in columns
+            }
+        )
     return pl.DataFrame(
         normalized_rows,
         schema={column: pl.String for column in columns},
         orient="row",
     )
+
+
+def _matches_task_key_values(row: dict[str, Any], task: PartitionTask) -> bool:
+    for field, expected in task.key_values.items():
+        actual_text = _normalized_to_string(normalize_value(row.get(field)))
+        expected_text = _normalized_to_string(normalize_value(expected))
+        if actual_text != expected_text:
+            return False
+    return True
 
 
 def _normalized_to_string(value: Any) -> str | None:

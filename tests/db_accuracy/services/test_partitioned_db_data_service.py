@@ -51,6 +51,27 @@ class FakeDB:
         return []
 
 
+class MultiRegistryFakeDB(FakeDB):
+    def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        self.calls.append((sql, params))
+        if "FROM `binance_futures_symbols`" in sql:
+            return [
+                {
+                    "symbol": "BTCUSDT",
+                    "status": "TRADING",
+                    "baseAsset": "BTC",
+                    "quoteAsset": "USDT",
+                },
+                {
+                    "symbol": "ETHUSDT",
+                    "status": "BREAK",
+                    "baseAsset": "ETH",
+                    "quoteAsset": "USDT",
+                },
+            ]
+        return super().query(sql, params)
+
+
 def _task(
     start_ms: int = 1704067200000,
     end_ms: int = 1704153599999,
@@ -72,12 +93,12 @@ def _task(
     )
 
 
-def _registry_task() -> PartitionTask:
+def _registry_task(key_values: dict[str, str] | None = None) -> PartitionTask:
     return PartitionTask(
         table="binance_futures_symbols",
         kind="registry",
         endpoint="exchange_info",
-        key_values={},
+        key_values=key_values or {},
         time_field=None,
         source_time_field=None,
         compare_fields=("status",),
@@ -298,3 +319,19 @@ def test_registry_task_queries_registry_rows_and_writes_complete_manifest(
     assert manifest.status == CacheStatus.COMPLETE
     assert manifest.row_count == 1
     assert manifest.fingerprint == fingerprint_frame(frame)
+
+
+def test_filtered_registry_task_keeps_only_matching_db_rows(tmp_path: Path) -> None:
+    db = MultiRegistryFakeDB()
+    store = PartitionedCacheStoreService(tmp_path)
+    service = PartitionedDBDataService(db, store)
+    task = _registry_task({"symbol": "BTCUSDT"})
+
+    frame, manifest = service.ensure_db_frame(task, CachePolicy(use_db_cache=False))
+
+    assert frame.to_dict(as_series=False) == {
+        "symbol": ["BTCUSDT"],
+        "status": ["TRADING"],
+    }
+    assert manifest.market_key == {"symbol": "BTCUSDT"}
+    assert manifest.row_count == 1

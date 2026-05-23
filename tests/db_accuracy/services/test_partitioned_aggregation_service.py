@@ -138,6 +138,23 @@ def test_aggregate_failed_when_not_all_tasks_compared_without_pause(tmp_path: Pa
     assert result.tasks_with_differences == 0
 
 
+def test_aggregate_failed_when_no_tasks_planned(tmp_path: Path) -> None:
+    service = PartitionedAggregationService(tmp_path)
+
+    result = service.aggregate(
+        run_id="run-empty",
+        tasks=[],
+        manifests=[],
+        pause_reason=None,
+    )
+
+    assert result.status == RunStatus.FAILED
+    assert result.tasks_total == 0
+    assert result.tasks_compared == 0
+    assert result.details["failure_reason"] == "no_tasks_planned"
+    assert "failure_reason=no_tasks_planned" in result.summary_text
+
+
 def test_aggregate_deduplicates_complete_manifests_by_task_identity(tmp_path: Path) -> None:
     task = _task()
     older_manifest = _manifest(task, differences=0)

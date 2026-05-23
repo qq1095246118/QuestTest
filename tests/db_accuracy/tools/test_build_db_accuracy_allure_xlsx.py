@@ -135,6 +135,55 @@ def test_direct_payload_xlsx_has_chinese_headers_and_text_values(tmp_path):
     assert "<t xml:space=\"preserve\">2024-01-01 00:00:00</t>" in sheet_xml
 
 
+def test_partitioned_payload_xlsx_has_partition_summary(tmp_path):
+    module = _load_script_module()
+    payload = {
+        "run_id": "20260523T092841553300Z",
+        "status": "passed",
+        "tasks_total": 1,
+        "tasks_compared": 1,
+        "tasks_with_differences": 0,
+        "db_rows": 88,
+        "source_rows": 88,
+        "differences": 0,
+        "failure_reason": None,
+        "pause_reason": None,
+        "partitions": [
+            {
+                "table": "binance_usdm_funding_rate_raw",
+                "endpoint": "usdm_funding",
+                "market_key": {"symbol": "BNBUSDT"},
+                "start_ms": 1747929600000,
+                "end_ms": 1750463999999,
+                "status": "passed",
+                "db_rows": 88,
+                "source_rows": 88,
+                "differences": 0,
+                "report_path": "compare/table=binance_usdm_funding_rate_raw/report.txt",
+                "diff_path": "compare/table=binance_usdm_funding_rate_raw/diff.json",
+                "message": None,
+            }
+        ],
+    }
+    source = tmp_path / "partitioned-attachment.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    output = tmp_path / "partitioned.xlsx"
+
+    assert module.find_latest_accuracy_attachment(tmp_path) == source
+
+    module.write_accuracy_workbook(payload, source_path=source, output_path=output)
+
+    with zipfile.ZipFile(output) as zf:
+        sheet1 = zf.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        sheet2 = zf.read("xl/worksheets/sheet2.xml").decode("utf-8")
+
+    assert "<t xml:space=\"preserve\">整体状态</t>" in sheet1
+    assert "<t xml:space=\"preserve\">passed</t>" in sheet1
+    assert "<t xml:space=\"preserve\">表名</t>" in sheet2
+    assert "<t xml:space=\"preserve\">binance_usdm_funding_rate_raw</t>" in sheet2
+    assert "<t xml:space=\"preserve\">2025-05-22 16:00:00</t>" in sheet2
+
+
 def test_describes_known_missing_source_row_reason():
     module = _load_script_module()
 

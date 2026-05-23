@@ -44,6 +44,11 @@ class PartitionedAggregationService:
             tasks_compared=tasks_compared,
             differences=differences,
         )
+        failure_reason = _failure_reason(
+            status=status,
+            tasks_total=tasks_total,
+            tasks_compared=tasks_compared,
+        )
         details = {
             "run_id": run_id,
             "status": status.value,
@@ -53,6 +58,7 @@ class PartitionedAggregationService:
             "db_rows": db_rows,
             "source_rows": source_rows,
             "differences": differences,
+            "failure_reason": failure_reason,
             "pause_reason": _pause_reason_payload(pause_reason),
             "partitions": [_partition_payload(manifest) for manifest in complete_manifests],
         }
@@ -64,6 +70,7 @@ class PartitionedAggregationService:
             db_rows=db_rows,
             source_rows=source_rows,
             differences=differences,
+            failure_reason=failure_reason,
             pause_reason=pause_reason,
         )
         result = PartitionedRunResult(
@@ -100,11 +107,28 @@ def _run_status(
 ) -> RunStatus:
     if pause_reason is not None:
         return RunStatus.PAUSED
+    if tasks_total == 0:
+        return RunStatus.FAILED
     if tasks_compared < tasks_total:
         return RunStatus.FAILED
     if differences > 0:
         return RunStatus.COMPLETED_WITH_DIFFERENCES
     return RunStatus.PASSED
+
+
+def _failure_reason(
+    *,
+    status: RunStatus,
+    tasks_total: int,
+    tasks_compared: int,
+) -> str | None:
+    if status != RunStatus.FAILED:
+        return None
+    if tasks_total == 0:
+        return "no_tasks_planned"
+    if tasks_compared < tasks_total:
+        return "incomplete_comparison"
+    return "run_failed"
 
 
 def _complete_manifests_for_tasks(
@@ -163,6 +187,7 @@ def _summary_text(
     db_rows: int,
     source_rows: int,
     differences: int,
+    failure_reason: str | None,
     pause_reason: RunPauseReason | None,
 ) -> str:
     lines = [
@@ -174,6 +199,8 @@ def _summary_text(
         f"source_rows={source_rows}",
         f"differences={differences}",
     ]
+    if failure_reason is not None:
+        lines.append(f"failure_reason={failure_reason}")
     if pause_reason is not None:
         lines.extend(
             [

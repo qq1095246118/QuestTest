@@ -1,14 +1,24 @@
 from __future__ import annotations
 
 from pathlib import Path
+import threading
+import time
 from typing import Any
 
 from services.db_accuracy.models import SourceRow, TableSpec
 from services.db_accuracy.partitioned.models import (
     AccuracyMode,
+    CacheManifest,
     CachePolicy,
+    CacheSide,
+    CacheStatus,
+    CompareManifest,
+    CompareStatus,
+    DataFingerprint,
     ExecutionOptions,
+    PartitionTask,
     PartitionedAccuracyRequest,
+    RunPauseReason,
     RunStatus,
 )
 from services.db_accuracy.partitioned.runner_service import PartitionedAccuracyService
@@ -122,6 +132,66 @@ def _request(
     )
 
 
+def _task(symbol: str) -> PartitionTask:
+    return PartitionTask(
+        table="binance_kline_all_future_raw",
+        kind="kline",
+        endpoint="usdm_klines",
+        key_values={"symbol": symbol, "interval": "1m"},
+        time_field="timestamp",
+        source_time_field="timestamp",
+        compare_fields=("timestamp", "open", "close"),
+        request_limit=1000,
+        start_ms=1704067200000,
+        end_ms=1704067259999,
+        partition_label="1704067200000-1704067259999",
+        partition_bucket="date=2024-01-01",
+        key_fields=("symbol", "interval"),
+        interval_field="interval",
+    )
+
+
+def _cache_manifest(task: PartitionTask, side: CacheSide) -> CacheManifest:
+    return CacheManifest(
+        schema_version=1,
+        side=side,
+        table=task.table,
+        endpoint=task.endpoint,
+        market_key=dict(task.key_values),
+        start_ms=task.start_ms,
+        end_ms=task.end_ms,
+        status=CacheStatus.COMPLETE,
+        row_count=1,
+        fingerprint=DataFingerprint(row_count=1, content_hash=f"{side.value}-{task.label}"),
+        schema_fingerprint=task.schema_fingerprint,
+        error_type=None,
+        error_message=None,
+        artifact_path=f"{side.value}/data.parquet",
+        created_at_utc="2026-05-22T00:00:00+00:00",
+    )
+
+
+def _compare_manifest(task: PartitionTask) -> CompareManifest:
+    return CompareManifest(
+        schema_version=1,
+        table=task.table,
+        endpoint=task.endpoint,
+        market_key=dict(task.key_values),
+        start_ms=task.start_ms,
+        end_ms=task.end_ms,
+        status=CompareStatus.PASSED,
+        db_fingerprint=DataFingerprint(row_count=1, content_hash=f"db-{task.label}"),
+        source_fingerprint=DataFingerprint(row_count=1, content_hash=f"source-{task.label}"),
+        db_rows=1,
+        source_rows=1,
+        differences=0,
+        report_path=f"compare/{task.label}/report.txt",
+        diff_path=f"compare/{task.label}/diff.json",
+        message=None,
+        created_at_utc="2026-05-22T00:00:00+00:00",
+    )
+
+
 def test_runner_prepares_data_then_compares_successfully(
     tmp_path: Path,
     monkeypatch: Any,
@@ -188,6 +258,85 @@ def test_runner_can_continue_without_pause_after_source_failure(
     assert result.tasks_total == 1
     assert result.tasks_compared == 0
     assert not list((tmp_path / "compare").glob("**/manifest.json"))
+
+
+def test_runner_db_prepare_uses_single_worker_for_shared_db_client(tmp_path: Path) -> None:
+    tasks = [_task("BTCUSDT"), _task("ETHUSDT"), _task("SOLUSDT")]
+    active = 0
+    max_active = 0
+    lock = threading.Lock()
+
+    class SlowDBService:
+        def ensure_db_frame(
+            self,
+            task: PartitionTask,
+            cache_policy: CachePolicy,
+        ) -> tuple[object, CacheManifest]:
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.03)
+            with lock:
+                active -= 1
+            return object(), _cache_manifest(task, CacheSide.DB)
+
+    runner = PartitionedAccuracyService(db=FakeDB(), source=GoodSource())
+
+    manifests = runner._prepare_db(tasks, SlowDBService(), _request(tmp_path))
+
+    assert set(manifests) == {task.label for task in tasks}
+    assert max_active == 1
+
+
+def test_runner_starts_db_and_source_prepare_stages_in_parallel(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    source_started = threading.Event()
+    db_observed_source_start: list[bool] = []
+
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_spec()],
+    )
+
+    def prepare_db(
+        self: PartitionedAccuracyService,
+        tasks: list[PartitionTask],
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, CacheManifest]:
+        db_observed_source_start.append(source_started.wait(timeout=0.2))
+        return {tasks[0].label: _cache_manifest(tasks[0], CacheSide.DB)}
+
+    def prepare_source(
+        self: PartitionedAccuracyService,
+        tasks: list[PartitionTask],
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[dict[str, CacheManifest], RunPauseReason | None]:
+        source_started.set()
+        return {tasks[0].label: _cache_manifest(tasks[0], CacheSide.SOURCE)}, None
+
+    def compare_all(
+        self: PartitionedAccuracyService,
+        *,
+        tasks: list[PartitionTask],
+        **kwargs: Any,
+    ) -> list[CompareManifest]:
+        return [_compare_manifest(tasks[0])]
+
+    monkeypatch.setattr(PartitionedAccuracyService, "_prepare_db", prepare_db)
+    monkeypatch.setattr(PartitionedAccuracyService, "_prepare_source", prepare_source)
+    monkeypatch.setattr(PartitionedAccuracyService, "_compare_all", compare_all)
+
+    runner = PartitionedAccuracyService(db=FakeDB(), source=GoodSource())
+
+    result = runner.run(_request(tmp_path))
+
+    assert result.status == RunStatus.PASSED
+    assert db_observed_source_start == [True]
 
 
 def test_runner_reuses_existing_complete_cache_on_second_run(

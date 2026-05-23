@@ -179,7 +179,7 @@ class PartitionedSourceDataService:
                         attempts=attempt,
                         original_exception=exc,
                     ) from exc
-                self._sleep_before_retry(execution)
+                self._sleep_before_retry(execution, attempt)
         raise RuntimeError("unreachable source retry state")
 
     def _fetch_registry_rows_with_retries(
@@ -201,12 +201,12 @@ class PartitionedSourceDataService:
                         attempts=attempt,
                         original_exception=exc,
                     ) from exc
-                self._sleep_before_retry(execution)
+                self._sleep_before_retry(execution, attempt)
         raise RuntimeError("unreachable source retry state")
 
-    def _sleep_before_retry(self, execution: ExecutionOptions) -> None:
+    def _sleep_before_retry(self, execution: ExecutionOptions, attempt: int) -> None:
         if execution.source_retry_backoff_ms > 0:
-            time.sleep(execution.source_retry_backoff_ms / 1000)
+            time.sleep((execution.source_retry_backoff_ms * attempt) / 1000)
 
     def _manifest(
         self,
@@ -270,6 +270,8 @@ def _registry_rows_to_frame(task: PartitionTask, rows: list[Any]) -> pl.DataFram
     normalized_rows = []
     for row in rows:
         fields = row.fields if hasattr(row, "fields") else row
+        if not _matches_task_key_values(fields, task):
+            continue
         normalized_rows.append(
             {
                 column: _normalized_to_string(normalize_value(fields.get(column)))
@@ -281,6 +283,15 @@ def _registry_rows_to_frame(task: PartitionTask, rows: list[Any]) -> pl.DataFram
         schema={column: pl.String for column in columns},
         orient="row",
     )
+
+
+def _matches_task_key_values(fields: dict[str, Any], task: PartitionTask) -> bool:
+    for field, expected in task.key_values.items():
+        actual_text = _normalized_to_string(normalize_value(fields.get(field)))
+        expected_text = _normalized_to_string(normalize_value(expected))
+        if actual_text != expected_text:
+            return False
+    return True
 
 
 def _normalized_to_string(value: Any) -> str | None:

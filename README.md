@@ -1,164 +1,277 @@
-# 量化数据中台 API 自动化测试框架 (Quant API AutoTest Framework)
+# 量化数据中台 API 自动化测试框架
 
-## 📖 框架简介
+QuestTest 是一个面向量化数据中台的 Python 3.12 + pytest 自动化测试框架。
+它不只验证接口是否能访问，更重点保护金融数据质量：响应契约、毫秒级时间戳、
+OHLC 逻辑、DB 与上游 Binance REST 数据的一致性。
 
-本框架是专为**量化数据中台**（多交易所数据获取与整合 API）设计的基于 `pytest` 的自动化测试解决方案。
-与常规的业务 API 测试框架不同，量化因子系统对数据质量和数据一致性极其敏感，因此本框架的设计核心聚焦于以下四大基石：
+## 核心目标
 
-1. **数据一致性防御 (Defensive Testing)**：严格区分接口连通性与金融数据逻辑（如 OHLC 关系、时间戳规范），要求每一项业务测试都经过严苛的逻辑验证。
-2. **底层数据校验 (DB Data Verification)**：不仅测试接口层面的返回，同时通过底层的 `DBClient` 直接与 MySQL 数据中台对接，确保接口吐出数据与底层存储数据的一致性。
-3. **高可用与容错 (High Availability)**：内置基于指数退避算法的重试机制，从容应对各类交易所或网关频发的 429 限流策略及瞬时网络抖动。
-4. **AI 辅助开发纪律 (AI Generation Guard)**：建立严格的目录纪律与断言规范，设立测试边界限制，确保 AI 生成代码不破坏基础设施。
+1. 数据准确性优先：K 线跳空、精度截断、时间戳错位都可能影响下游策略。
+2. 分层清晰：原始 API 调用、业务判断、基础设施、测试用例、工具脚本各归其位。
+3. 可追溯验证：普通 API 测试、DB consistency、Binance DB-to-source accuracy 都有固定入口。
+4. AI 生成纪律：后续新增代码必须遵守目录职责、断言规范和测试边界。
 
----
+## 当前目录结构
 
-## 📂 目录结构与分层模型 (Layered Architecture)
-
-框架采用了高内聚、低耦合的清晰分层模型，具体目录及核心文件职责如下：
-
-### 1. 配置层 (`config/`)
-负责管理多环境切换与全局变量配置。
-- **`settings.py`**: 基于 `Pydantic BaseSettings` 编写的配置管理器。通过读取操作系统的环境变量动态加载对应的 `.env` 文件，实现开发、测试、生产环境的平滑切换。包括接口地址、可选 API Key、数据库连接（`db_host`, `db_port`, `db_user` 等）信息的加载。
-- **`.env.example`**: 环境变量模板。实际 `.env.test` / `.env.prod` 为本地私有配置，不提交到代码库。
-
-### 2. 核心基建层 (`infrastructure/`)
-**【框架禁区】禁止普通业务测试开发与 AI 助手直接修改。** 存放框架的底层驱动逻辑。
-- **`http/http_client.py`**: 统一的网络请求客户端。封装了 `requests`，并深度集成了 `Tenacity` 库，实现了自动重试机制（专治 HTTP 429 和 502/504 等状态码）。
-- **`database/db_client.py`**: 底层 MySQL 数据库连接客户端。基于 `PyMySQL` 的 `DictCursor` 封装，提供直连数据库查询方法（`query`），为数据质量控制（DQC）提供底层数据比对依据。
-- **`database/dao.py`**: 数据访问对象层，封装面向数据中台表的可复用查询。
-- **`assertions/dqc_asserts.py`**: 数据质量控制（DQC）断言库。提供 JSON Schema 结构验证、数字精度防溢出验证以及 13 位毫秒级时间戳规范校验等。
-- **`assertions/logic_asserts.py`**: 金融逻辑断言库。提供强业务属性的校验，例如 K线 (OHLC) 关系校验（最高价必须大于等于其他价）、时间序列连续性校验（防止漏线跳线）。
-
-### 3. 原始 API 封装层 (`api/`)
-面向对象的 API 路由封装层，将繁琐的 HTTP 细节下沉，只放内部平台和外部上游的原始请求包装。
-- **`base_api.py`**: 提供基础的 HTTP 请求方法（GET/POST 等），并统一处理 JSON 请求头；外部 Binance 行情接口可选使用 API Key 提升限流额度。Kline 数据中台接口只发送 JSON 请求头。
-- **`platform/`**: 内部数据中台接口包装。
-- **`external/binance/`**: Binance Spot、USDM、COIN-M 上游行情接口包装。
-
-### 4. 服务逻辑层 (`services/`)
-存放中间业务逻辑、判断、比较、缓存和报告数据准备，不直接承载 pytest 用例。
-- **`db_accuracy/`**: Binance DB-to-source 准确性校验服务，包括 direct/cached runner、DB 读取、上游源数据、比较、缓存和结果序列化。
-
-### 5. 数据驱动层 (`data/`)
-实现测试脚本与测试数据的彻底解耦。
-- **`test_symbols.yaml`**: 存放测试用例所需的参数化数据（如测试币对 `BTC-USDT`、交易所枚举等）。配合 `pytest` 参数化机制，实现一套用例跑多套数据。
-- **`binance_db_accuracy_tables.yaml`**: Binance DB accuracy 表规格定义。
-
-### 6. 测试用例层 (`tests/`)
-实际的自动化测试用例落盘处，只放可执行 pytest 测试文件。
-- **`conftest.py`**: Pytest 的全局 Hook 与 Fixture 配置文件。实现了基于命令行参数 `--env` 动态切换环境，并预埋了测试执行完毕后向企微/钉钉发送汇总告警信息的逻辑。
-- 测试目录按业务域优先组织，第一层表示业务或能力域，如 `kline/`、`binance/`、`coinglass/`、`factor_data/`、`open_interest/`、`db_accuracy/`。
-- 业务域下再按被测类型细分，如 `api/`、`services/`、`integration/`、`tools/`。
-- **`kline/api/test_kline_api.py`**: Kline Data 七个 legacy 接口的传统 pytest 用例，每个接口保留 Normal、ParamError、Boundary、Response、Performance 五类用例。
-- **`db_accuracy/integration/test_binance_db_accuracy.py`**: 手动触发的 Binance DB-to-source 准确性校验入口。
-- **`db_accuracy/tools/`**: 存放根目录 `tools/db_accuracy/` 工具脚本的测试用例，不存放工具实现。
-
-### 7. 工具层 (`tools/`)
-直接可运行的工具脚本和临时 Python 文件。
-- **`db_accuracy/`**: Allure XLSX 构建、USDM Kline 抽样抓取与工作簿生成工具。
-
-### 8. 文档与规范 (`docs/`)
-- **`AI_GENERATION_GUIDE.md`**: AI 代码生成指南。设立了分层边界、强制断言、目录角色和**严格的测试范围限制**，防止大模型在后续扩展中污染框架结构。
-
-### 9. 产物目录 (`artifacts/`)
-- **`artifacts/reports/`**: 手动生成的 CSV、XLSX、JSON 等报告输出。
-
-### 10. 根目录基础设施
-- **`pytest.ini`**: Pytest 核心配置文件。定义了常用的标签（markers: `smoke`, `dqc`, `logic`）、默认运行参数以及 Python 的包检索路径 (`pythonpath = .`)。
-- **`requirements.txt`**: Python 第三方依赖清单（包含 `pytest`, `requests`, `tenacity`, `pydantic>=2.7.0`, `pydantic-settings`, `python-dotenv`, `pymysql` 等核心依赖）。
-- **`Jenkinsfile`**: 声明式的 CI/CD 流水线配置文件。包含拉取代码、构建虚拟环境、执行测试、生成 Allure 报告及发送 IM 告警的完整 Pipeline 步骤。
-
----
-
-## 🚀 核心能力与开发指南
-
-### 1. 编写一个标准的 API 测试
-所有新增的业务接口测试必须遵循以下流程：
-1. 在 `api/` 下新建对应原始 API 请求包装模块并继承 `BaseAPI`。
-2. 在 `data/` 下准备相关的 YAML 驱动数据。
-3. 在 `services/` 下沉淀可复用业务判断、比较或校验逻辑。
-4. 在 `tests/` 目录下编写 `test_xxx.py`，必须使用 `infrastructure.assertions.logic_asserts`、`infrastructure.assertions.dqc_asserts` 或 service-level validator 验证金融数据，禁止直接使用普通的 `assert True` 或单纯检查 HTTP 状态码（状态码和重试已由 `http_client` 兜底）。
-
-### 2. 数据库一致性校验
-当需要验证 API 下发的数据与底层数据库一致时：
-```python
-from infrastructure.database.db_client import DBClient
-
-def test_data_consistency():
-    db = DBClient()
-    # 框架默认已通过 settings 获取数据库连接信息
-    result = db.query("SELECT * FROM binance_1h_usdm_kline_raw LIMIT 1")
-    # ...与 API 结果比对...
-    db.close()
+```text
+QuestTest/
+  api/                         # 原始 API 请求封装
+    base_api.py
+    platform/                  # 内部数据中台接口
+    external/binance/          # Binance Spot / USDM / COIN-M 上游接口
+  services/                    # 中间业务逻辑、判断、比较、缓存、报告数据准备
+    db_accuracy/
+      direct/                  # direct 模式 DB accuracy 编排
+      cached/                  # cached 模式的 shard、frame、DataComPy 复用服务
+      partitioned/             # 统一分区 runner、DB/source/compare 缓存和续跑编排
+      reporting/               # 结果序列化
+  infrastructure/              # 受保护基础设施层
+    http/                      # HTTP retry client
+    database/                  # DB client / DAO
+    assertions/                # DQC 和金融逻辑断言
+  tests/                       # 只放可执行 pytest 测试文件
+    kline/api/
+    binance/api/
+    coinglass/api/
+    factor_data/api/
+    open_interest/api/
+    db_accuracy/
+      integration/
+      services/
+      tools/
+  tools/                       # 可直接运行的工具脚本和临时 Python 文件
+    db_accuracy/
+  data/                        # YAML 测试数据和 DB accuracy 表规格
+  config/                      # 环境配置
+  docs/                        # 设计、规范和使用文档
+  artifacts/reports/           # 当前手动报告输出目录
 ```
 
-### 3. Binance 数据库准确性全量校验
-`tests/db_accuracy/integration/test_binance_db_accuracy.py` 提供手动触发的 Binance raw/metadata 表全量准确性校验。它会通过 `services/db_accuracy/` 从 MySQL 扫描 PDF 范围内的 Binance raw/metadata 表，并与 Binance REST 上游严格对账。
+## 分层边界
 
-默认 `pytest` 不运行该套件；需要显式传入：
+### `infrastructure/`
 
-```bash
-python3 -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+基础设施层，默认不要改动，除非明确要求。
+
+- `http/http_client.py`：统一 HTTP 客户端和重试策略。
+- `database/db_client.py`：MySQL 连接和查询封装。
+- `database/dao.py`：面向数据中台表的 DAO 查询。
+- `assertions/dqc_asserts.py`：Schema、精度、毫秒级时间戳等 DQC 断言。
+- `assertions/logic_asserts.py`：OHLC、时间序列连续性等金融逻辑断言。
+
+### `api/`
+
+只放原始接口调用封装，不放业务判断和对比逻辑。
+
+- `api/platform/`：内部数据中台接口包装。
+- `api/external/binance/`：Binance 上游行情接口包装。
+- 新增 API 封装应继承或复用 `api/base_api.py`。
+
+### `services/`
+
+放中间逻辑、判断、比较、缓存和报告数据准备。
+
+- DB accuracy 的统一执行入口在 `services/db_accuracy/partitioned/`，旧 direct/cached 服务作为底层能力复用。
+- 可复用逻辑应优先放在这里，而不是测试文件或工具脚本里。
+
+### `tests/`
+
+只放 pytest 测试用例和 pytest 支撑文件。第一层按业务域或能力域组织，第二层再区分测什么。
+
+```text
+tests/<业务域>/<测试类型>/test_*.py
 ```
 
-大表优先使用 cached 范围分片校验模式。cached 模式会把 Binance 上游数据按市场和时间分片缓存成本地 Parquet，再查询同一 shard 的 DB 数据，并通过 DataComPy 生成文本报告和 JSON diff。
+当前业务域：
 
-完整功能、参数、缓存结构、报告说明和排错方式见 `docs/binance_db_accuracy_validation.md`。
+- `kline/api/`：Kline Data legacy API 测试。
+- `binance/api/`：Binance Full / Binance USDM 平台 API 测试。
+- `coinglass/api/`：CoinGlass 相关 API 测试。
+- `factor_data/api/`：Factor Data API 测试。
+- `open_interest/api/`：Open Interest API 测试。
+- `db_accuracy/integration/`：手动触发的 DB-to-source 集成校验入口。
+- `db_accuracy/services/`：DB accuracy 服务逻辑单元测试。
+- `db_accuracy/tools/`：根目录 `tools/db_accuracy/` 工具脚本的测试用例。
 
-### 4. 测试范围控制 (Scope Restriction)
-当前框架的测试边界被**严格限制于数据中台 PDF 文档内记载的核心表与接口**（如 `binance_1h_usdm_kline_raw` 等）。禁止擅自编写针对链上数据、新闻资讯、Meme 监控等未定型的接口测试，以免产生大量无效用例。
+注意：`tests/db_accuracy/tools/` 是“工具测试”，不是工具实现。真正可运行的工具代码在根目录 `tools/`。
 
----
+### `tools/`
 
-## 💻 快速开始
+放可直接运行的工具脚本和临时 Python 文件。
 
-### 1. 环境准备
+- `tools/db_accuracy/build_allure_xlsx.py`：把 DB accuracy Allure JSON 附件转换为中文 XLSX。
+- `tools/db_accuracy/fetch_selected_usdm_klines.py`：拉取指定 USDM K 线样本并输出 CSV/JSON。
+- `tools/db_accuracy/build_selected_usdm_klines_xlsx.py`：把专项 CSV/JSON 报告转换为中文 XLSX。
+
+### `data/`
+
+- `test_symbols.yaml`：通用参数化测试数据。
+- `binance_db_accuracy_tables.yaml`：Binance DB accuracy 表规格，定义 table kind、endpoint、key fields、time fields、compare fields 等。
+
+## 快速开始
+
+推荐使用本机 Python 3.12：
+
 ```bash
-# 使用本机 pyenv Python 3.12
 PYTHON=/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12
+```
 
-# 安装依赖
+安装依赖：
+
+```bash
 $PYTHON -m pip install -r requirements.txt
 ```
 
-### 2. 环境变量配置
-基于模板创建本地环境配置，补充真实接口地址和数据库信息：
+创建本地配置：
+
 ```bash
 cp config/.env.example config/.env.test
 ```
 
-### 3. 运行测试
+真实 API 和 DB 测试需要补齐 `config/.env.<env>` 中的接口地址、数据库连接和可选 API Key。
+
+## 常用命令
+
+收集测试，适合结构调整后快速确认导入路径：
+
 ```bash
-# 运行全部测试，确保使用本机 Python 3.12
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest --collect-only -q
+```
+
+运行全部测试：
+
+```bash
 /Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v
+```
 
-# 运行特定环境的测试 (由 conftest.py 拦截并设置环境变量)
+按业务域运行：
+
+```bash
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/kline/api -v
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/binance/api -v
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/db_accuracy/services -q
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/db_accuracy/tools -q
+```
+
+切换环境：
+
+```bash
 /Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v --env=prod
+```
 
-# 仅运行包含特定标记的测试 (例如仅验证数据逻辑)
+按 marker 运行：
+
+```bash
 /Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v -m logic
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v -m dqc
+```
 
-# 运行测试并收集 Allure 报告数据
+生成 Allure 原始结果：
+
+```bash
 /Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v --alluredir=./allure-results
 ```
 
-### 4. 生成 Allure 报告
+生成或打开 Allure 报告：
+
 ```bash
-# 生成静态报告（需要本机已安装 Allure CLI）
 allure generate ./allure-results -o ./allure-report --clean
-
-# 打开静态报告
 allure open ./allure-report
-
-# 或直接启动临时报告服务
-allure serve ./allure-results
 ```
 
----
+## Binance DB Accuracy
 
-## 🛡️ 架构师要求与规范提示 (For QA/Tester)
+DB accuracy 用来把 MySQL 中的 Binance raw/metadata 数据与 Binance REST 上游源数据做严格对账。
+默认不参与普通 CI，只有显式传入 `--run-db-accuracy` 才会执行。
 
-作为量化体系下的 QA/Tester，请时刻铭记：
-1. **数据准确性高于一切**：K线的跳空、精度截断、甚至是时间戳的毫秒/秒级错乱，都可能导致下游策略跑出巨大回撤。测试的重点永远在 `infrastructure/assertions/` 和服务层校验器。
-2. **防御性编程**：不要信任任何外部接口。重试机制、超时配置、脏数据过滤必须在框架的每一层落实。
-3. **敬畏纪律**：AI 助手和开发人员在贡献代码时，必须严格遵守 `docs/AI_GENERATION_GUIDE.md` 约定的纪律，保护核心基建层 (`infrastructure/`) 的纯洁性。
+入口：
+
+```bash
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v --run-db-accuracy
+```
+
+当前 DB accuracy 入口统一使用 partitioned runner。Direct 和 cached 都会先规划 `table + market shard + time partition`，再准备 DB 分区缓存、准备 Binance source 分区缓存，最后统一 compare。
+
+Direct 模式：
+
+1. 从 `data/binance_db_accuracy_tables.yaml` 读取表规格。
+2. 用 `services/db_accuracy/table_specs.py` 解析真实 DB 字段。
+3. 用 `services/db_accuracy/db_reader_service.py` 发现稳定历史范围。
+4. 用 `services/db_accuracy/partitioned/` 准备 DB/source 分区缓存。
+5. 用 DataComPy 对比分区并写入 compare artifacts。
+6. 用 `services/db_accuracy/reporting/result_serializer_service.py` 输出 Allure 附件 JSON/text。
+
+Cached 模式适合大表和指定时间范围复核：
+
+```bash
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/db_accuracy/integration/test_binance_db_accuracy.py -v \
+  --run-db-accuracy \
+  --db-accuracy-mode cached \
+  --db-accuracy-table binance_kline_all_future_raw \
+  --db-accuracy-symbol BTCUSDT \
+  --db-accuracy-interval 1m \
+  --db-accuracy-start-ms 1704067200000 \
+  --db-accuracy-end-ms 1704153599999 \
+  --db-accuracy-use-db-cache true \
+  --db-accuracy-use-source-cache true \
+  --db-accuracy-workers 8
+```
+
+`--db-accuracy-use-db-cache true` 和 `--db-accuracy-use-source-cache true` 表示允许复用本地缓存；如果本次范围更大，缺失分区仍会重新获取。传 `false` 会覆盖对应数据侧的本地分区缓存。
+
+完整参数、缓存结构、报告说明和排错方式见：
+
+```text
+docs/binance_db_accuracy_validation.md
+```
+
+## 工具和报告
+
+当前手动报告输出目录是：
+
+```text
+artifacts/reports/
+```
+
+DB accuracy 默认缓存目录是：
+
+```text
+.cache/binance_accuracy/
+```
+
+该目录下会按 `db/`、`source/`、`compare/`、`runs/` 保存分区数据、对比产物和 run 汇总。
+
+pytest/Allure 默认输出目录是：
+
+```text
+allure-results/
+```
+
+本地工作区可能还存在历史生成的 `reports/` 目录。它不是当前推荐输出目录，清理前需要确认是否仍有人工需要的历史产物。
+
+## 新增或修改用例的规则
+
+1. 先确认业务域。如果是 Kline，就放在 `tests/kline/`；如果是 DB accuracy，就放在 `tests/db_accuracy/`。
+2. 再确认测试类型。API 用例放 `api/`，服务逻辑测试放 `services/`，集成入口放 `integration/`，工具测试放 `tools/`。
+3. 原始接口调用封装放 `api/`。
+4. 可复用判断、比较、清洗、缓存、报告准备逻辑放 `services/`。
+5. 可直接运行的工具和临时 Python 文件放 `tools/`。
+6. 测试数据和参数化数据放 `data/`。
+7. 金融数据校验优先使用 `infrastructure/assertions/` 或服务层 validator，不要只检查 HTTP 状态码。
+
+## 维护纪律
+
+- 不要默认修改 `infrastructure/`。
+- 不要把业务逻辑写进 `tests/` 或 `tools/`。
+- 不要把可执行工具放进 `tests/`。
+- 不要把测试用例直接堆在 `tests/` 根目录。
+- 不要新增超出数据中台文档范围的外部表或接口测试。
+- 保留用户已有改动，不要清理未明确要求处理的报告、缓存或计划文件。
+
+## 参考文档
+
+- AI 生成规则：`docs/AI_GENERATION_GUIDE.md`
+- DB accuracy 使用说明：`docs/binance_db_accuracy_validation.md`
+- Kline 传统用例说明：`docs/kline_traditional_test_report.md`
+- DB accuracy 表规格：`data/binance_db_accuracy_tables.yaml`
+- 后续 agent 快速入口：`AGENTS.md`

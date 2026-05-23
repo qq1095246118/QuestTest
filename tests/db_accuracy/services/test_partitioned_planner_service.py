@@ -167,7 +167,6 @@ def test_direct_with_explicit_range_and_filters_uses_discovery_filters(
             tables=("binance_kline_all_future_raw",),
             cache_root=tmp_path,
             symbols=("BTCUSDT",),
-            intervals=("1m",),
             start_ms=1704110400000,
             end_ms=1704113999999,
         )
@@ -177,6 +176,34 @@ def test_direct_with_explicit_range_and_filters_uses_discovery_filters(
     assert tasks[0].start_ms == 1704110400000
     assert tasks[0].end_ms == 1704113999999
     assert any("GROUP BY `symbol`, `interval`" in sql for sql, _ in db.queries)
+
+
+def test_explicit_range_with_complete_market_key_plans_without_db_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db = FakeDB()
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_kline_spec()],
+    )
+    planner = PartitionPlannerService(db)
+
+    tasks = planner.plan(
+        PartitionedAccuracyRequest(
+            mode=AccuracyMode.CACHED,
+            tables=("binance_kline_all_future_raw",),
+            cache_root=tmp_path,
+            symbols=("BTCUSDT",),
+            intervals=("1m",),
+            start_ms=1704110400000,
+            end_ms=1704113999999,
+        )
+    )
+
+    assert len(tasks) == 1
+    assert tasks[0].key_values == {"symbol": "BTCUSDT", "interval": "1m"}
+    assert not any("GROUP BY `symbol`, `interval`" in sql for sql, _ in db.queries)
 
 
 def test_explicit_range_filters_multi_value_discovery_results(
@@ -303,3 +330,29 @@ def test_registry_table_becomes_single_registry_partition(
     assert tasks[0].partition_bucket == "registry"
     assert tasks[0].key_fields == ("symbol",)
     assert tasks[0].compare_fields == ("symbol", "status")
+
+
+def test_registry_table_with_symbol_filter_plans_filtered_registry_partition(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "services.db_accuracy.partitioned.planner_service.load_table_specs",
+        lambda: [_registry_spec()],
+    )
+    planner = PartitionPlannerService(FakeDB())
+
+    tasks = planner.plan(
+        PartitionedAccuracyRequest(
+            mode=AccuracyMode.DIRECT,
+            tables=("binance_futures_symbols",),
+            cache_root=tmp_path,
+            symbols=("BTCUSDT",),
+        )
+    )
+
+    assert len(tasks) == 1
+    assert tasks[0].is_registry is True
+    assert tasks[0].key_values == {"symbol": "BTCUSDT"}
+    assert tasks[0].partition_label == "registry"
+    assert tasks[0].partition_bucket == "registry"

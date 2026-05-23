@@ -32,7 +32,7 @@ class PartitionPlannerService:
         for spec in specs:
             resolved = self._resolve(spec)
             if spec.kind == "registry":
-                tasks.append(_registry_task(resolved))
+                tasks.extend(_registry_tasks(resolved, request))
                 continue
 
             if resolved.time_field is None:
@@ -96,6 +96,16 @@ class PartitionPlannerService:
         if spec.time_field is None:
             raise ValueError(f"{spec.spec.table} has no resolved time field")
 
+        explicit_key = _explicit_market_key(spec, request)
+        if explicit_key is not None:
+            return _tasks_for_range(
+                spec=spec,
+                key_values=explicit_key,
+                start_ms=request.start_ms,
+                end_ms=request.end_ms,
+                partition_days=request.partition_days,
+            )
+
         key_values: list[dict[str, Any]] = []
         seen_keys: set[tuple[Any, ...]] = set()
         for filters in _discovery_filter_sets(spec, request):
@@ -153,12 +163,23 @@ def _validate_request(request: PartitionedAccuracyRequest) -> None:
         raise ValueError("start_ms and end_ms must be provided together")
 
 
-def _registry_task(spec: ResolvedTableSpec) -> PartitionTask:
+def _registry_tasks(
+    spec: ResolvedTableSpec,
+    request: PartitionedAccuracyRequest,
+) -> list[PartitionTask]:
+    key_values = _registry_key_values(spec, request)
+    return [_registry_task(spec, values) for values in key_values[: request.max_shards]]
+
+
+def _registry_task(
+    spec: ResolvedTableSpec,
+    key_values: dict[str, Any] | None = None,
+) -> PartitionTask:
     return PartitionTask(
         table=spec.spec.table,
         kind=spec.spec.kind,
         endpoint=spec.spec.endpoint,
-        key_values={},
+        key_values=dict(key_values or {}),
         time_field=None,
         source_time_field=spec.spec.source_time_field,
         compare_fields=spec.compare_fields,
@@ -175,6 +196,36 @@ def _registry_task(spec: ResolvedTableSpec) -> PartitionTask:
         pair_field=spec.spec.pair_field,
         contract_type_field=spec.spec.contract_type_field,
     )
+
+
+def _explicit_market_key(
+    spec: ResolvedTableSpec,
+    request: PartitionedAccuracyRequest,
+) -> dict[str, Any] | None:
+    values: dict[str, Any] = {}
+    for field in spec.key_fields:
+        candidates = _request_values_for_field(field, spec, request)
+        if not candidates:
+            return None
+        if len(candidates) != 1:
+            return None
+        values[field] = candidates[0]
+    return values
+
+
+def _registry_key_values(
+    spec: ResolvedTableSpec,
+    request: PartitionedAccuracyRequest,
+) -> list[dict[str, Any]]:
+    filter_sets = _filter_sets(spec, request)
+    if not filter_sets:
+        return [{}]
+
+    fields = tuple(filter_sets.keys())
+    return [
+        dict(zip(fields, values, strict=True))
+        for values in product(*(sorted(filter_sets[field]) for field in fields))
+    ]
 
 
 def _tasks_for_range(
@@ -262,6 +313,22 @@ def _filter_sets(
         for field, values in field_values
         if field is not None and field in spec.key_fields and values
     }
+
+
+def _request_values_for_field(
+    field: str,
+    spec: ResolvedTableSpec,
+    request: PartitionedAccuracyRequest,
+) -> tuple[Any, ...]:
+    if field == spec.spec.symbol_field:
+        return request.symbols
+    if field == spec.spec.pair_field:
+        return request.pairs
+    if field == spec.spec.contract_type_field:
+        return request.contract_types
+    if field == spec.interval_field:
+        return request.intervals
+    return ()
 
 
 def _stable_before_ms(safety_hours: int) -> int:
