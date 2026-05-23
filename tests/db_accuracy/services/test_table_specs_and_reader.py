@@ -67,6 +67,25 @@ def test_loaded_one_hour_usdm_funding_spec_declares_fixed_interval():
     assert specs["binance_1h_usdm_funding_rate_raw"].fixed_interval == "1h"
 
 
+def test_loaded_usdm_funding_raw_spec_uses_two_hour_safe_window_and_source_fields_only():
+    specs = {spec.table: spec for spec in load_table_specs()}
+    spec = specs["binance_usdm_funding_rate_raw"]
+
+    assert spec.kind == "funding"
+    assert spec.endpoint == "usdm_funding"
+    assert spec.key_fields == ("symbol",)
+    assert spec.time_fields == ("funding_time", "timestamp")
+    assert spec.fixed_interval == "2h"
+    assert spec.compare_fields == (
+        "symbol",
+        "funding_rate",
+        "funding_time",
+        "mark_price",
+    )
+    assert "funding_rate_interval" not in spec.key_fields
+    assert "funding_rate_interval" not in spec.compare_fields
+
+
 def test_load_table_specs_rejects_scalar_list_fields(tmp_path):
     config_path = tmp_path / "tables.yaml"
     config_path.write_text(
@@ -332,6 +351,51 @@ def test_reader_slices_funding_windows_from_explicit_fixed_interval():
     assert [(window.start_ms, window.end_ms) for window in windows] == [
         (0, 3 * hour_ms - 1),
         (3 * hour_ms, 5 * hour_ms),
+    ]
+
+
+def test_reader_slices_loaded_usdm_funding_raw_windows_with_two_hour_cadence():
+    hour_ms = 3_600_000
+    specs = {spec.table: spec for spec in load_table_specs()}
+    spec = specs["binance_usdm_funding_rate_raw"]
+    resolved = resolve_spec(
+        spec,
+        {"symbol", "funding_time", "funding_rate", "mark_price", "funding_rate_interval"},
+    )
+    time_range = KeyTimeRange(
+        table="binance_usdm_funding_rate_raw",
+        key=ValidationKey({"symbol": "BTCUSDT"}),
+        start_ms=0,
+        end_ms=5 * hour_ms,
+    )
+
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
+
+    assert [(window.start_ms, window.end_ms) for window in windows] == [
+        (0, 5 * hour_ms),
+    ]
+
+
+def test_reader_slices_loaded_usdm_funding_raw_windows_at_two_hour_limit_boundary():
+    hour_ms = 3_600_000
+    specs = {spec.table: spec for spec in load_table_specs()}
+    spec = specs["binance_usdm_funding_rate_raw"]
+    resolved = resolve_spec(
+        spec,
+        {"symbol", "funding_time", "funding_rate", "mark_price", "funding_rate_interval"},
+    )
+    time_range = KeyTimeRange(
+        table="binance_usdm_funding_rate_raw",
+        key=ValidationKey({"symbol": "BTCUSDT"}),
+        start_ms=0,
+        end_ms=2001 * hour_ms,
+    )
+
+    windows = DBAccuracyReaderService(FakeDB()).build_windows(resolved, time_range)
+
+    assert [(window.start_ms, window.end_ms) for window in windows] == [
+        (0, 2000 * hour_ms - 1),
+        (2000 * hour_ms, 2001 * hour_ms),
     ]
 
 

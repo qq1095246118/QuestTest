@@ -25,6 +25,7 @@ tables:
     key_fields: [symbol]
     time_fields: [funding_time, timestamp]
     interval_field:
+    fixed_interval: 2h
     compare_fields: [symbol, funding_rate, funding_time, mark_price]
     request_limit: 1000
 
