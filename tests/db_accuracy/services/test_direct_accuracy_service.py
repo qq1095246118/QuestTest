@@ -276,10 +276,10 @@ def test_source_routes_each_kline_endpoint_to_expected_client_and_key_fields():
         }
 
 
-def test_source_maps_usdm_funding_dict_to_named_fields():
+def test_source_maps_usdm_funding_dict_to_named_fields_without_interval_metadata():
     source, usdm, _, _ = _source()
     spec = TableSpec(
-        table="binance_funding_rate_all_future_raw",
+        table="binance_usdm_funding_rate_raw",
         kind="funding",
         endpoint="usdm_funding",
         key_fields=("symbol",),
@@ -287,28 +287,37 @@ def test_source_maps_usdm_funding_dict_to_named_fields():
         interval_field=None,
         compare_fields=("symbol", "funding_rate", "funding_time", "mark_price"),
         request_limit=1000,
+        fixed_interval="2h",
     )
 
-    rows = source.fetch_rows(spec, ValidationKey({"symbol": "BTCUSDT"}), 1704067200000, 1704070800000)
+    rows = source.fetch_rows(
+        spec,
+        ValidationKey({"symbol": "BTCUSDT"}),
+        1704067200000,
+        1704153600000,
+    )
 
-    assert rows[0].key == 1704067200000
-    assert rows[0].fields == {
-        "symbol": "BTCUSDT",
-        "funding_rate": "0.01",
-        "funding_time": 1704067200000,
-        "mark_price": "42000",
-    }
-    assert usdm.calls == [
-        (
-            "get_funding_rate",
-            {
+    assert rows == [
+        SourceRow(
+            key=1704067200000,
+            fields={
                 "symbol": "BTCUSDT",
-                "startTime": 1704067200000,
-                "endTime": 1704070800000,
-                "limit": 1000,
+                "funding_rate": "0.01",
+                "funding_time": 1704067200000,
+                "mark_price": "42000",
             },
         )
     ]
+    assert "funding_rate_interval" not in rows[0].fields
+    assert usdm.calls[-1] == (
+        "get_funding_rate",
+        {
+            "symbol": "BTCUSDT",
+            "startTime": 1704067200000,
+            "endTime": 1704153600000,
+            "limit": 1000,
+        },
+    )
 
 
 def test_source_maps_coinm_funding_without_mark_price_to_none():
