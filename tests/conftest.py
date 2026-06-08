@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import platform
-import re
 from pathlib import Path
 
 import allure
@@ -17,7 +16,6 @@ ALLURE_MARKER_FEATURES = {
     "dqc": "Data Quality Control",
     "logic": "Financial Logic",
     "performance": "Performance Baseline",
-    "db_accuracy": "Database Source Accuracy",
 }
 
 ALLURE_STORY_BY_NAME = {
@@ -26,153 +24,12 @@ ALLURE_STORY_BY_NAME = {
     "boundary": "Boundary",
     "response": "Response Schema",
     "performance": "Performance",
-    "db_consistency": "Database Consistency",
     "data_quality": "Data Quality",
 }
-
-DEFAULT_ALLURE_DIR = Path("allure-results")
-DB_ACCURACY_ALLURE_ROOT = DEFAULT_ALLURE_DIR / "db_accuracy"
-DEFAULT_ALLURE_DIR_NAMES = {"allure-results", "./allure-results"}
-
-
-def _parse_bool_option(value: str) -> bool:
-    text = str(value).strip().lower()
-    if text in {"true", "1", "yes", "y"}:
-        return True
-    if text in {"false", "0", "no", "n"}:
-        return False
-    raise pytest.UsageError(f"expected true or false, got: {value}")
-
 
 def pytest_addoption(parser):
     parser.addoption(
         "--env", action="store", default="test", help="Environment to run tests against (e.g., test, prod)"
-    )
-    parser.addoption(
-        "--run-db-accuracy",
-        action="store_true",
-        default=False,
-        help="Run manual Binance database-to-source accuracy validation",
-    )
-    parser.addoption(
-        "--db-accuracy-safety-hours",
-        action="store",
-        type=int,
-        default=24,
-        help="Safety window in hours for database accuracy validation",
-    )
-    parser.addoption(
-        "--db-accuracy-table",
-        action="append",
-        default=[],
-        help="Limit database accuracy validation to one or more tables",
-    )
-    parser.addoption(
-        "--db-accuracy-mode",
-        action="store",
-        choices=("direct", "cached"),
-        default="direct",
-        help="DB accuracy execution mode: direct or cached",
-    )
-    parser.addoption(
-        "--db-accuracy-cache-root",
-        action="store",
-        default=".cache/binance_accuracy",
-        help="Local cache root for cached Binance source data",
-    )
-    parser.addoption(
-        "--db-accuracy-symbol",
-        action="append",
-        default=[],
-        help="Limit cached DB accuracy validation to one or more symbols",
-    )
-    parser.addoption(
-        "--db-accuracy-pair",
-        action="append",
-        default=[],
-        help="Limit cached DB accuracy validation to one or more delivery pairs",
-    )
-    parser.addoption(
-        "--db-accuracy-contract-type",
-        action="append",
-        default=[],
-        help="Limit cached DB accuracy validation to one or more contract types",
-    )
-    parser.addoption(
-        "--db-accuracy-interval",
-        action="append",
-        default=[],
-        help="Limit cached DB accuracy validation to one or more intervals",
-    )
-    parser.addoption(
-        "--db-accuracy-start-ms",
-        action="store",
-        type=int,
-        default=None,
-        help="Inclusive start timestamp in milliseconds for cached DB accuracy validation",
-    )
-    parser.addoption(
-        "--db-accuracy-end-ms",
-        action="store",
-        type=int,
-        default=None,
-        help="Inclusive end timestamp in milliseconds for cached DB accuracy validation",
-    )
-    parser.addoption(
-        "--db-accuracy-partition-days",
-        action="store",
-        type=int,
-        default=1,
-        help="Time partition size in days for cached DB accuracy validation",
-    )
-    parser.addoption(
-        "--db-accuracy-max-shards",
-        action="store",
-        type=int,
-        default=100,
-        help="Maximum DB-discovered market shards for cached DB accuracy validation",
-    )
-    parser.addoption(
-        "--db-accuracy-use-db-cache",
-        action="store",
-        type=_parse_bool_option,
-        default=True,
-        help="Reuse local DB partition cache when it covers the requested range",
-    )
-    parser.addoption(
-        "--db-accuracy-use-source-cache",
-        action="store",
-        type=_parse_bool_option,
-        default=True,
-        help="Reuse local Binance source partition cache when it covers the requested range",
-    )
-    parser.addoption(
-        "--db-accuracy-workers",
-        action="store",
-        type=int,
-        default=8,
-        help="Maximum concurrent partition workers for DB/source/compare stages",
-    )
-    parser.addoption(
-        "--db-accuracy-source-retries",
-        action="store",
-        type=int,
-        default=5,
-        help="Retries for each Binance request window before pausing the run",
-    )
-    parser.addoption(
-        "--db-accuracy-source-retry-backoff-ms",
-        action="store",
-        type=int,
-        default=1000,
-        help="Linear retry backoff base in milliseconds for Binance requests",
-    )
-    parser.addoption(
-        "--db-accuracy-stop-on-source-failure",
-        action="store",
-        type=_parse_bool_option,
-        default=True,
-        help="Pause the run after a source request exhausts retries",
     )
 
 @pytest.hookimpl(tryfirst=True)
@@ -180,77 +37,7 @@ def pytest_configure(config):
     """
     Set TEST_ENV before test modules import config.settings.
     """
-    configure_db_accuracy_allure_dir(config)
     os.environ["TEST_ENV"] = config.getoption("--env")
-
-
-def configure_db_accuracy_allure_dir(config):
-    """
-    Isolate DB accuracy Allure output by command/table when the default Allure
-    directory is in use. Explicit --alluredir values are respected.
-    """
-    if not config.getoption("--run-db-accuracy"):
-        return None
-
-    current = getattr(config.option, "allure_report_dir", None)
-    if not current or not _is_default_allure_dir(current, _config_cwd(config)):
-        return None
-
-    report_dir = _config_cwd(config) / DB_ACCURACY_ALLURE_ROOT / _db_accuracy_run_slug(config)
-    config.option.allure_report_dir = str(report_dir)
-    return report_dir
-
-
-def _config_cwd(config) -> Path:
-    return Path(getattr(config, "cwd", Path.cwd()))
-
-
-def _is_default_allure_dir(value, cwd: Path) -> bool:
-    text = str(value).rstrip("/")
-    if text in DEFAULT_ALLURE_DIR_NAMES:
-        return True
-
-    path = Path(text)
-    if not path.is_absolute():
-        path = cwd / path
-    return path == cwd / DEFAULT_ALLURE_DIR
-
-
-def _db_accuracy_run_slug(config) -> str:
-    tables = config.getoption("--db-accuracy-table") or []
-    mode = config.getoption("--db-accuracy-mode")
-    if len(tables) == 1:
-        parts = [tables[0]]
-    elif tables:
-        parts = ["multi", *tables]
-    else:
-        parts = ["all_tables"]
-
-    if mode == "cached":
-        parts.append("cached")
-        parts.extend(_option_values_for_slug(config, "--db-accuracy-symbol", "symbol"))
-        parts.extend(_option_values_for_slug(config, "--db-accuracy-pair", "pair"))
-        parts.extend(_option_values_for_slug(config, "--db-accuracy-contract-type", "contract"))
-        parts.extend(_option_values_for_slug(config, "--db-accuracy-interval", "interval"))
-        for option, label in [
-            ("--db-accuracy-start-ms", "start"),
-            ("--db-accuracy-end-ms", "end"),
-        ]:
-            value = config.getoption(option)
-            if value is not None:
-                parts.append(f"{label}_{value}")
-
-    return _safe_path_component("__".join(str(part) for part in parts if part))
-
-
-def _option_values_for_slug(config, option: str, label: str) -> list[str]:
-    values = config.getoption(option) or []
-    return [f"{label}_{value}" for value in values]
-
-
-def _safe_path_component(value: str) -> str:
-    safe = re.sub(r"[^0-9A-Za-z_.-]+", "_", value).strip("._")
-    return (safe or "db_accuracy")[:180]
 
 
 def _extract_case_metadata(test_function):
@@ -328,17 +115,6 @@ def pytest_collection_modifyitems(session, config, items):
             continue
         item.obj.__allure_display_name__ = _allure_title_for_item(item)
 
-    if config.getoption("--run-db-accuracy"):
-        return
-
-    skip_db_accuracy = pytest.mark.skip(
-        reason="database accuracy validation requires --run-db-accuracy"
-    )
-    for item in items:
-        if item.get_closest_marker("db_accuracy") is not None:
-            item.add_marker(skip_db_accuracy)
-
-
 @pytest.fixture(autouse=True)
 def allure_case_metadata(request):
     """
@@ -386,20 +162,6 @@ def set_env(request):
     env = request.config.getoption("--env")
     os.environ["TEST_ENV"] = env
     logging.info(f"Test environment set to: {env}")
-
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    """
-    Hook to generate summary and send IM alerts (WeCom/DingTalk) after tests finish.
-    """
-    passed = len(terminalreporter.stats.get('passed', []))
-    failed = len(terminalreporter.stats.get('failed', []))
-    skipped = len(terminalreporter.stats.get('skipped', []))
-    
-    # Placeholder for IM notification logic
-    alert_msg = f"API AutoTest Finished. Passed: {passed}, Failed: {failed}, Skipped: {skipped}"
-    print(f"\n[Alert Hook] {alert_msg}")
-    # send_im_alert(alert_msg)
-
 
 def pytest_sessionfinish(session, exitstatus):
     """

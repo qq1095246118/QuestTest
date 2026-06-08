@@ -1,27 +1,29 @@
 # AI Generation Guide
 
-This guide establishes the core rules for AI assistants working on this test framework. 
-To ensure framework stability and strict quality standards, the following rules MUST be adhered to:
+QuestTest is only for API automation and Allure report output.
 
 ## Core Rules
 
-1. **Respect Layer Boundaries**
-   - `infrastructure/` holds low-level HTTP, database, and assertion foundations.
-   - `infrastructure/` is protected infrastructure and should not be modified unless the user explicitly asks.
-   - `api/` holds raw API request wrappers only.
-   - `services/` holds intermediate logic, judgment, comparison, caching, and report data preparation.
-   - `tools/` holds directly runnable utilities and temporary Python files.
-   - `tests/` holds executable pytest test files only.
+1. Keep the project single-purpose.
+   - Do not add code, documents, scripts, generated files, or top-level source areas unless they are necessary for API automation and Allure output.
 
-2. **Mandatory DQC & Logic Assertions**
-   All generated API test cases MUST use reusable assertion helpers from `infrastructure/assertions/` or service-level validators.
+2. Respect directory roles.
+   - `api/platform/` holds raw platform API request wrappers.
+   - `infrastructure/http/` holds HTTP client and retry behavior.
+   - `infrastructure/assertions/` holds reusable DQC and financial logic assertions.
+   - `tests/<business_domain>/api/` holds executable pytest API tests.
+   - `data/` holds API test parameter data.
+   - `docs/` holds API automation notes only.
 
-3. **Strict Directory Roles & Structure**
-   New raw API wrappers MUST go into `api/`.
-   New reusable logic MUST go into `services/`.
-   New executable tools MUST go into `tools/`.
-   New pytest cases MUST go into `tests/`.
-   Test data and parameterizations MUST stay in `data/`.
+3. Do not create forbidden project files.
+   - Do not create `__init__.py`; the project uses Python namespace packages and pytest importlib mode.
+   - Do not create hidden files or hidden directories. The only allowed dot-prefixed path is Git metadata under `.git`; environment config must use `config/env.<env>`, not `.env`.
 
-4. **Testing Scope Restriction**
-   Currently, the testing scope is strictly limited to the core tables outlined in the Data Platform PDF documentation (e.g., `binance_1h_usdm_kline_raw`, `coinglass_open_interest_raw`, `dqc_issues`, etc.). Do not generate test cases for other external tables (like News, On-chain data, or Meme tokens) until their schemas and logic definitions are explicitly provided and supplemented to the framework.
+4. Keep Allure metadata useful.
+   - Prefer clear docstrings with case IDs and test purpose.
+   - Use existing pytest markers when they describe the API test dimension.
+   - Keep report metadata in `tests/conftest.py`.
+
+5. Stay inside the documented API scope.
+   - Add or change tests only for platform APIs that are already part of this framework or explicitly requested by the user.
+   - Use reusable assertion helpers instead of bare status-code checks when validating financial data behavior.
