@@ -1,0 +1,28 @@
+factor_list:
+  default:
+    page: 1
+    limit: 5
+  page_two:
+    page: 2
+    limit: 5
+  sort_updated_at_asc:
+    page: 1
+    limit: 5
+    sort_by: updated_at
+    sort_order: asc
+  sort_updated_at_desc:
+    page: 1
+    limit: 5
+    sort_by: updated_at
+    sort_order: desc
+  invalid_page_zero:
+    page: 0
+    limit: 20
+  invalid_limit_too_large:
+    page: 1
+    limit: 501
+  invalid_sort_order:
+    page: 1
+    limit: 20
+    sort_by: updated_at
+    sort_order: bad
