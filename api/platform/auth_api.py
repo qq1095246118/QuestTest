@@ -22,7 +22,7 @@ class AuthAPI:
         return self.post(
             "/api/v1/auth/login",
             json={
-                "email": email or settings.factor_email,
-                "password": password or settings.factor_password,
+                "email": settings.factor_email if email is None else email,
+                "password": settings.factor_password if password is None else password,
             },
         )
