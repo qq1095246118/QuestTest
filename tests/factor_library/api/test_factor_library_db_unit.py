@@ -17,6 +17,7 @@ from infrastructure.db.ssh_tunnel import DatabaseEndpoint, open_database_endpoin
         "WITH latest_factor AS (SELECT * FROM factor) SELECT * FROM latest_factor",
         "SELECT * FROM factor WHERE name = 'delete'",
         "SELECT 1 /* update */",
+        "SELECT 1 -- update\n",
         "SELECT ';' AS semicolon",
     ],
 )
@@ -36,6 +37,7 @@ def test_ensure_select_only_accepts_select_and_with(sql):
         "SELECT * FROM factor INTO DUMPFILE '/tmp/x'",
         "SELECT GET_LOCK('factor_lock', 1)",
         "SELECT RELEASE_LOCK('factor_lock')",
+        "SELECT 1--1; DELETE FROM factor",
     ],
 )
 def test_ensure_select_only_rejects_mutating_or_multi_statement_sql(sql):

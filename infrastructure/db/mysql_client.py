@@ -46,7 +46,12 @@ def _sql_code_view(sql: str) -> str:
             i += 1
             continue
 
-        if char == "-" and i + 1 < len(chars) and chars[i + 1] == "-":
+        if (
+            char == "-"
+            and i + 2 < len(chars)
+            and chars[i + 1] == "-"
+            and chars[i + 2].isspace()
+        ):
             chars[i] = " "
             i += 1
             chars[i] = " "
