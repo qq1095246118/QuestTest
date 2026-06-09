@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import pytest
 
@@ -135,6 +136,37 @@ def test_assert_factor_list_matches_db_accepts_full_match_with_normalized_time_a
     assert_factor_list_matches_db(_api_body(), _db_page())
 
 
+@pytest.mark.parametrize(
+    ("created_at", "updated_at"),
+    [
+        ("2026-06-06 14:00:01.123456", "2026-06-06 14:00:01+00:00"),
+        ("2026-06-06 14:00:01.123456+00:00", "2026-06-06 14:00:01.999999+00:00"),
+    ],
+)
+def test_assert_factor_list_matches_db_accepts_db_microsecond_and_offset_time_strings(created_at, updated_at):
+    db_page = _db_page()
+    db_page["items"][0]["created_at"] = created_at
+    db_page["items"][0]["updated_at"] = updated_at
+
+    assert_factor_list_matches_db(_api_body(), db_page)
+
+
+def test_assert_factor_list_matches_db_accepts_datetime_objects():
+    db_page = _db_page()
+    db_page["items"][0]["created_at"] = datetime(2026, 6, 6, 14, 0, 1, 123456)
+    db_page["items"][0]["updated_at"] = datetime(2026, 6, 6, 14, 0, 1, 999999, tzinfo=timezone.utc)
+
+    assert_factor_list_matches_db(_api_body(), db_page)
+
+
+def test_assert_factor_list_matches_db_rejects_string_is_sub_factor_id():
+    db_page = _db_page()
+    db_page["items"][0]["factor_detail"]["is_sub_factor_id"] = "0"
+
+    with pytest.raises(AssertionError, match="is_sub_factor_id"):
+        assert_factor_list_matches_db(_api_body(), db_page)
+
+
 def test_assert_factor_list_matches_db_reports_basic_field_mismatch():
     api_body = _api_body()
     db_page = _db_page()
@@ -190,7 +222,7 @@ def test_assert_theme_ids_exist_in_theme_list_accepts_data_list_and_data_items()
 def test_assert_theme_ids_exist_in_theme_list_reports_missing_theme_id():
     factor_body = deepcopy(_api_body())
 
-    with pytest.raises(AssertionError, match="missing|theme_id"):
+    with pytest.raises(AssertionError, match=r"items\[0\].*615.*missing.*theme_id"):
         assert_theme_ids_exist_in_theme_list(
             factor_body,
             {"success": True, "data": [{"id": 1, "theme_key": "momentum"}]},

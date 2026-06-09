@@ -99,15 +99,15 @@ def assert_theme_ids_exist_in_theme_list(factor_body: dict[str, Any], themes_bod
     themes = _extract_theme_items(themes_body["data"])
     theme_ids = {theme.get("id") for theme in themes}
 
-    missing_theme_ids = sorted(
-        {
-            theme.get("id")
-            for item in factor_body["data"]["items"]
-            for theme in item["themes"]
-            if theme.get("id") not in theme_ids
-        }
-    )
-    assert not missing_theme_ids, f"missing theme_id in themes list: {missing_theme_ids}"
+    missing_messages = []
+    for index, item in enumerate(factor_body["data"]["items"]):
+        factor_id = item.get("id")
+        for theme in item["themes"]:
+            theme_id = theme.get("id")
+            if theme_id not in theme_ids:
+                missing_messages.append(f"items[{index}] factor_id={factor_id} missing theme_id={theme_id}")
+
+    assert not missing_messages, "; ".join(missing_messages)
 
 
 def _assert_basic_fields_match(api_item: dict[str, Any], db_item: dict[str, Any], index: int) -> None:
@@ -185,10 +185,11 @@ def _normalize_utc_second(value: Any) -> str | None:
         text = value.strip()
         if text.endswith("Z"):
             text = text[:-1] + "+00:00"
-        if "T" in text:
+        text = text.replace(" ", "T", 1)
+        try:
             dt = datetime.fromisoformat(text)
-        else:
-            dt = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            dt = datetime.strptime(text, "%Y-%m-%dT%H:%M:%S")
     else:
         raise AssertionError(f"Unsupported datetime value: {value!r}")
 
