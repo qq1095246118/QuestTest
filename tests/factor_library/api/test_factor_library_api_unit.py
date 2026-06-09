@@ -64,3 +64,18 @@ def test_factor_library_auxiliary_routes(monkeypatch):
             {"ic_scope": "time_series", "time_window": "1h"},
         ),
     ]
+
+
+def test_empty_token_still_sends_authorization_header(monkeypatch):
+    calls = {}
+
+    def fake_request(method, url, **kwargs):
+        calls["kwargs"] = kwargs
+        return SimpleNamespace(status_code=200, json=lambda: {"success": True})
+
+    monkeypatch.setattr("api.platform.factor_library_api.HTTPClient.request", fake_request)
+    monkeypatch.setattr("api.platform.factor_library_api.settings.base_url", "https://test-factor-backend.questvector.ai")
+
+    FactorLibraryAPI(token="").list_factors(page=1)
+
+    assert calls["kwargs"]["headers"]["Authorization"] == "Bearer "

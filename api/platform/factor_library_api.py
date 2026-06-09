@@ -15,7 +15,7 @@ class FactorLibraryAPI:
     def __init__(self, token: str | None = None):
         self.base_url = settings.base_url.rstrip("/")
         self.headers = {"Content-Type": "application/json"}
-        if token:
+        if token is not None:
             self.headers["Authorization"] = f"Bearer {token}"
 
     def get(self, endpoint: str, params: dict[str, Any] | None = None):
