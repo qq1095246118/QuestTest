@@ -6,6 +6,22 @@ import pytest
 
 from infrastructure.db.mysql_client import ReadOnlyMySQLClient, ensure_select_only
 from infrastructure.db.ssh_tunnel import DatabaseEndpoint, open_database_endpoint
+from infrastructure.db.factor_library_queries import FactorListQuery, fetch_factor_list_db_page
+
+
+class RecordingFactorClient:
+    def __init__(self, fetch_one_rows=None, fetch_all_rows=None):
+        self.fetch_one_rows = list(fetch_one_rows or [])
+        self.fetch_all_rows = list(fetch_all_rows or [])
+        self.calls = []
+
+    def fetch_one(self, sql, params=None):
+        self.calls.append(("fetch_one", sql, params))
+        return self.fetch_one_rows.pop(0)
+
+    def fetch_all(self, sql, params=None):
+        self.calls.append(("fetch_all", sql, params))
+        return self.fetch_all_rows.pop(0)
 
 
 @pytest.mark.parametrize(
@@ -221,3 +237,94 @@ def test_open_database_endpoint_starts_and_stops_ssh_tunnel(monkeypatch):
         "ssh_password": "secret",
     }
     assert calls["stopped"] is True
+
+
+def test_fetch_factor_list_db_page_queries_and_assembles_page():
+    client = RecordingFactorClient(
+        fetch_one_rows=[{"total": 2}],
+        fetch_all_rows=[
+            [{"id": 2}, {"id": 1}],
+            [
+                {"id": 1, "factor_name": "mean_reversion", "cn_name": "均值回归"},
+                {"id": 2, "factor_name": "momentum", "cn_name": "动量"},
+            ],
+            [
+                {"id": 20, "factor_id": 2, "name": "momentum_detail", "status": 1},
+                {"id": 10, "factor_id": 1, "name": "mean_reversion_detail", "status": 1},
+            ],
+            [
+                {"factor_id": 2, "id": 8, "theme_key": "momentum", "cn_name": "动量"},
+                {"factor_id": 1, "id": 9, "theme_key": "reversal", "cn_name": "反转"},
+            ],
+        ],
+    )
+
+    result = fetch_factor_list_db_page(
+        client,
+        FactorListQuery(
+            page=2,
+            limit=10,
+            factor_theme="momentum",
+            created_by="alice",
+            operator_by="bob",
+            factor_detail_status=1,
+            sort_by="created_at",
+            sort_order="asc",
+        ),
+    )
+
+    assert result == {
+        "pagination": {"page": 2, "limit": 10, "total": 2},
+        "items": [
+            {
+                "id": 2,
+                "factor_name": "momentum",
+                "cn_name": "动量",
+                "factor_detail": {"id": 20, "factor_id": 2, "name": "momentum_detail", "status": 1},
+                "themes": [{"id": 8, "theme_key": "momentum", "cn_name": "动量"}],
+            },
+            {
+                "id": 1,
+                "factor_name": "mean_reversion",
+                "cn_name": "均值回归",
+                "factor_detail": {"id": 10, "factor_id": 1, "name": "mean_reversion_detail", "status": 1},
+                "themes": [{"id": 9, "theme_key": "reversal", "cn_name": "反转"}],
+            },
+        ],
+    }
+    assert [call[0] for call in client.calls] == ["fetch_one", "fetch_all", "fetch_all", "fetch_all", "fetch_all"]
+    assert "COUNT(DISTINCT f.id)" in client.calls[0][1]
+    assert "t.theme_key = %(factor_theme)s" in client.calls[1][1]
+    assert "fd.status = %(factor_detail_status)s" in client.calls[1][1]
+    assert "ORDER BY f.created_at ASC, f.id ASC" in client.calls[1][1]
+    assert client.calls[1][2]["factor_theme"] == "momentum"
+    assert client.calls[1][2]["limit"] == 10
+    assert client.calls[1][2]["offset"] == 10
+
+
+def test_fetch_factor_list_db_page_skips_child_queries_when_page_has_no_ids():
+    client = RecordingFactorClient(fetch_one_rows=[{"total": 3}], fetch_all_rows=[[]])
+
+    result = fetch_factor_list_db_page(client, FactorListQuery(page=3, limit=20))
+
+    assert result == {"pagination": {"page": 3, "limit": 20, "total": 3}, "items": []}
+    assert [call[0] for call in client.calls] == ["fetch_one", "fetch_all"]
+
+
+def test_fetch_factor_list_db_page_defaults_unknown_sort_by_to_id():
+    client = RecordingFactorClient(fetch_one_rows=[{"total": 0}], fetch_all_rows=[[]])
+
+    fetch_factor_list_db_page(client, FactorListQuery(sort_by="f.created_at; DROP TABLE factors", sort_order="asc"))
+
+    page_sql = client.calls[1][1]
+    assert "DROP TABLE" not in page_sql
+    assert "ORDER BY f.id ASC" in page_sql
+
+
+def test_fetch_factor_list_db_page_defaults_unknown_sort_order_to_desc():
+    client = RecordingFactorClient(fetch_one_rows=[{"total": 0}], fetch_all_rows=[[]])
+
+    fetch_factor_list_db_page(client, FactorListQuery(sort_by="cn_name", sort_order="sideways"))
+
+    page_sql = client.calls[1][1]
+    assert "ORDER BY f.cn_name DESC, f.id DESC" in page_sql
