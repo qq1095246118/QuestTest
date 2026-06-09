@@ -2,10 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from config.settings import Settings
 
+def test_factor_library_settings_load_from_env_file(tmp_path: Path, monkeypatch):
+    for key in [
+        "ENV",
+        "BASE_URL",
+        "API_KEY",
+        "FACTOR_EMAIL",
+        "FACTOR_PASSWORD",
+        "FACTOR_DB_HOST",
+        "FACTOR_DB_PORT",
+        "FACTOR_DB_NAME",
+        "FACTOR_DB_USER",
+        "FACTOR_DB_PASSWORD",
+        "FACTOR_SSH_ENABLED",
+        "FACTOR_SSH_HOST",
+        "FACTOR_SSH_PORT",
+        "FACTOR_SSH_USER",
+        "FACTOR_SSH_KEY_PATH",
+        "FACTOR_SSH_PASSWORD",
+    ]:
+        monkeypatch.delenv(key, raising=False)
 
-def test_factor_library_settings_load_from_env_file(tmp_path: Path):
     env_file = tmp_path / "env.test"
     env_file.write_text(
         "\n".join(
@@ -29,6 +47,8 @@ def test_factor_library_settings_load_from_env_file(tmp_path: Path):
         ),
         encoding="utf-8",
     )
+
+    from config.settings import Settings
 
     settings = Settings(_env_file=env_file)
 
