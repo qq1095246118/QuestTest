@@ -47,10 +47,10 @@
         请求 listFactors，GET /api/v1/factors?factor_detail_status=1
           返回因子 factor_detail.status 均为 1，接口数据与 DB 查询结果一致
       FA-09 按创建人筛选因子
-        请求 listFactors，GET /api/v1/factors?created_by=System Admin
+        请求 listFactors，GET /api/v1/factors?created_by=System%20Admin
           返回因子 created_by 均为 System Admin，接口数据与 DB 查询结果一致
       FA-10 按操作人筛选因子
-        请求 listFactors，GET /api/v1/factors?operator_by=System Admin
+        请求 listFactors，GET /api/v1/factors?operator_by=System%20Admin
           返回因子 operator_by 均为 System Admin，接口数据与 DB 查询结果一致
     参数异常
       FA-11 page 为 0 查询因子列表
@@ -127,11 +127,11 @@
 
   权限异常
     鉴权
-      PE-01 未登录访问因子库接口
-        不带 Authorization 请求 listFactors，GET /api/v1/factors
+      PE-01 未登录访问主题列表
+        不带 Authorization 请求 listThemes，GET /api/v1/themes
           返回未授权错误
-      PE-02 使用无效 token 访问因子库接口
-        使用伪造 Authorization 请求 listFactors，GET /api/v1/factors
+      PE-02 使用无效 token 访问子因子列表
+        使用伪造 Authorization 请求 listSubFactors，GET /api/v1/sub-factors
           返回未授权错误
 
   数据一致性
