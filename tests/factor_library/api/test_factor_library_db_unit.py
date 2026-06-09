@@ -295,9 +295,14 @@ def test_fetch_factor_list_db_page_queries_and_assembles_page():
     assert [call[0] for call in client.calls] == ["fetch_one", "fetch_all", "fetch_all", "fetch_all", "fetch_all"]
     assert "COUNT(DISTINCT f.id)" in client.calls[0][1]
     assert "t.theme_key = %(factor_theme)s" in client.calls[1][1]
+    assert "f.created_by = %(created_by)s" in client.calls[1][1]
+    assert "f.operator_by = %(operator_by)s" in client.calls[1][1]
     assert "fd.status = %(factor_detail_status)s" in client.calls[1][1]
     assert "ORDER BY f.created_at ASC, f.id ASC" in client.calls[1][1]
     assert client.calls[1][2]["factor_theme"] == "momentum"
+    assert client.calls[1][2]["created_by"] == "alice"
+    assert client.calls[1][2]["operator_by"] == "bob"
+    assert client.calls[1][2]["factor_detail_status"] == 1
     assert client.calls[1][2]["limit"] == 10
     assert client.calls[1][2]["offset"] == 10
 
