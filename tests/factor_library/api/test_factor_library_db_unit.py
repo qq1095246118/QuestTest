@@ -12,6 +12,7 @@ from infrastructure.db.ssh_tunnel import DatabaseEndpoint, open_database_endpoin
     "sql",
     [
         "SELECT * FROM factor",
+        "SELECT * FROM factor;",
         "  select id FROM factor WHERE id = %s",
         "WITH latest_factor AS (SELECT * FROM factor) SELECT * FROM latest_factor",
     ],
@@ -83,6 +84,22 @@ def test_read_only_mysql_client_fetch_all_uses_dict_cursor_and_params(monkeypatc
     assert calls["connect_kwargs"]["connect_timeout"] == 10
     assert calls["connect_kwargs"]["read_timeout"] == 30
     assert calls["connect_kwargs"]["write_timeout"] == 30
+
+
+def test_read_only_mysql_client_from_settings_allows_host_and_port_override(monkeypatch):
+    monkeypatch.setattr("infrastructure.db.mysql_client.settings.factor_db_host", "settings-db.internal")
+    monkeypatch.setattr("infrastructure.db.mysql_client.settings.factor_db_port", 3306)
+    monkeypatch.setattr("infrastructure.db.mysql_client.settings.factor_db_name", "factor_db")
+    monkeypatch.setattr("infrastructure.db.mysql_client.settings.factor_db_user", "factor_app")
+    monkeypatch.setattr("infrastructure.db.mysql_client.settings.factor_db_password", "secret")
+
+    client = ReadOnlyMySQLClient.from_settings(host="127.0.0.1", port=3307)
+
+    assert client.host == "127.0.0.1"
+    assert client.port == 3307
+    assert client.database == "factor_db"
+    assert client.user == "factor_app"
+    assert client.password == "secret"
 
 
 def test_open_database_endpoint_yields_direct_endpoint_when_ssh_disabled():

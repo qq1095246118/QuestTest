@@ -36,11 +36,14 @@ def _strip_leading_comments(sql: str) -> str:
 
 def ensure_select_only(sql: str) -> None:
     statement = _strip_leading_comments(sql)
+    statement_without_trailing_semicolon = statement.rstrip()
+    if statement_without_trailing_semicolon.endswith(";"):
+        statement_without_trailing_semicolon = statement_without_trailing_semicolon[:-1].rstrip()
     if (
-        not statement
-        or ";" in statement
-        or not re.match(r"^(select|with)\b", statement, re.IGNORECASE)
-        or MUTATING_SQL_RE.search(statement)
+        not statement_without_trailing_semicolon
+        or ";" in statement_without_trailing_semicolon
+        or not re.match(r"^(select|with)\b", statement_without_trailing_semicolon, re.IGNORECASE)
+        or MUTATING_SQL_RE.search(statement_without_trailing_semicolon)
     ):
         raise ValueError("Only SELECT statements are allowed")
 
@@ -62,12 +65,10 @@ class ReadOnlyMySQLClient:
         self._connection = None
 
     @classmethod
-    def from_settings(cls, endpoint=None):
-        db_host = endpoint.host if endpoint is not None else settings.factor_db_host
-        db_port = endpoint.port if endpoint is not None else settings.factor_db_port
+    def from_settings(cls, host: str | None = None, port: int | None = None):
         return cls(
-            host=db_host,
-            port=db_port,
+            host=host or settings.factor_db_host,
+            port=port or settings.factor_db_port,
             database=settings.factor_db_name,
             user=settings.factor_db_user,
             password=settings.factor_db_password,
