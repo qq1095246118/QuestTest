@@ -14,28 +14,79 @@ MUTATING_SQL_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|truncate|create|replace|grant|revoke)\b",
     re.IGNORECASE,
 )
+INTO_FILE_SQL_RE = re.compile(r"\binto\s+(out|dump)file\b", re.IGNORECASE)
+LOCK_FUNCTION_SQL_RE = re.compile(r"\b(get_lock|release_lock)\s*\(", re.IGNORECASE)
 
 
-def _strip_leading_comments(sql: str) -> str:
-    stripped = sql.lstrip()
-    while True:
-        if stripped.startswith("--"):
-            line_end = stripped.find("\n")
-            if line_end == -1:
-                return ""
-            stripped = stripped[line_end + 1 :].lstrip()
+def _sql_code_view(sql: str) -> str:
+    chars = list(sql)
+    i = 0
+    quote: str | None = None
+
+    while i < len(chars):
+        char = chars[i]
+
+        if quote is not None:
+            chars[i] = " "
+            if char == "\\" and quote in {"'", '"'} and i + 1 < len(chars):
+                i += 1
+                chars[i] = " "
+            elif char == quote:
+                if i + 1 < len(chars) and chars[i + 1] == quote:
+                    i += 1
+                    chars[i] = " "
+                else:
+                    quote = None
+            i += 1
             continue
-        if stripped.startswith("/*"):
-            comment_end = stripped.find("*/")
-            if comment_end == -1:
-                return ""
-            stripped = stripped[comment_end + 2 :].lstrip()
+
+        if char in {"'", '"', "`"}:
+            quote = char
+            chars[i] = " "
+            i += 1
             continue
-        return stripped
+
+        if char == "-" and i + 1 < len(chars) and chars[i + 1] == "-":
+            chars[i] = " "
+            i += 1
+            chars[i] = " "
+            i += 1
+            while i < len(chars) and chars[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+
+        if char == "#":
+            chars[i] = " "
+            i += 1
+            while i < len(chars) and chars[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+
+        if char == "/" and i + 1 < len(chars) and chars[i + 1] == "*":
+            chars[i] = " "
+            i += 1
+            chars[i] = " "
+            i += 1
+            while i < len(chars):
+                end_of_comment = chars[i] == "*" and i + 1 < len(chars) and chars[i + 1] == "/"
+                chars[i] = " "
+                if end_of_comment:
+                    i += 1
+                    chars[i] = " "
+                    i += 1
+                    break
+                i += 1
+            continue
+
+        i += 1
+
+    return "".join(chars)
 
 
 def ensure_select_only(sql: str) -> None:
-    statement = _strip_leading_comments(sql)
+    statement = _sql_code_view(sql).lstrip()
     statement_without_trailing_semicolon = statement.rstrip()
     if statement_without_trailing_semicolon.endswith(";"):
         statement_without_trailing_semicolon = statement_without_trailing_semicolon[:-1].rstrip()
@@ -44,6 +95,8 @@ def ensure_select_only(sql: str) -> None:
         or ";" in statement_without_trailing_semicolon
         or not re.match(r"^(select|with)\b", statement_without_trailing_semicolon, re.IGNORECASE)
         or MUTATING_SQL_RE.search(statement_without_trailing_semicolon)
+        or INTO_FILE_SQL_RE.search(statement_without_trailing_semicolon)
+        or LOCK_FUNCTION_SQL_RE.search(statement_without_trailing_semicolon)
     ):
         raise ValueError("Only SELECT statements are allowed")
 
