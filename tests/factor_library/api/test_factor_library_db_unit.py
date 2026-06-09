@@ -298,7 +298,10 @@ def test_fetch_factor_list_db_page_queries_and_assembles_page():
     assert "f.created_by = %(created_by)s" in client.calls[1][1]
     assert "f.operator_by = %(operator_by)s" in client.calls[1][1]
     assert "fd.status = %(factor_detail_status)s" in client.calls[1][1]
-    assert "ORDER BY f.created_at ASC, f.id ASC" in client.calls[1][1]
+    assert "SELECT DISTINCT f.id" not in client.calls[1][1]
+    assert "AS sort_value" in client.calls[1][1]
+    assert "GROUP BY f.id" in client.calls[1][1]
+    assert "ORDER BY sort_value ASC, f.id ASC" in client.calls[1][1]
     assert client.calls[1][2]["factor_theme"] == "momentum"
     assert client.calls[1][2]["created_by"] == "alice"
     assert client.calls[1][2]["operator_by"] == "bob"
@@ -323,7 +326,8 @@ def test_fetch_factor_list_db_page_defaults_unknown_sort_by_to_id():
 
     page_sql = client.calls[1][1]
     assert "DROP TABLE" not in page_sql
-    assert "ORDER BY f.id ASC" in page_sql
+    assert "f.id AS sort_value" in page_sql
+    assert "ORDER BY sort_value ASC, f.id ASC" in page_sql
 
 
 def test_fetch_factor_list_db_page_defaults_unknown_sort_order_to_desc():
@@ -332,4 +336,39 @@ def test_fetch_factor_list_db_page_defaults_unknown_sort_order_to_desc():
     fetch_factor_list_db_page(client, FactorListQuery(sort_by="cn_name", sort_order="sideways"))
 
     page_sql = client.calls[1][1]
-    assert "ORDER BY f.cn_name DESC, f.id DESC" in page_sql
+    assert "ORDER BY sort_value DESC, f.id DESC" in page_sql
+
+
+def test_fetch_factor_list_db_page_keeps_first_detail_row_for_factor():
+    client = RecordingFactorClient(
+        fetch_one_rows=[{"total": 1}],
+        fetch_all_rows=[
+            [{"id": 1}],
+            [{"id": 1, "factor_name": "momentum"}],
+            [
+                {"id": 20, "factor_id": 1, "name": "latest_detail"},
+                {"id": 10, "factor_id": 1, "name": "older_detail"},
+            ],
+            [],
+        ],
+    )
+
+    result = fetch_factor_list_db_page(client, FactorListQuery())
+
+    assert result["items"][0]["factor_detail"] == {"id": 20, "factor_id": 1, "name": "latest_detail"}
+    assert "ORDER BY fd.factor_id ASC, fd.updated_at DESC, fd.id DESC" in client.calls[3][1]
+
+
+def test_fetch_factor_list_db_page_raises_clear_error_for_missing_factor_row():
+    client = RecordingFactorClient(
+        fetch_one_rows=[{"total": 2}],
+        fetch_all_rows=[
+            [{"id": 1}, {"id": 2}],
+            [{"id": 1, "factor_name": "momentum"}],
+            [],
+            [],
+        ],
+    )
+
+    with pytest.raises(AssertionError, match="Missing factor row for id 2"):
+        fetch_factor_list_db_page(client, FactorListQuery())

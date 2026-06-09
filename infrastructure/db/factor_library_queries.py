@@ -108,10 +108,11 @@ def fetch_factor_list_db_page(client: Any, query: FactorListQuery) -> dict[str, 
     sort_order = "ASC" if (query.sort_order or "").lower() == "asc" else "DESC"
     id_rows = client.fetch_all(
         f"""
-        SELECT DISTINCT f.id
+        SELECT f.id AS id, {sort_column} AS sort_value
         FROM factors f
         {where_sql}
-        ORDER BY {sort_column} {sort_order}, f.id {sort_order}
+        GROUP BY f.id, sort_value
+        ORDER BY sort_value {sort_order}, f.id {sort_order}
         LIMIT %(limit)s OFFSET %(offset)s
         """,
         page_params,
@@ -126,6 +127,8 @@ def fetch_factor_list_db_page(client: Any, query: FactorListQuery) -> dict[str, 
 
     items = []
     for factor_id in factor_ids:
+        if factor_id not in factors_by_id:
+            raise AssertionError(f"Missing factor row for id {factor_id}")
         factor = dict(factors_by_id[factor_id])
         factor["factor_detail"] = details_by_factor_id.get(factor_id)
         factor["themes"] = themes_by_factor_id.get(factor_id, [])
@@ -183,10 +186,14 @@ def _fetch_details(client: Any, factor_ids: list[Any]) -> dict[Any, dict[str, An
         FROM factors_details fd
         WHERE fd.factor_id IN %(factor_ids)s
           AND fd.is_sub_factor_id = 0
+        ORDER BY fd.factor_id ASC, fd.updated_at DESC, fd.id DESC
         """,
         {"factor_ids": tuple(factor_ids)},
     )
-    return {row["factor_id"]: row for row in rows}
+    details_by_factor_id: dict[Any, dict[str, Any]] = {}
+    for row in rows:
+        details_by_factor_id.setdefault(row["factor_id"], row)
+    return details_by_factor_id
 
 
 def _fetch_themes(client: Any, factor_ids: list[Any]) -> dict[Any, list[dict[str, Any]]]:
