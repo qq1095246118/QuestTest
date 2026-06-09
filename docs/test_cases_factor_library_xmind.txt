@@ -64,19 +64,19 @@
           返回明确参数错误，不返回 500 或错误排序数据
     数据对账
       FA-DB-01 校验分页总数
-        请求 listFactors 后按相同查询条件查询 DB factors 相关表
+        请求 listFactors，GET /api/v1/factors 后按相同查询条件查询 DB factors 相关表
           pagination.total 与 DB 总数一致
       FA-DB-02 校验当前页顺序
-        请求 listFactors 后按相同排序和分页条件查询 DB
+        请求 listFactors，GET /api/v1/factors 后按相同排序和分页条件查询 DB
           items 中 id 顺序与 DB 当前页 id 顺序一致
       FA-DB-03 校验因子基础字段
-        请求 listFactors 后按返回 id 查询 DB factors 表
+        请求 listFactors，GET /api/v1/factors 后按返回 id 查询 DB factors 表
           id、serial_number、serial_prefix、factor_name、cn_name、level、max_level、child_factor_count、created_by、operator_by、created_at、updated_at 与 DB 一致
       FA-DB-04 校验因子详情字段
-        请求 listFactors 后按 factor_id 查询 DB factors_details 表
+        请求 listFactors，GET /api/v1/factors 后按 factor_id 查询 DB factors_details 表
           factor_detail 中 name、status、strategy_status、update_interval、hit_count 与 DB 一致
       FA-DB-05 校验主题归属
-        请求 listFactors 后按 factor_id 查询 DB factor_theme_relations 和 themes
+        请求 listFactors，GET /api/v1/factors 后按 factor_id 查询 DB factor_theme_relations 和 themes
           接口返回 themes 数量、theme_key、theme_name、cn_name、status 与 DB 一致
 
   主题结构
@@ -89,10 +89,10 @@
           返回主题到母因子、子因子的层级结构
     一致性
       TH-03 因子列表主题与主题列表一致
-        对比 listFactors 返回的 themes 与 listThemes 返回的主题集合
+        请求 listFactors，GET /api/v1/factors，并请求 listThemes，GET /api/v1/themes
           因子列表中的每个 theme_id 都能在主题列表中找到
       TH-04 因子列表主题与主题树一致
-        对比 listFactors 返回的 themes 与 listFactorThemeTree 返回的主题节点
+        请求 listFactors，GET /api/v1/factors，并请求 listFactorThemeTree，GET /api/v1/factors/theme-tree
           因子列表中的每个主题归属都能在主题树中找到
 
   子因子
@@ -102,7 +102,7 @@
           返回子因子列表，子因子均关联到请求的母因子
     一致性
       SF-02 校验母因子子因子数量
-        对比 listFactors 中 child_factor_count 与 listSubFactors 返回数量
+        请求 listFactors，GET /api/v1/factors，并请求 listSubFactors，GET /api/v1/sub-factors?factor_id={factor_id}
           子因子数量与接口和 DB 关系表一致
 
   IC/IR评价
@@ -112,7 +112,7 @@
           返回 IC/IR 汇总指标，指标字段结构完整
     一致性
       IC-02 因子列表评价字段与 IC 汇总一致
-        当 listFactors 返回 IC/IR 字段时，对比 getFactorICSummary
+        请求 listFactors，GET /api/v1/factors，并请求 getFactorICSummary，GET /api/v1/factor-ic/factors/{factor_id}/summary
           列表评价字段与 IC 汇总接口一致
 
   审批流转
@@ -137,15 +137,15 @@
   数据一致性
     接口与 DB
       DC-01 因子列表与 DB 一致
-        对 listFactors 返回的当前页数据执行 DB 对账
+        请求 listFactors，GET /api/v1/factors 后对当前页数据执行 DB 对账
           分页、顺序、基础字段、详情字段、主题归属全部一致
     上下游接口
       DC-02 因子列表与主题接口一致
-        对比 listFactors、listThemes、listFactorThemeTree
+        请求 listFactors，GET /api/v1/factors，并请求 listThemes，GET /api/v1/themes 和 listFactorThemeTree，GET /api/v1/factors/theme-tree
           因子主题归属在上下游接口中一致
       DC-03 因子列表与子因子接口一致
-        对比 listFactors、listSubFactors
+        请求 listFactors，GET /api/v1/factors，并请求 listSubFactors，GET /api/v1/sub-factors?factor_id={factor_id}
           子因子数量和关联关系一致
       DC-04 因子列表与 IC 汇总接口一致
-        当 listFactors 返回 IC/IR 字段时，对比 getFactorICSummary
+        请求 listFactors，GET /api/v1/factors，并请求 getFactorICSummary，GET /api/v1/factor-ic/factors/{factor_id}/summary
           IC/IR 指标值一致
