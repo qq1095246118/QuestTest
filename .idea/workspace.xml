@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="项目结构变动">
+      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/base_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/auth_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/auth_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/binance_full_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/binance_usdm_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/coinglass_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_data_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_library_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_library_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/kline_data_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/open_interest_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/env.example" beforeDir="false" afterPath="$PROJECT_DIR$/config/env.example" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/env.prod" beforeDir="false" afterPath="$PROJECT_DIR$/config/env.prod" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/env.test" beforeDir="false" afterPath="$PROJECT_DIR$/config/env.test" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/factor_library_api_cases.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/test_symbols.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/AI_GENERATION_GUIDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/AI_GENERATION_GUIDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/kline_traditional_test_report.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-06-09-factor-library-api-automation.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-06-09-factor-library-api-automation-design.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_binance_full.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_binance_usdm.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_coinglass.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_data.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_kline_data.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_open_interest.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/assertions/dqc_asserts.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/assertions/factor_library_asserts.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/assertions/logic_asserts.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/db/factor_library_queries.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/db/mysql_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/db/ssh_tunnel.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/http/http_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pytest.ini" beforeDir="false" afterPath="$PROJECT_DIR$/pytest.ini" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/binance/api/test_binance_full_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/binance/api/test_binance_usdm_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/coinglass/api/test_coinglass_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_data/api/test_factor_data_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/api/test_auth_api_unit.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/api/test_factor_library_api_unit.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/api/test_factor_library_asserts_unit.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/api/test_factor_library_db_unit.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/api/test_factor_library_settings_unit.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/api/test_factor_list_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/kline/api/test_kline_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/open_interest/api/test_open_interest_api.py" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="26764" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;qq1095246118&quot;
+  }
+}</component>
+  <component name="GithubDefaultAccount">
+    <option name="defaultAccountId" value="9dc199da-2e6a-48c5-bf70-897f44c0d3fb" />
+  </component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/qq1095246118/QuestTest.git&quot;,
+    &quot;accountId&quot;: &quot;9dc199da-2e6a-48c5-bf70-897f44c0d3fb&quot;
+  }
+}</component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3DfFY1ch5CurLuMhgM1PXUPxTQ6" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python 测试.pytest (Admin 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (factors 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_binance_full_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_binance_usdm_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_coinglass_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_factor_data_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_kline_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_open_interest_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.factor_library.auth.test_login_api.TestLoginAPI 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.factor_library.factors.test_factor_list_api.TestFactorListAPI 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_binance_db_accuracy.test_binance_raw_and_metadata_db_accuracy 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_binance_full_api.test_bf_batch_bounds_param_002 的 pytest.executor&quot;: &quot;Debug&quot;,
+    &quot;Python 测试.tests.test_binance_full_api.test_bf_complete_boundary_001 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_coinglass_api.test_cg_controlled_summary_dqc_001 的 pytest.executor&quot;: &quot;Debug&quot;,
+    &quot;Python 测试.tests.test_kline_api.test_binance_full_usdm_kline_time_bounds_boundary_001 的 pytest.executor&quot;: &quot;Debug&quot;,
+    &quot;Python 测试.tests.test_kline_api.test_kd_usdm_raw_dqc_001 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_kline_api.test_kline_fetch_boundary_001 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_kline_api.test_kline_fetch_normal_001 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_kline_api.test_kline_fetch_param_error_001_missing_symbol 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_kline_api.test_kline_usdm_curated_normal_001 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.test_kline_api_cases.test_migrated_kline_api_cases 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python.a.executor&quot;: &quot;Run&quot;,
+    &quot;Python.fetch_selected_usdm_1h_klines.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;codex/kline-case-design&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/wrh/Downloads/QuestTest/docs&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/docs" />
+      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_kline_all_future_raw_1h" />
+      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_1h_usdm_kline_raw" />
+      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_kline_all_future_raw" />
+      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_usdm_funding_rate_raw" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/reports/1m" />
+      <recent name="$PROJECT_DIR$/reports/1h" />
+      <recent name="$PROJECT_DIR$/reports/all" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python 测试.pytest (Admin 内)">
+    <configuration name="a" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/tests/a.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest (Admin 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/Admin" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Admin&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest (factors 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/factors" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/factors&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="tests.factor_library.auth.test_login_api.TestLoginAPI 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.factor_library.auth.test_login_api.TestLoginAPI&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="tests.factor_library.factors.test_factor_list_api.TestFactorListAPI 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.factor_library.factors.test_factor_list_api.TestFactorListAPI&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python 测试.pytest (Admin 内)" />
+        <item itemvalue="Python 测试.pytest (factors 内)" />
+        <item itemvalue="Python 测试.tests.factor_library.factors.test_factor_list_api.TestFactorListAPI 的 pytest" />
+        <item itemvalue="Python 测试.tests.factor_library.auth.test_login_api.TestLoginAPI 的 pytest" />
+        <item itemvalue="Python.a" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-83fa46d5d5d4-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.33514.19" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration>$USER_HOME$/.subversion</configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="" />
+      <created>1778665260593</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1778665260593</updated>
+    </task>
+    <task id="LOCAL-00001" summary="数据中台用例+数据库数据验证 case">
+      <option name="closed" value="true" />
+      <created>1779087836190</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1779087836190</updated>
+    </task>
+    <task id="LOCAL-00002" summary="bug 修复">
+      <option name="closed" value="true" />
+      <created>1779163923559</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1779163923559</updated>
+    </task>
+    <task id="LOCAL-00003" summary="指定时间+指定市场+对比结果脚本">
+      <option name="closed" value="true" />
+      <created>1779176860542</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1779176860542</updated>
+    </task>
+    <task id="LOCAL-00004" summary="功能修复">
+      <option name="closed" value="true" />
+      <created>1779247503316</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1779247503316</updated>
+    </task>
+    <task id="LOCAL-00005" summary="bug 修复">
+      <option name="closed" value="true" />
+      <created>1779267517158</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1779267517158</updated>
+    </task>
+    <task id="LOCAL-00006" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1779420995121</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1779420995121</updated>
+    </task>
+    <task id="LOCAL-00007" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1779421042613</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1779421042613</updated>
+    </task>
+    <task id="LOCAL-00008" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1779532321346</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1779532321346</updated>
+    </task>
+    <task id="LOCAL-00009" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1780909299375</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1780909299375</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="数据中台用例+数据库数据验证 case" />
+    <MESSAGE value="指定时间+指定市场+对比结果脚本" />
+    <MESSAGE value="功能修复" />
+    <MESSAGE value="bug 修复" />
+    <MESSAGE value="项目结构变动" />
+    <option name="LAST_COMMIT_MESSAGE" value="项目结构变动" />
+  </component>
+</project>

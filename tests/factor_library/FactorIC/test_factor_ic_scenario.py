@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import allure
+import pytest
+
+from service.common.http.json_response_assertion import JSONResponseAssertionService
+from service.factor_library.factor_ic.factor_ic_assertions import FactorICAssertionService
+from service.factor_library.factor_ic.factor_ic_test_data import FactorICTestDataService
+from service.factor_library.factors.factor_test_data import FactorTestDataService
+
+
+@pytest.mark.factor_library_api
+@allure.feature("Factor Library API")
+@allure.story("Scenario")
+class TestFactorICScenario:
+    """FactorIC 连贯场景接口自动化用例集。
+
+    请求参数:
+        使用管理员 token 和真实因子 ID 串联 IC run、summary metrics、slice metrics 接口。
+    返回值:
+        无返回值；pytest 根据链路断言判断场景是否通过。
+    """
+
+    def first_factor_id(self, factor_resource_api) -> int:
+        """从因子列表派生一个真实因子 ID。
+
+        请求参数:
+            factor_resource_api: factor 模块 API fixture。
+        返回值:
+            因子 ID；列表为空时跳过当前用例。
+        """
+        body = factor_resource_api.list_factors(page=1, limit=1).json()
+        items = body.get("data", {}).get("items", [])
+        if not items:
+            pytest.skip("因子列表为空，无法派生 factor_id。")
+        return items[0]["id"]
+
+    def assert_ic_success(self, response, body) -> None:
+        """断言 FactorIC 成功响应符合接口自身规则。
+
+        请求参数:
+            response: FactorIC 接口原始 HTTP 响应对象。
+            body: FactorIC 接口返回的原始 JSON。
+        返回值:
+            无；响应错误时输出接口原始 JSON。
+        """
+        errors = FactorICAssertionService.success_errors(response.status_code, body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+
+    @allure.title("ICS-01 创建 IC run 后查询详情")
+    def test_ics_01_create_factor_and_ic_run_then_query_run_detail(
+        self,
+        factor_ic_api,
+        factor_resource_api,
+        test_data_factory,
+        resource_tracker,
+    ):
+        """Case ID: ICS-01
+        测试目的: 验证自动化因子创建 IC run 后可以查询运行详情。
+
+        请求参数:
+            创建 auto_test 因子，使用其 factor_id 创建 IC run。
+        返回值:
+            创建和详情查询接口都应返回成功响应；IC run 保留后由人工或定时任务清理。
+        """
+        payload = FactorTestDataService.build_factor_payload(factor_resource_api, test_data_factory, "ics_01")
+        create_factor_body = factor_resource_api.create_factor(payload).json()
+        factor_id = create_factor_body.get("data", {}).get("id")
+        if not factor_id:
+            JSONResponseAssertionService.fail_with_api_json(create_factor_body)
+        resource_tracker.track("factor", factor_id, lambda value: factor_resource_api.update_factor_status(value, 3))
+
+        create_run_response = factor_ic_api.create_run(FactorICTestDataService.build_run_payload(factor_id, "ics_01"))
+        create_run_body = create_run_response.json()
+        self.assert_ic_success(create_run_response, create_run_body)
+
+        run_id = create_run_body.get("data", {}).get("run_id")
+        if not run_id:
+            JSONResponseAssertionService.fail_with_api_json(create_run_body)
+        detail_response = factor_ic_api.get_run(run_id)
+        self.assert_ic_success(detail_response, detail_response.json())
+
+    @allure.title("ICS-02 upsert summary metrics 后查询 summary metrics")
+    def test_ics_02_batch_upsert_summary_metrics_then_query_summary_metrics(
+        self,
+        factor_ic_api,
+        factor_resource_api,
+        test_data_factory,
+        resource_tracker,
+    ):
+        """Case ID: ICS-02
+        测试目的: 验证写入自动化因子 summary metrics 后可以按 factor_id 查询。
+
+        请求参数:
+            创建 auto_test 因子，写入一条 summary metrics。
+        返回值:
+            upsert 和查询接口都应返回成功响应；IC 指标保留后由人工或定时任务清理。
+        """
+        payload = FactorTestDataService.build_factor_payload(factor_resource_api, test_data_factory, "ics_02")
+        create_factor_body = factor_resource_api.create_factor(payload).json()
+        factor_id = create_factor_body.get("data", {}).get("id")
+        if not factor_id:
+            JSONResponseAssertionService.fail_with_api_json(create_factor_body)
+        resource_tracker.track("factor", factor_id, lambda value: factor_resource_api.update_factor_status(value, 3))
+
+        run_id = test_data_factory.name("ic_run", "ics_02")
+        upsert_response = factor_ic_api.batch_upsert_summary_metrics([FactorICTestDataService.build_summary_metric_item(run_id, factor_id)])
+        self.assert_ic_success(upsert_response, upsert_response.json())
+
+        list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=False, limit=5)
+        list_body = list_response.json()
+        self.assert_ic_success(list_response, list_body)
+        list_errors = FactorICAssertionService.metric_list_contains_errors(
+            list_body,
+            expected_factor_id=factor_id,
+            expected_run_id=run_id,
+            required_metric_keys=("mean_ic",),
+        )
+        if list_errors:
+            JSONResponseAssertionService.fail_with_api_json(list_body)
+
+    @allure.title("ICS-03 upsert slice metrics 后查询 slice metrics")
+    def test_ics_03_batch_upsert_slice_metrics_then_query_slice_metrics(
+        self,
+        factor_ic_api,
+        factor_resource_api,
+        test_data_factory,
+        resource_tracker,
+    ):
+        """Case ID: ICS-03
+        测试目的: 验证写入自动化因子 slice metrics 后可以按 factor_id 查询。
+
+        请求参数:
+            创建 auto_test 因子，写入一条 slice metrics。
+        返回值:
+            upsert 和查询接口都应返回成功响应；IC 指标保留后由人工或定时任务清理。
+        """
+        payload = FactorTestDataService.build_factor_payload(factor_resource_api, test_data_factory, "ics_03")
+        create_factor_body = factor_resource_api.create_factor(payload).json()
+        factor_id = create_factor_body.get("data", {}).get("id")
+        if not factor_id:
+            JSONResponseAssertionService.fail_with_api_json(create_factor_body)
+        resource_tracker.track("factor", factor_id, lambda value: factor_resource_api.update_factor_status(value, 3))
+
+        run_id = test_data_factory.name("ic_run", "ics_03")
+        upsert_response = factor_ic_api.batch_upsert_slice_metrics([FactorICTestDataService.build_slice_metric_item(run_id, factor_id)])
+        self.assert_ic_success(upsert_response, upsert_response.json())
+
+        list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=False, symbol="BTCUSDT", limit=5)
+        list_body = list_response.json()
+        self.assert_ic_success(list_response, list_body)
+        list_errors = FactorICAssertionService.metric_list_contains_errors(
+            list_body,
+            expected_factor_id=factor_id,
+            expected_run_id=run_id,
+            expected_symbol="BTCUSDT",
+            required_metric_keys=("ic",),
+        )
+        if list_errors:
+            JSONResponseAssertionService.fail_with_api_json(list_body)
