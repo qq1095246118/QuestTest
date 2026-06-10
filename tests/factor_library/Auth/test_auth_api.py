@@ -23,34 +23,6 @@ class TestAuthAPI:
         无返回值；pytest 根据类内用例断言判断接口是否通过。
     """
 
-    def assert_auth_login_success(self, response, body, expected_email: str) -> None:
-        """断言登录成功响应符合接口自身规则。
-
-        请求参数:
-            response: 登录接口原始 HTTP 响应对象。
-            body: 登录接口返回的原始 JSON。
-            expected_email: 期望登录邮箱。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AuthAssertionService.login_success_errors(response.status_code, body, expected_email)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
-    def assert_auth_me_success(self, response, body, expected_email: str) -> None:
-        """断言当前用户资料响应符合接口自身规则。
-
-        请求参数:
-            response: /me 接口原始 HTTP 响应对象。
-            body: /me 接口返回的原始 JSON。
-            expected_email: 期望邮箱。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AuthAssertionService.me_success_errors(response.status_code, body, expected_email)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("AU-01 有效账号登录成功")
     def test_au_01_login_success(self):
         """Case ID: AU-01
@@ -69,7 +41,9 @@ class TestAuthAPI:
         response = AuthAPI().login()
         body = response.json()
 
-        self.assert_auth_login_success(response, body, settings.factor_email)
+        errors = AuthAssertionService.login_success_errors(response.status_code, body, settings.factor_email)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
 
     @allure.title("AU-02 错误密码登录失败")
     def test_au_02_login_wrong_password_fails(self):
@@ -219,4 +193,6 @@ class TestAuthAPI:
         response = AuthAPI().me(token)
         body = response.json()
 
-        self.assert_auth_me_success(response, body, settings.factor_email)
+        errors = AuthAssertionService.me_success_errors(response.status_code, body, settings.factor_email)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)

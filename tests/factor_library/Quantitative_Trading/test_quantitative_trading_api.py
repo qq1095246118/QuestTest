@@ -22,19 +22,6 @@ class TestQuantitativeTradingAPI:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
 
-    def assert_admin_success(self, response, body) -> None:
-        """断言 Admin 成功响应符合接口自身规则。
-
-        请求参数:
-            response: Admin 接口原始 HTTP 响应对象。
-            body: Admin 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     def create_quant_payload(self, test_data_factory, case_id: str) -> dict:
         """生成自动化量化账户创建参数。
 
@@ -58,7 +45,9 @@ class TestQuantitativeTradingAPI:
         """
         response = admin_api.create_quant_account(self.create_quant_payload(test_data_factory, case_id))
         body = response.json()
-        self.assert_admin_success(response, body)
+        errors = AdminAssertionService.success_errors(response.status_code, body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         return body["data"]
 
     @allure.title("ADQ-01 量化账户列表查询成功")
@@ -72,7 +61,10 @@ class TestQuantitativeTradingAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_quant_accounts()
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADQ-02 创建量化账户成功")
     def test_adq_02_create_quant_account_success(self, admin_api, test_data_factory, resource_tracker):
@@ -125,7 +117,10 @@ class TestQuantitativeTradingAPI:
         resource_tracker.track("quant_account", account_id, lambda value: admin_api.delete_quant_account(value))
 
         response = admin_api.get_quant_account(account_id)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADQ-06 更新量化账户成功")
     def test_adq_06_update_quant_account_success(self, admin_api, test_data_factory, resource_tracker):
@@ -144,7 +139,10 @@ class TestQuantitativeTradingAPI:
         resource_tracker.track("quant_account", account_id, lambda value: admin_api.delete_quant_account(value))
 
         response = admin_api.update_quant_account(account_id, {"api_description": "updated"})
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADQ-07 更新量化账户资产成功")
     def test_adq_07_update_quant_account_assets_success(self, admin_api, test_data_factory, resource_tracker):
@@ -163,7 +161,10 @@ class TestQuantitativeTradingAPI:
         resource_tracker.track("quant_account", account_id, lambda value: admin_api.delete_quant_account(value))
 
         response = admin_api.update_quant_account_assets(account_id, 100.12)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADQ-08 查询存储量化账户实时信息")
     def test_adq_08_get_stored_quant_account_info_success(self, admin_api, exchange_test_config, test_data_factory, resource_tracker):
@@ -191,7 +192,10 @@ class TestQuantitativeTradingAPI:
         resource_tracker.track("quant_account", account_id, lambda value: admin_api.delete_quant_account(value))
 
         response = admin_api.get_quant_account_info(account_id, account_type=exchange_test_config["account_type"])
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADQ-09 直接交易所账户查询成功")
     def test_adq_09_direct_exchange_account_query_success(self, admin_api, exchange_test_config):
@@ -212,7 +216,10 @@ class TestQuantitativeTradingAPI:
                 "account_type": exchange_test_config["account_type"],
             }
         )
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADQ-10 错误交易所 key 查询失败")
     def test_adq_10_direct_exchange_account_query_wrong_key_returns_error(self, admin_api):
@@ -266,4 +273,7 @@ class TestQuantitativeTradingAPI:
             JSONResponseAssertionService.fail_with_api_json(data)
 
         response = admin_api.delete_quant_account(account_id)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)

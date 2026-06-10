@@ -20,19 +20,6 @@ class TestAdminScenario:
         无返回值；pytest 根据链路断言判断场景是否通过。
     """
 
-    def assert_admin_success(self, response, body) -> None:
-        """断言 Admin 成功响应符合接口自身规则。
-
-        请求参数:
-            response: Admin 接口原始 HTTP 响应对象。
-            body: Admin 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("ADS-01 角色模板创建-列表-详情-更新-权限名-删除链路")
     def test_ads_01_role_template_lifecycle(self, admin_api, test_data_factory):
         """Case ID: ADS-01
@@ -47,22 +34,40 @@ class TestAdminScenario:
         create_response = admin_api.create_role_template(
             {"role_name": role_name, "display_name": role_name, "description": "auto", "permissions": []}
         )
-        self.assert_admin_success(create_response, create_response.json())
+        create_response_body = create_response.json()
+        errors = AdminAssertionService.success_errors(create_response.status_code, create_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_response_body)
 
         list_response = admin_api.list_role_templates()
-        self.assert_admin_success(list_response, list_response.json())
+        list_response_body = list_response.json()
+        errors = AdminAssertionService.success_errors(list_response.status_code, list_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_response_body)
 
         detail_response = admin_api.get_role_template(role_name)
-        self.assert_admin_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = AdminAssertionService.success_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
         update_response = admin_api.update_role_template(role_name, {"description": "updated"})
-        self.assert_admin_success(update_response, update_response.json())
+        update_response_body = update_response.json()
+        errors = AdminAssertionService.success_errors(update_response.status_code, update_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(update_response_body)
 
         permission_response = admin_api.list_role_template_permission_names(role_name)
-        self.assert_admin_success(permission_response, permission_response.json())
+        permission_response_body = permission_response.json()
+        errors = AdminAssertionService.success_errors(permission_response.status_code, permission_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(permission_response_body)
 
         delete_response = admin_api.delete_role_template(role_name)
-        self.assert_admin_success(delete_response, delete_response.json())
+        delete_response_body = delete_response.json()
+        errors = AdminAssertionService.success_errors(delete_response.status_code, delete_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(delete_response_body)
 
     @allure.title("ADS-02 用户权限创建-替换-查询-删除链路")
     def test_ads_02_user_permission_lifecycle(self, admin_api, test_data_factory):
@@ -79,17 +84,28 @@ class TestAdminScenario:
             {"email": email, "password": "Aa123456789!", "display_name": email, "role": "admin"}
         )
         create_body = create_response.json()
-        self.assert_admin_success(create_response, create_body)
+        errors = AdminAssertionService.success_errors(create_response.status_code, create_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
 
         set_response = admin_api.replace_user_permissions(user_id, [])
-        self.assert_admin_success(set_response, set_response.json())
+        set_response_body = set_response.json()
+        errors = AdminAssertionService.success_errors(set_response.status_code, set_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(set_response_body)
 
         get_response = admin_api.get_user_permissions(user_id)
-        self.assert_admin_success(get_response, get_response.json())
+        get_response_body = get_response.json()
+        errors = AdminAssertionService.success_errors(get_response.status_code, get_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(get_response_body)
 
         delete_response = admin_api.delete_user(user_id)
-        self.assert_admin_success(delete_response, delete_response.json())
+        delete_response_body = delete_response.json()
+        errors = AdminAssertionService.success_errors(delete_response.status_code, delete_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(delete_response_body)
 
     @allure.title("ADS-04 提示词创建-列表-更新链路")
     def test_ads_04_prompt_lifecycle(self, admin_api, test_data_factory):
@@ -112,11 +128,19 @@ class TestAdminScenario:
             }
         )
         create_body = create_response.json()
-        self.assert_admin_success(create_response, create_body)
+        errors = AdminAssertionService.success_errors(create_response.status_code, create_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         prompt_id = create_body["data"]["id"]
 
         list_response = admin_api.list_prompts(name=name, limit=5)
-        self.assert_admin_success(list_response, list_response.json())
+        list_response_body = list_response.json()
+        errors = AdminAssertionService.success_errors(list_response.status_code, list_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_response_body)
 
         update_response = admin_api.update_prompt(prompt_id, {"user_prompt": "updated"})
-        self.assert_admin_success(update_response, update_response.json())
+        update_response_body = update_response.json()
+        errors = AdminAssertionService.success_errors(update_response.status_code, update_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(update_response_body)

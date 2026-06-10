@@ -45,19 +45,6 @@ class TestFactorICAPI:
         """
         return FactorTestDataService.first_sub_factor_id(factor_resource_api)
 
-    def assert_factor_ic_success(self, response, body) -> None:
-        """断言 FactorIC 成功响应符合接口自身规则。
-
-        请求参数:
-            response: FactorIC 接口原始 HTTP 响应对象。
-            body: FactorIC 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = FactorICAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("IC-01 因子 IC summary 查询成功")
     def test_ic_01_factor_summary_success_with_real_factor_id(self, factor_ic_api):
         """Case ID: IC-01
@@ -70,7 +57,10 @@ class TestFactorICAPI:
         """
         factor_id = FactorICTestDataService.first_factor_id_with_summary_metric(factor_ic_api)
         response = factor_ic_api.get_factor_summary(factor_id, ic_scope="time_series")
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-02 不存在因子 IC summary 返回明确结果")
     def test_ic_02_factor_summary_nonexistent_factor_handles_404_or_empty_data(self, factor_ic_api):
@@ -100,7 +90,10 @@ class TestFactorICAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = factor_ic_api.get_factor_by_symbol(self.first_factor_id(factor_resource_api), ic_scope="time_series")
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-04 因子 slice-metrics 查询成功")
     def test_ic_04_factor_slice_metrics_success(self, factor_ic_api, factor_resource_api):
@@ -113,7 +106,10 @@ class TestFactorICAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = factor_ic_api.get_factor_slice_metrics(self.first_factor_id(factor_resource_api), ic_scope="time_series")
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-05 因子 symbol-window-metrics 查询成功")
     def test_ic_05_factor_symbol_window_metrics_success(self, factor_ic_api, factor_resource_api):
@@ -130,7 +126,10 @@ class TestFactorICAPI:
             universe_key="main",
             limit=5,
         )
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-06 子因子 summary 查询成功")
     def test_ic_06_sub_factor_summary_success_with_real_sub_factor_id(self, factor_ic_api):
@@ -147,7 +146,10 @@ class TestFactorICAPI:
             sub_factor_id,
             ic_scope="time_series",
         )
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-07 子因子 by-symbol 查询成功")
     def test_ic_07_sub_factor_by_symbol_success(self, factor_ic_api, factor_resource_api):
@@ -163,7 +165,10 @@ class TestFactorICAPI:
             self.first_sub_factor_id(factor_resource_api),
             ic_scope="time_series",
         )
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-08 子因子 slice-metrics 查询成功")
     def test_ic_08_sub_factor_slice_metrics_success(self, factor_ic_api, factor_resource_api):
@@ -179,7 +184,10 @@ class TestFactorICAPI:
             self.first_sub_factor_id(factor_resource_api),
             ic_scope="time_series",
         )
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-09 子因子 symbol-window-metrics 查询成功")
     def test_ic_09_sub_factor_symbol_window_metrics_success(self, factor_ic_api, factor_resource_api):
@@ -196,7 +204,10 @@ class TestFactorICAPI:
             universe_key="main",
             limit=5,
         )
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-10 IC 汇总指标列表查询成功")
     def test_ic_10_list_summary_metrics_success(self, factor_ic_api):
@@ -209,7 +220,10 @@ class TestFactorICAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = factor_ic_api.list_summary_metrics(limit=5)
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-11 批量 upsert IC 汇总指标返回明确结果")
     def test_ic_11_batch_upsert_summary_metrics_success_with_auto_factor(
@@ -236,11 +250,16 @@ class TestFactorICAPI:
 
         run_id = test_data_factory.name("ic_run", "ic_11")
         response = factor_ic_api.batch_upsert_summary_metrics([FactorICTestDataService.build_summary_metric_item(run_id, factor_id)])
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
         list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=False, limit=5)
         list_body = list_response.json()
-        self.assert_factor_ic_success(list_response, list_body)
+        errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_body)
         list_errors = FactorICAssertionService.metric_list_contains_errors(
             list_body,
             expected_factor_id=factor_id,
@@ -261,7 +280,10 @@ class TestFactorICAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = factor_ic_api.list_slice_metrics(limit=5)
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-13 批量 upsert IC 切片指标返回明确结果")
     def test_ic_13_batch_upsert_slice_metrics_success_with_auto_factor(
@@ -288,11 +310,16 @@ class TestFactorICAPI:
 
         run_id = test_data_factory.name("ic_run", "ic_13")
         response = factor_ic_api.batch_upsert_slice_metrics([FactorICTestDataService.build_slice_metric_item(run_id, factor_id)])
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
         list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=False, symbol="BTCUSDT", limit=5)
         list_body = list_response.json()
-        self.assert_factor_ic_success(list_response, list_body)
+        errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_body)
         list_errors = FactorICAssertionService.metric_list_contains_errors(
             list_body,
             expected_factor_id=factor_id,
@@ -314,7 +341,10 @@ class TestFactorICAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = factor_ic_api.list_runs(limit=5)
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-15 创建 IC 运行记录成功")
     def test_ic_15_create_ic_run_success(self, factor_ic_api, factor_resource_api, test_data_factory, resource_tracker):
@@ -335,13 +365,18 @@ class TestFactorICAPI:
 
         response = factor_ic_api.create_run(FactorICTestDataService.build_run_payload(factor_id, "ic_15"))
         body = response.json()
-        self.assert_factor_ic_success(response, body)
+        errors = FactorICAssertionService.success_errors(response.status_code, body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
 
         run_id = body.get("data", {}).get("run_id")
         if not run_id:
             JSONResponseAssertionService.fail_with_api_json(body)
         detail_response = factor_ic_api.get_run(run_id)
-        self.assert_factor_ic_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = FactorICAssertionService.success_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
     @allure.title("IC-16 查询 IC 运行记录详情成功")
     def test_ic_16_get_ic_run_success(self, factor_ic_api):
@@ -354,7 +389,10 @@ class TestFactorICAPI:
             详情接口应返回成功响应。
         """
         response = factor_ic_api.get_run(FactorICTestDataService.first_run_id(factor_ic_api))
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-17 查询不存在 IC 运行记录失败")
     def test_ic_17_get_nonexistent_ic_run_fails(self, factor_ic_api):
@@ -384,7 +422,10 @@ class TestFactorICAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = factor_ic_api.list_scoring_standards(coin_category="main")
-        self.assert_factor_ic_success(response, response.json())
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-19 未带 token 查询 IC summary 失败")
     def test_ic_19_no_token_summary_unauthorized(self):

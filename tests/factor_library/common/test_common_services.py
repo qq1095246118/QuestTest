@@ -1,3 +1,6 @@
+import requests
+
+from service.common.http.http_client import HTTPClient
 from service.factor_library.common.auth_session import AuthSessionService
 from service.factor_library.common.resource_tracker import ResourceTracker
 from service.factor_library.common.test_data_factory import TestDataFactory
@@ -90,3 +93,63 @@ class TestCommonServices:
         token = AuthSessionService.extract_token(body)
 
         assert token == "jwt-token"
+
+    def test_http_client_retries_ssl_error_and_uses_60_second_timeout(self, monkeypatch):
+        """验证 HTTPClient 会重试临时 SSL 断连并默认使用 60 秒连接和读取超时。
+
+        请求参数:
+            使用 monkeypatch 模拟第一次 requests.request 抛出 SSLError，第二次返回成功响应。
+        返回值:
+            HTTPClient.request 应返回第二次成功响应，且两次请求都使用 timeout=(60, 60)。
+        """
+        calls = []
+
+        class FakeResponse:
+            """模拟 requests.Response 成功响应。
+
+            请求参数:
+                无。
+            返回值:
+                提供 status_code、url 和 raise_for_status 供 HTTPClient 使用。
+            """
+
+            status_code = 200
+            url = "https://test-factor-backend.questvector.ai/api/v1/admin/role-templates"
+
+            def raise_for_status(self):
+                """模拟成功响应不抛出 HTTPError。
+
+                请求参数:
+                    无。
+                返回值:
+                    None。
+                """
+                return None
+
+        def fake_request(method, url, **kwargs):
+            """模拟 requests.request 的临时 SSL 失败和后续成功。
+
+            请求参数:
+                method: HTTP 方法。
+                url: 请求地址。
+                **kwargs: HTTPClient 透传的请求参数。
+            返回值:
+                第二次调用返回 FakeResponse；第一次调用抛出 SSLError。
+            """
+            calls.append({"method": method, "url": url, "kwargs": kwargs})
+            if len(calls) == 1:
+                raise requests.exceptions.SSLError("unexpected eof")
+            return FakeResponse()
+
+        monkeypatch.setattr(requests, "request", fake_request)
+        monkeypatch.setattr(HTTPClient.request.retry, "sleep", lambda retry_state: None)
+
+        response = HTTPClient.request(
+            "GET",
+            "https://test-factor-backend.questvector.ai/api/v1/admin/role-templates",
+        )
+
+        assert response.status_code == 200
+        assert len(calls) == 2
+        assert calls[0]["kwargs"]["timeout"] == (60, 60)
+        assert calls[1]["kwargs"]["timeout"] == (60, 60)

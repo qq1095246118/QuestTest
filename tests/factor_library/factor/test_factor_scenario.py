@@ -20,19 +20,6 @@ class TestFactorScenario:
         无返回值；pytest 根据链路断言判断场景是否通过。
     """
 
-    def assert_factor_success(self, response, body) -> None:
-        """断言 factor 模块成功响应符合接口自身规则。
-
-        请求参数:
-            response: factor 模块接口原始 HTTP 响应对象。
-            body: factor 模块接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("FS-01 主题创建-列表-详情-更新-状态链路")
     def test_fs_01_theme_lifecycle_create_list_detail_update_status(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: FS-01
@@ -46,7 +33,9 @@ class TestFactorScenario:
         name = test_data_factory.name("theme", "fs_01")
         create_response = factor_resource_api.create_theme({"theme_key": name, "theme_name": name, "cn_name": name})
         create_body = create_response.json()
-        self.assert_factor_success(create_response, create_body)
+        errors = FactorAssertionService.success_with_data_errors(create_response.status_code, create_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         theme_id = create_body["data"]["id"]
         resource_tracker.track("theme", theme_id, lambda value: factor_resource_api.update_theme_status(value, 3))
 
@@ -56,13 +45,22 @@ class TestFactorScenario:
         assert any(item.get("theme_key") == name for item in items)
 
         detail_response = factor_resource_api.get_theme(theme_id)
-        self.assert_factor_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = FactorAssertionService.success_with_data_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
         update_response = factor_resource_api.update_theme(theme_id, {"cn_name": f"{name}_updated"})
-        self.assert_factor_success(update_response, update_response.json())
+        update_response_body = update_response.json()
+        errors = FactorAssertionService.success_with_data_errors(update_response.status_code, update_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(update_response_body)
 
         status_response = factor_resource_api.update_theme_status(theme_id, 3)
-        self.assert_factor_success(status_response, status_response.json())
+        status_response_body = status_response.json()
+        errors = FactorAssertionService.success_with_data_errors(status_response.status_code, status_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(status_response_body)
 
     @allure.title("FS-02 因子创建-列表-详情-更新-状态链路")
     def test_fs_02_factor_lifecycle_create_list_detail_update_status(self, factor_resource_api, test_data_factory, resource_tracker):
@@ -78,7 +76,9 @@ class TestFactorScenario:
         name = payload["factor_name"]
         create_response = factor_resource_api.create_factor(payload)
         create_body = create_response.json()
-        self.assert_factor_success(create_response, create_body)
+        errors = FactorAssertionService.success_with_data_errors(create_response.status_code, create_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         factor_id = create_body["data"]["id"]
         resource_tracker.track("factor", factor_id, lambda value: factor_resource_api.update_factor_status(value, 3))
 
@@ -86,13 +86,22 @@ class TestFactorScenario:
         assert list_body.get("success") is True
 
         detail_response = factor_resource_api.get_factor(factor_id)
-        self.assert_factor_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = FactorAssertionService.success_with_data_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
         update_response = factor_resource_api.update_factor(factor_id, {"cn_name": f"{name}_updated"})
-        self.assert_factor_success(update_response, update_response.json())
+        update_response_body = update_response.json()
+        errors = FactorAssertionService.success_with_data_errors(update_response.status_code, update_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(update_response_body)
 
         status_response = factor_resource_api.update_factor_status(factor_id, 3)
-        self.assert_factor_success(status_response, status_response.json())
+        status_response_body = status_response.json()
+        errors = FactorAssertionService.success_with_data_errors(status_response.status_code, status_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(status_response_body)
 
     @allure.title("FS-03 子因子创建-列表-详情-更新-状态-refresh 链路")
     def test_fs_03_sub_factor_lifecycle_create_list_detail_update_status_refresh(self, factor_resource_api, test_data_factory, resource_tracker):
@@ -108,7 +117,9 @@ class TestFactorScenario:
         name = payload["sub_factor_name"]
         create_response = factor_resource_api.create_sub_factor(payload)
         create_body = create_response.json()
-        self.assert_factor_success(create_response, create_body)
+        errors = FactorAssertionService.success_with_data_errors(create_response.status_code, create_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         sub_factor_id = create_body["data"]["id"]
         resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
 
@@ -116,13 +127,22 @@ class TestFactorScenario:
         assert list_body.get("success") is True
 
         detail_response = factor_resource_api.get_sub_factor(sub_factor_id)
-        self.assert_factor_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = FactorAssertionService.success_with_data_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
         update_response = factor_resource_api.update_sub_factor(sub_factor_id, {"cn_name": f"{name}_updated"})
-        self.assert_factor_success(update_response, update_response.json())
+        update_response_body = update_response.json()
+        errors = FactorAssertionService.success_with_data_errors(update_response.status_code, update_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(update_response_body)
 
         status_response = factor_resource_api.update_sub_factor_status(sub_factor_id, 3)
-        self.assert_factor_success(status_response, status_response.json())
+        status_response_body = status_response.json()
+        errors = FactorAssertionService.success_with_data_errors(status_response.status_code, status_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(status_response_body)
 
         try:
             refresh_response = factor_resource_api.refresh_sub_factor(sub_factor_id)

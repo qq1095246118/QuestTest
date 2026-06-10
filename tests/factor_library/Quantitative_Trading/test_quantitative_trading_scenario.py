@@ -20,19 +20,6 @@ class TestQuantitativeTradingScenario:
         无返回值；pytest 根据链路断言判断场景是否通过。
     """
 
-    def assert_quant_success(self, response, body) -> None:
-        """断言 Quantitative_Trading 成功响应符合接口自身规则。
-
-        请求参数:
-            response: 量化交易接口原始 HTTP 响应对象。
-            body: 量化交易接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("QT-01 量化账户创建-列表-详情-更新-资产-删除链路")
     def test_qt_01_quant_account_lifecycle(self, admin_api, test_data_factory):
         """Case ID: QT-01
@@ -46,20 +33,37 @@ class TestQuantitativeTradingScenario:
         payload = AdminTestDataService.build_quant_account_payload(test_data_factory, "qt_01")
         create_response = admin_api.create_quant_account(payload)
         create_body = create_response.json()
-        self.assert_quant_success(create_response, create_body)
+        errors = AdminAssertionService.success_errors(create_response.status_code, create_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         account_id = create_body["data"]["id"]
 
         list_response = admin_api.list_quant_accounts(exchange="binance")
-        self.assert_quant_success(list_response, list_response.json())
+        list_response_body = list_response.json()
+        errors = AdminAssertionService.success_errors(list_response.status_code, list_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_response_body)
 
         detail_response = admin_api.get_quant_account(account_id)
-        self.assert_quant_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = AdminAssertionService.success_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
         update_response = admin_api.update_quant_account(account_id, {"api_description": "updated"})
-        self.assert_quant_success(update_response, update_response.json())
+        update_response_body = update_response.json()
+        errors = AdminAssertionService.success_errors(update_response.status_code, update_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(update_response_body)
 
         asset_response = admin_api.update_quant_account_assets(account_id, 1.23)
-        self.assert_quant_success(asset_response, asset_response.json())
+        asset_response_body = asset_response.json()
+        errors = AdminAssertionService.success_errors(asset_response.status_code, asset_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(asset_response_body)
 
         delete_response = admin_api.delete_quant_account(account_id)
-        self.assert_quant_success(delete_response, delete_response.json())
+        delete_response_body = delete_response.json()
+        errors = AdminAssertionService.success_errors(delete_response.status_code, delete_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(delete_response_body)

@@ -35,19 +35,6 @@ class TestFactorICScenario:
             pytest.skip("因子列表为空，无法派生 factor_id。")
         return items[0]["id"]
 
-    def assert_ic_success(self, response, body) -> None:
-        """断言 FactorIC 成功响应符合接口自身规则。
-
-        请求参数:
-            response: FactorIC 接口原始 HTTP 响应对象。
-            body: FactorIC 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = FactorICAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("ICS-01 创建 IC run 后查询详情")
     def test_ics_01_create_factor_and_ic_run_then_query_run_detail(
         self,
@@ -73,13 +60,18 @@ class TestFactorICScenario:
 
         create_run_response = factor_ic_api.create_run(FactorICTestDataService.build_run_payload(factor_id, "ics_01"))
         create_run_body = create_run_response.json()
-        self.assert_ic_success(create_run_response, create_run_body)
+        errors = FactorICAssertionService.success_errors(create_run_response.status_code, create_run_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(create_run_body)
 
         run_id = create_run_body.get("data", {}).get("run_id")
         if not run_id:
             JSONResponseAssertionService.fail_with_api_json(create_run_body)
         detail_response = factor_ic_api.get_run(run_id)
-        self.assert_ic_success(detail_response, detail_response.json())
+        detail_response_body = detail_response.json()
+        errors = FactorICAssertionService.success_errors(detail_response.status_code, detail_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
     @allure.title("ICS-02 upsert summary metrics 后查询 summary metrics")
     def test_ics_02_batch_upsert_summary_metrics_then_query_summary_metrics(
@@ -106,11 +98,16 @@ class TestFactorICScenario:
 
         run_id = test_data_factory.name("ic_run", "ics_02")
         upsert_response = factor_ic_api.batch_upsert_summary_metrics([FactorICTestDataService.build_summary_metric_item(run_id, factor_id)])
-        self.assert_ic_success(upsert_response, upsert_response.json())
+        upsert_response_body = upsert_response.json()
+        errors = FactorICAssertionService.success_errors(upsert_response.status_code, upsert_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(upsert_response_body)
 
         list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=False, limit=5)
         list_body = list_response.json()
-        self.assert_ic_success(list_response, list_body)
+        errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_body)
         list_errors = FactorICAssertionService.metric_list_contains_errors(
             list_body,
             expected_factor_id=factor_id,
@@ -145,11 +142,16 @@ class TestFactorICScenario:
 
         run_id = test_data_factory.name("ic_run", "ics_03")
         upsert_response = factor_ic_api.batch_upsert_slice_metrics([FactorICTestDataService.build_slice_metric_item(run_id, factor_id)])
-        self.assert_ic_success(upsert_response, upsert_response.json())
+        upsert_response_body = upsert_response.json()
+        errors = FactorICAssertionService.success_errors(upsert_response.status_code, upsert_response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(upsert_response_body)
 
         list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=False, symbol="BTCUSDT", limit=5)
         list_body = list_response.json()
-        self.assert_ic_success(list_response, list_body)
+        errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(list_body)
         list_errors = FactorICAssertionService.metric_list_contains_errors(
             list_body,
             expected_factor_id=factor_id,

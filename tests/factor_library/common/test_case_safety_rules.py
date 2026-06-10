@@ -92,6 +92,34 @@ class TestCaseSafetyRules:
 
         assert violations == []
 
+    def test_executable_case_files_do_not_extract_assertion_methods(self):
+        """验证可执行接口用例文件不把断言提取成 case 内公共方法。
+
+        请求参数:
+            扫描 tests/factor_library 下除 common 外的 test_*.py 文件。
+        返回值:
+            无返回值；发现 def assert_* 或 self.assert_* 调用时失败。
+        """
+        violations = []
+
+        for path in self.case_root.rglob("test_*.py"):
+            if "common" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name.startswith("assert_"):
+                    violations.append(f"{path.relative_to(self.case_root.parent)}::{node.name}")
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr.startswith("assert_")
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"
+                ):
+                    violations.append(f"{path.relative_to(self.case_root.parent)}::self.{node.func.attr}")
+
+        assert violations == []
+
     def test_db_services_do_not_execute_write_sql(self):
         """验证 service 层 DB 代码只允许查询，不允许写库。
 

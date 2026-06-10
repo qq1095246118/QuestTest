@@ -24,19 +24,6 @@ class TestAdminUserAPI:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
 
-    def assert_admin_success(self, response, body) -> None:
-        """断言 Admin 成功响应符合接口自身规则。
-
-        请求参数:
-            response: Admin 接口原始 HTTP 响应对象。
-            body: Admin 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     def first_user_id(self, admin_api) -> int:
         """从用户列表派生一个真实用户 ID。
 
@@ -72,7 +59,9 @@ class TestAdminUserAPI:
         }
         response = admin_api.create_admin(payload)
         body = response.json()
-        self.assert_admin_success(response, body)
+        errors = AdminAssertionService.success_errors(response.status_code, body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         data = body["data"]
         data["id"] = AdminTestDataService.resolve_created_user_id(admin_api, data, email)
         return data
@@ -88,7 +77,10 @@ class TestAdminUserAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_users()
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADU-02 按状态查询用户列表成功")
     def test_adu_02_list_users_filter_by_status_success(self, admin_api):
@@ -101,7 +93,10 @@ class TestAdminUserAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_users(status="active")
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADU-03 未带 token 查询用户列表失败")
     def test_adu_03_list_users_without_token_unauthorized(self):
@@ -179,7 +174,10 @@ class TestAdminUserAPI:
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         response = admin_api.update_user(user_id, {"notes": "updated"})
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADU-08 更新不存在用户失败")
     def test_adu_08_update_nonexistent_user_fails(self, admin_api):
@@ -214,7 +212,10 @@ class TestAdminUserAPI:
             JSONResponseAssertionService.fail_with_api_json(data)
 
         response = admin_api.delete_user(user_id)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADU-10 查询用户权限成功")
     def test_adu_10_get_user_permissions_success(self, admin_api):
@@ -227,7 +228,10 @@ class TestAdminUserAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.get_user_permissions(self.first_user_id(admin_api))
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADU-11 替换用户权限成功")
     def test_adu_11_set_user_permissions_success(self, admin_api, test_data_factory, resource_tracker):
@@ -246,7 +250,10 @@ class TestAdminUserAPI:
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         response = admin_api.replace_user_permissions(user_id, [])
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADU-12 授予用户权限返回明确结果")
     def test_adu_12_grant_user_permission_success(self, admin_api, test_data_factory, resource_tracker):
@@ -344,4 +351,7 @@ class TestAdminUserAPI:
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         response = admin_api.reset_admin_password(user_id, "Bb123456789!")
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)

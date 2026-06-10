@@ -4,7 +4,6 @@ from typing import Any
 
 import allure
 import pytest
-from requests import Response
 from requests.exceptions import HTTPError
 
 from api.platform.factor_library_api import FactorLibraryAPI
@@ -25,105 +24,6 @@ class TestFactorListAPI:
         无返回值；pytest 根据方法内断言判断用例是否通过。
     """
 
-    def assert_factor_list_api_success(
-        self,
-        response: Response,
-        body: Any,
-        expected_page: int | None = None,
-        expected_limit: int | None = None,
-    ) -> None:
-        """断言因子列表接口自身基础响应正确。
-
-        请求参数:
-            response: 因子列表接口原始 HTTP 响应对象。
-            body: 因子列表接口返回的原始 JSON。
-            expected_page: 当前用例期望的分页页码。
-            expected_limit: 当前用例期望的分页条数。
-        返回值:
-            无；接口自身基础响应错误时在控制台和 Allure 中输出接口原始 JSON。
-        """
-        errors = FactorListCompareService.factor_list_api_errors(
-            response.status_code,
-            body,
-            expected_page=expected_page,
-            expected_limit=expected_limit,
-        )
-        if not errors:
-            return
-
-        JSONResponseAssertionService.fail_with_api_json(body)
-
-    def assert_factor_list_business_rules(self, body: Any, query_params: dict[str, Any]) -> None:
-        """断言因子列表接口响应符合请求参数对应的接口自身业务规则。
-
-        请求参数:
-            body: 因子列表接口返回的原始 JSON。
-            query_params: 当前请求使用的查询参数。
-        返回值:
-            无；接口自身业务规则错误时在控制台和 Allure 中输出接口原始 JSON。
-        """
-        errors = FactorListCompareService.factor_list_business_rule_errors(body, query_params)
-        if not errors:
-            return
-
-        JSONResponseAssertionService.fail_with_api_json(body)
-
-    def assert_no_factor_list_db_mismatches(self, api_body: Any, db_page: Any) -> None:
-        """断言因子列表接口响应与 DB 查询结果一致。
-
-        请求参数:
-            api_body: 因子列表接口返回的原始 JSON。
-            db_page: DB 查询 service 返回的原始分页 JSON。
-        返回值:
-            无；不一致时在控制台和 Allure 中输出接口原始 JSON 与 DB 原始 JSON。
-        """
-        mismatches = FactorListCompareService.factor_list_db_mismatches(api_body, db_page)
-        if not mismatches:
-            return
-
-        JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", api_body, "DB 查询 JSON", db_page)
-
-    def assert_no_theme_relation_mismatches(self, factor_body: Any, themes_body: Any) -> None:
-        """断言因子列表主题与主题列表接口数据一致。
-
-        请求参数:
-            factor_body: 因子列表接口返回的原始 JSON。
-            themes_body: 主题列表接口返回的原始 JSON。
-        返回值:
-            无；不一致时在控制台和 Allure 中输出两个接口的原始 JSON。
-        """
-        mismatches = FactorListCompareService.theme_relation_mismatches(factor_body, themes_body)
-        if not mismatches:
-            return
-
-        JSONResponseAssertionService.fail_with_two_json(
-            "因子列表接口返回 JSON",
-            factor_body,
-            "主题列表接口返回 JSON",
-            themes_body,
-        )
-
-    def assert_no_page_overlap(self, first_body: Any, second_body: Any) -> None:
-        """断言两个分页接口响应中的因子 id 不重复。
-
-        请求参数:
-            first_body: 第一页因子列表接口返回的原始 JSON。
-            second_body: 第二页因子列表接口返回的原始 JSON。
-        返回值:
-            无；存在重复数据时在控制台和 Allure 中输出两个分页接口的原始 JSON。
-        """
-        first_ids = {item["id"] for item in first_body["data"]["items"]}
-        second_ids = {item["id"] for item in second_body["data"]["items"]}
-        if first_ids.isdisjoint(second_ids):
-            return
-
-        JSONResponseAssertionService.fail_with_two_json(
-            "第一页接口返回 JSON",
-            first_body,
-            "第二页接口返回 JSON",
-            second_body,
-        )
-
     @allure.title("FA-01 默认第一页因子列表与 DB 一致")
     @pytest.mark.live_db
     def test_fa_01_default_first_page_matches_db(self, factor_api, db_client):
@@ -139,10 +39,21 @@ class TestFactorListAPI:
         response = factor_api.list_factors(**params)
         body = response.json()
 
-        self.assert_factor_list_api_success(response, body, expected_page=params["page"], expected_limit=params["limit"])
-        self.assert_factor_list_business_rules(body, params)
+        errors = FactorListCompareService.factor_list_api_errors(
+            response.status_code,
+            body,
+            expected_page=params["page"],
+            expected_limit=params["limit"],
+        )
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**params))
-        self.assert_no_factor_list_db_mismatches(body, db_page)
+        mismatches = FactorListCompareService.factor_list_db_mismatches(body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", body, "DB 查询 JSON", db_page)
 
     @allure.title("FA-03 第二页因子列表与第一页不重复且与 DB 一致")
     @pytest.mark.live_db
@@ -163,24 +74,42 @@ class TestFactorListAPI:
         first_body = first_response.json()
         second_body = second_response.json()
 
-        self.assert_factor_list_api_success(
-            first_response,
+        errors = FactorListCompareService.factor_list_api_errors(
+            first_response.status_code,
             first_body,
             expected_page=first_params["page"],
             expected_limit=first_params["limit"],
         )
-        self.assert_factor_list_api_success(
-            second_response,
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(first_body)
+        errors = FactorListCompareService.factor_list_api_errors(
+            second_response.status_code,
             second_body,
             expected_page=second_params["page"],
             expected_limit=second_params["limit"],
         )
-        self.assert_factor_list_business_rules(first_body, first_params)
-        self.assert_factor_list_business_rules(second_body, second_params)
-        self.assert_no_page_overlap(first_body, second_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(second_body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(first_body, first_params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(first_body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(second_body, second_params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(second_body)
+        first_ids = {item["id"] for item in first_body["data"]["items"]}
+        second_ids = {item["id"] for item in second_body["data"]["items"]}
+        if not first_ids.isdisjoint(second_ids):
+            JSONResponseAssertionService.fail_with_two_json(
+                "第一页接口返回 JSON",
+                first_body,
+                "第二页接口返回 JSON",
+                second_body,
+            )
 
         db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**second_params))
-        self.assert_no_factor_list_db_mismatches(second_body, db_page)
+        mismatches = FactorListCompareService.factor_list_db_mismatches(second_body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", second_body, "DB 查询 JSON", db_page)
 
     @allure.title("FA-05 按 updated_at 升序查询因子列表与 DB 一致")
     @pytest.mark.live_db
@@ -197,10 +126,21 @@ class TestFactorListAPI:
         response = factor_api.list_factors(**params)
         body = response.json()
 
-        self.assert_factor_list_api_success(response, body, expected_page=params["page"], expected_limit=params["limit"])
-        self.assert_factor_list_business_rules(body, params)
+        errors = FactorListCompareService.factor_list_api_errors(
+            response.status_code,
+            body,
+            expected_page=params["page"],
+            expected_limit=params["limit"],
+        )
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**params))
-        self.assert_no_factor_list_db_mismatches(body, db_page)
+        mismatches = FactorListCompareService.factor_list_db_mismatches(body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", body, "DB 查询 JSON", db_page)
 
     @allure.title("FA-06 按 updated_at 降序查询因子列表与 DB 一致")
     @pytest.mark.live_db
@@ -217,10 +157,21 @@ class TestFactorListAPI:
         response = factor_api.list_factors(**params)
         body = response.json()
 
-        self.assert_factor_list_api_success(response, body, expected_page=params["page"], expected_limit=params["limit"])
-        self.assert_factor_list_business_rules(body, params)
+        errors = FactorListCompareService.factor_list_api_errors(
+            response.status_code,
+            body,
+            expected_page=params["page"],
+            expected_limit=params["limit"],
+        )
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**params))
-        self.assert_no_factor_list_db_mismatches(body, db_page)
+        mismatches = FactorListCompareService.factor_list_db_mismatches(body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", body, "DB 查询 JSON", db_page)
 
     @allure.title("FA-07 按主题筛选因子列表与 DB 一致")
     @pytest.mark.live_db
@@ -237,13 +188,17 @@ class TestFactorListAPI:
         seed_response = factor_api.list_factors(**seed_params)
         seed_body = seed_response.json()
 
-        self.assert_factor_list_api_success(
-            seed_response,
+        errors = FactorListCompareService.factor_list_api_errors(
+            seed_response.status_code,
             seed_body,
             expected_page=seed_params["page"],
             expected_limit=seed_params["limit"],
         )
-        self.assert_factor_list_business_rules(seed_body, seed_params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(seed_body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(seed_body, seed_params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(seed_body)
 
         if not seed_body["data"]["items"]:
             pytest.skip("Factor list first page is empty; cannot derive theme filter.")
@@ -256,10 +211,21 @@ class TestFactorListAPI:
         response = factor_api.list_factors(**params)
         body = response.json()
 
-        self.assert_factor_list_api_success(response, body, expected_page=params["page"], expected_limit=params["limit"])
-        self.assert_factor_list_business_rules(body, params)
+        errors = FactorListCompareService.factor_list_api_errors(
+            response.status_code,
+            body,
+            expected_page=params["page"],
+            expected_limit=params["limit"],
+        )
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**params))
-        self.assert_no_factor_list_db_mismatches(body, db_page)
+        mismatches = FactorListCompareService.factor_list_db_mismatches(body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", body, "DB 查询 JSON", db_page)
 
     @allure.title("FA-08 按 factor_detail_status=1 筛选因子列表与 DB 一致")
     @pytest.mark.live_db
@@ -276,10 +242,21 @@ class TestFactorListAPI:
         response = factor_api.list_factors(**params)
         body = response.json()
 
-        self.assert_factor_list_api_success(response, body, expected_page=params["page"], expected_limit=params["limit"])
-        self.assert_factor_list_business_rules(body, params)
+        errors = FactorListCompareService.factor_list_api_errors(
+            response.status_code,
+            body,
+            expected_page=params["page"],
+            expected_limit=params["limit"],
+        )
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**params))
-        self.assert_no_factor_list_db_mismatches(body, db_page)
+        mismatches = FactorListCompareService.factor_list_db_mismatches(body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", body, "DB 查询 JSON", db_page)
 
     @allure.title("FA-09 未带 token 查询因子列表")
     def test_fa_09_list_factors_without_token_is_unauthorized(self):
@@ -387,11 +364,22 @@ class TestFactorListAPI:
         factor_body = factor_response.json()
         themes_body = factor_api.list_themes().json()
 
-        self.assert_factor_list_api_success(
-            factor_response,
+        errors = FactorListCompareService.factor_list_api_errors(
+            factor_response.status_code,
             factor_body,
             expected_page=factor_params["page"],
             expected_limit=factor_params["limit"],
         )
-        self.assert_factor_list_business_rules(factor_body, factor_params)
-        self.assert_no_theme_relation_mismatches(factor_body, themes_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(factor_body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(factor_body, factor_params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(factor_body)
+        mismatches = FactorListCompareService.theme_relation_mismatches(factor_body, themes_body)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json(
+                "因子列表接口返回 JSON",
+                factor_body,
+                "主题列表接口返回 JSON",
+                themes_body,
+            )

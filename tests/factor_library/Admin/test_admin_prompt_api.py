@@ -21,19 +21,6 @@ class TestAdminPromptAPI:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
 
-    def assert_admin_success(self, response, body) -> None:
-        """断言 Admin 成功响应符合接口自身规则。
-
-        请求参数:
-            response: Admin 接口原始 HTTP 响应对象。
-            body: Admin 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     def create_prompt_payload(self, test_data_factory, case_id: str) -> dict:
         """生成自动化提示词创建参数。
 
@@ -64,7 +51,9 @@ class TestAdminPromptAPI:
         """
         response = admin_api.create_prompt(self.create_prompt_payload(test_data_factory, case_id))
         body = response.json()
-        self.assert_admin_success(response, body)
+        errors = AdminAssertionService.success_errors(response.status_code, body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         return body["data"]
 
     @allure.title("ADP-01 提示词列表查询成功")
@@ -78,7 +67,10 @@ class TestAdminPromptAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_prompts(limit=5)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADP-02 按 used_by 查询提示词成功")
     def test_adp_02_list_prompts_filter_by_used_by_success(self, admin_api):
@@ -91,7 +83,10 @@ class TestAdminPromptAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_prompts(used_by="api_test", limit=5)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADP-03 创建提示词成功")
     def test_adp_03_create_prompt_success(self, admin_api, test_data_factory):
@@ -140,7 +135,10 @@ class TestAdminPromptAPI:
             JSONResponseAssertionService.fail_with_api_json(data)
 
         response = admin_api.update_prompt(prompt_id, {"user_prompt": "updated"})
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADP-06 更新不存在提示词失败")
     def test_adp_06_update_nonexistent_prompt_fails(self, admin_api):

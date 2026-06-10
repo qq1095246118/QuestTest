@@ -21,19 +21,6 @@ class TestAdminRoleTemplateAPI:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
 
-    def assert_admin_success(self, response, body) -> None:
-        """断言 Admin 成功响应符合接口自身规则。
-
-        请求参数:
-            response: Admin 接口原始 HTTP 响应对象。
-            body: Admin 接口返回的原始 JSON。
-        返回值:
-            无；响应错误时输出接口原始 JSON。
-        """
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("ADR-01 角色模板列表查询成功")
     def test_adr_01_list_role_templates_success(self, admin_api):
         """Case ID: ADR-01
@@ -45,7 +32,10 @@ class TestAdminRoleTemplateAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_role_templates()
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADR-02 创建角色模板成功")
     def test_adr_02_create_role_template_success(self, admin_api, test_data_factory, resource_tracker):
@@ -63,7 +53,9 @@ class TestAdminRoleTemplateAPI:
         )
         body = response.json()
 
-        self.assert_admin_success(response, body)
+        errors = AdminAssertionService.success_errors(response.status_code, body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
         resource_tracker.track("role_template", role_name, lambda value: admin_api.delete_role_template(value))
 
     @allure.title("ADR-03 重复角色模板创建失败")
@@ -103,7 +95,10 @@ class TestAdminRoleTemplateAPI:
         resource_tracker.track("role_template", role_name, lambda value: admin_api.delete_role_template(value))
 
         response = admin_api.get_role_template(role_name)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADR-05 查询不存在角色模板失败")
     def test_adr_05_get_nonexistent_role_template_fails(self, admin_api):
@@ -137,7 +132,10 @@ class TestAdminRoleTemplateAPI:
         resource_tracker.track("role_template", role_name, lambda value: admin_api.delete_role_template(value))
 
         response = admin_api.update_role_template(role_name, {"description": "updated"})
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADR-07 查询角色模板权限显示名成功")
     def test_adr_07_get_role_permission_names_success(self, admin_api, test_data_factory, resource_tracker):
@@ -154,7 +152,10 @@ class TestAdminRoleTemplateAPI:
         resource_tracker.track("role_template", role_name, lambda value: admin_api.delete_role_template(value))
 
         response = admin_api.list_role_template_permission_names(role_name)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADR-08 删除角色模板成功")
     def test_adr_08_delete_role_template_success(self, admin_api, test_data_factory):
@@ -170,7 +171,10 @@ class TestAdminRoleTemplateAPI:
         admin_api.create_role_template({"role_name": role_name, "display_name": role_name, "permissions": []})
 
         response = admin_api.delete_role_template(role_name)
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADR-09 删除不存在角色模板失败")
     def test_adr_09_delete_nonexistent_role_template_fails(self, admin_api):
@@ -200,7 +204,10 @@ class TestAdminRoleTemplateAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_permissions()
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("ADR-12 邀请码列表查询成功")
     def test_adr_12_list_invite_codes_success(self, admin_api):
@@ -213,4 +220,7 @@ class TestAdminRoleTemplateAPI:
             接口应返回 HTTP 200、success=True 和 data。
         """
         response = admin_api.list_invite_codes()
-        self.assert_admin_success(response, response.json())
+        response_body = response.json()
+        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
