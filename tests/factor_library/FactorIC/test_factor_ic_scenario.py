@@ -103,7 +103,7 @@ class TestFactorICScenario:
         if errors:
             JSONResponseAssertionService.fail_with_api_json(upsert_response_body)
 
-        list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=False, limit=5)
+        list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=0, limit=5)
         list_body = list_response.json()
         errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
         if errors:
@@ -147,7 +147,7 @@ class TestFactorICScenario:
         if errors:
             JSONResponseAssertionService.fail_with_api_json(upsert_response_body)
 
-        list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=False, symbol="BTCUSDT", limit=5)
+        list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=0, symbol="BTCUSDT", limit=5)
         list_body = list_response.json()
         errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
         if errors:

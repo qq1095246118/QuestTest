@@ -100,6 +100,36 @@ class TestQuantitativeTradingAPI:
 
         assert response.status_code in {400, 401, 403, 409, 422}
 
+    @allure.title("ADQ-04 重复量化账户创建失败")
+    def test_adq_04_create_duplicate_quant_account_fails(self, admin_api, test_data_factory, resource_tracker):
+        """Case ID: ADQ-04
+        测试目的: 验证重复创建相同量化账户时返回明确失败。
+
+        请求参数:
+            使用相同 exchange、email、api_key 和 secret_key 连续请求 POST /api/v1/admin/quant-accounts。
+        返回值:
+            第二次创建应返回 400、401、403、409 或 422；如果接口允许重复创建，则用例失败并登记清理重复数据。
+        """
+        payload = self.create_quant_payload(test_data_factory, "adq_04")
+        create_body = admin_api.create_quant_account(payload).json()
+        account_id = create_body.get("data", {}).get("id")
+        if not account_id:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+        resource_tracker.track("quant_account", account_id, lambda value: admin_api.delete_quant_account(value))
+
+        try:
+            duplicate_response = admin_api.create_quant_account(payload)
+        except HTTPError as exc:
+            duplicate_response = HTTPResponseService.from_http_error(exc)
+        else:
+            duplicate_body = duplicate_response.json()
+            duplicate_account_id = duplicate_body.get("data", {}).get("id")
+            if duplicate_account_id:
+                resource_tracker.track("quant_account", duplicate_account_id, lambda value: admin_api.delete_quant_account(value))
+
+        if duplicate_response.status_code not in {400, 401, 403, 409, 422}:
+            JSONResponseAssertionService.fail_with_api_json(duplicate_response.json())
+
     @allure.title("ADQ-05 查询量化账户详情成功")
     def test_adq_05_get_quant_account_success(self, admin_api, test_data_factory, resource_tracker):
         """Case ID: ADQ-05
@@ -182,9 +212,10 @@ class TestQuantitativeTradingAPI:
                 "exchange": exchange_test_config["exchange"],
                 "api_key": exchange_test_config["api_key"],
                 "secret_key": exchange_test_config["api_secret"],
-                "api_password": exchange_test_config["api_passphrase"],
             }
         )
+        if exchange_test_config["api_passphrase"]:
+            payload["api_password"] = exchange_test_config["api_passphrase"]
         body = admin_api.create_quant_account(payload).json()
         account_id = body.get("data", {}).get("id")
         if not account_id:
@@ -207,15 +238,16 @@ class TestQuantitativeTradingAPI:
         返回值:
             接口应返回 HTTP 200、success=True 和 data。
         """
-        response = admin_api.query_exchange_account(
-            {
-                "exchange": exchange_test_config["exchange"],
-                "api_key": exchange_test_config["api_key"],
-                "secret_key": exchange_test_config["api_secret"],
-                "passphrase": exchange_test_config["api_passphrase"],
-                "account_type": exchange_test_config["account_type"],
-            }
-        )
+        payload = {
+            "exchange": exchange_test_config["exchange"],
+            "api_key": exchange_test_config["api_key"],
+            "secret_key": exchange_test_config["api_secret"],
+            "account_type": exchange_test_config["account_type"],
+        }
+        if exchange_test_config["api_passphrase"]:
+            payload["passphrase"] = exchange_test_config["api_passphrase"]
+
+        response = admin_api.query_exchange_account(payload)
         response_body = response.json()
         errors = AdminAssertionService.success_errors(response.status_code, response_body)
         if errors:

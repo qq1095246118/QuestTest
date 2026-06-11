@@ -6,16 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="项目结构变动">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_ic_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config/env.test" beforeDir="false" afterPath="$PROJECT_DIR$/config/env.test" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_library_compare.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factors/factor_library_compare.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_library_queries.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factors/factor_library_queries.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_common_services.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_common_services.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_list_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_list_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,17 +66,23 @@
   &quot;keyToString&quot;: {
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;Python 测试.pytest (Admin 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (FactorIC 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (Quantitative_Trading 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (factor 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (factors 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (test_binance_full_api.py 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (test_binance_usdm_api.py 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (test_coinglass_api.py 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (test_factor_data_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_factor_ic_api.py 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (test_kline_api.py 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.pytest (test_open_interest_api.py 内).executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.pytest (test_quantitative_trading_api.py 内).executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI 的 pytest.executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_02_list_users_filter_by_status_success 的 pytest.executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_10_get_user_permissions_success 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id 的 pytest.executor&quot;: &quot;Run&quot;,
+    &quot;Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest.executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.tests.factor_library.auth.test_login_api.TestLoginAPI 的 pytest.executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.tests.factor_library.factors.test_factor_list_api.TestFactorListAPI 的 pytest.executor&quot;: &quot;Run&quot;,
     &quot;Python 测试.tests.test_binance_db_accuracy.test_binance_raw_and_metadata_db_accuracy 的 pytest.executor&quot;: &quot;Run&quot;,
@@ -99,7 +104,7 @@
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;codex/kline-case-design&quot;,
     &quot;last_opened_file_path&quot;: &quot;/Users/wrh/Downloads/QuestTest/docs&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+    &quot;settings.editor.selected.configurable&quot;: &quot;ml.llm.LLMConfigurable&quot;
   }
 }</component>
   <component name="RecentsManager">
@@ -116,14 +121,14 @@
       <recent name="$PROJECT_DIR$/reports/all" />
     </key>
   </component>
-  <component name="RunManager" selected="Python 测试.pytest (factor 内)">
-    <configuration name="pytest (Admin 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+  <component name="RunManager" selected="Python 测试.pytest (test_quantitative_trading_api.py 内)">
+    <configuration name="pytest (Quantitative_Trading 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="QuestTest" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/Admin" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
@@ -131,17 +136,17 @@
       <option name="_new_keywords" value="&quot;&quot;" />
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Admin&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Quantitative_Trading&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="pytest (factor 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+    <configuration name="pytest (test_factor_ic_api.py 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="QuestTest" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/factor" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
@@ -149,11 +154,11 @@
       <option name="_new_keywords" value="&quot;&quot;" />
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/factor&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+    <configuration name="pytest (test_quantitative_trading_api.py 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="QuestTest" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -167,11 +172,29 @@
       <option name="_new_keywords" value="&quot;&quot;" />
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_02_list_users_filter_by_status_success 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+    <configuration name="tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="QuestTest" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -185,35 +208,17 @@
       <option name="_new_keywords" value="&quot;&quot;" />
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_02_list_users_filter_by_status_success&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_10_get_user_permissions_success 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_10_get_user_permissions_success&quot;" />
+      <option name="_new_target" value="&quot;tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python 测试.pytest (factor 内)" />
-        <item itemvalue="Python 测试.pytest (Admin 内)" />
-        <item itemvalue="Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI 的 pytest" />
-        <item itemvalue="Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_10_get_user_permissions_success 的 pytest" />
-        <item itemvalue="Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_02_list_users_filter_by_status_success 的 pytest" />
+        <item itemvalue="Python 测试.pytest (test_quantitative_trading_api.py 内)" />
+        <item itemvalue="Python 测试.pytest (Quantitative_Trading 内)" />
+        <item itemvalue="Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest" />
+        <item itemvalue="Python 测试.pytest (test_factor_ic_api.py 内)" />
+        <item itemvalue="Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id 的 pytest" />
       </list>
     </recent_temporary>
   </component>
@@ -323,7 +328,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781096471874</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1781146469006</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1781146469006</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

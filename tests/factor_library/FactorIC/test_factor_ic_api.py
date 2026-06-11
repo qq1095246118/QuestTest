@@ -225,6 +225,36 @@ class TestFactorICAPI:
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
+    @allure.title("IC-10A IC 汇总指标列表按 owner 类型筛选成功")
+    @pytest.mark.parametrize("owner_filter, expected_is_sub_factor", [(0, False), (1, True)])
+    def test_ic_10a_list_summary_metrics_filter_by_owner_type_success(
+        self,
+        factor_ic_api,
+        owner_filter,
+        expected_is_sub_factor,
+    ):
+        """Case ID: IC-10A
+        测试目的: 验证 IC 汇总指标列表接口按母因子/子因子 owner 类型筛选时返回数据归属正确。
+
+        请求参数:
+            is_sub_factor_id=0 或 1，limit=5。
+        返回值:
+            接口应返回 HTTP 200、success=True；如果存在 items，每条记录的 is_sub_factor_id 应与筛选条件一致。
+        """
+        response = factor_ic_api.list_summary_metrics(is_sub_factor_id=owner_filter, limit=5)
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
+
+        data = response_body.get("data")
+        items = data.get("items") if isinstance(data, dict) else data if isinstance(data, list) else None
+        if not isinstance(items, list):
+            JSONResponseAssertionService.fail_with_api_json(response_body)
+        for item in items:
+            if "is_sub_factor_id" not in item or bool(item.get("is_sub_factor_id")) is not expected_is_sub_factor:
+                JSONResponseAssertionService.fail_with_api_json(response_body)
+
     @allure.title("IC-11 批量 upsert IC 汇总指标返回明确结果")
     def test_ic_11_batch_upsert_summary_metrics_success_with_auto_factor(
         self,
@@ -255,7 +285,7 @@ class TestFactorICAPI:
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
-        list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=False, limit=5)
+        list_response = factor_ic_api.list_summary_metrics(factor_id=factor_id, is_sub_factor_id=0, limit=5)
         list_body = list_response.json()
         errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
         if errors:
@@ -284,6 +314,36 @@ class TestFactorICAPI:
         errors = FactorICAssertionService.success_errors(response.status_code, response_body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
+
+    @allure.title("IC-12A IC 切片指标列表按 owner 类型筛选成功")
+    @pytest.mark.parametrize("owner_filter, expected_is_sub_factor", [(0, False), (1, True)])
+    def test_ic_12a_list_slice_metrics_filter_by_owner_type_success(
+        self,
+        factor_ic_api,
+        owner_filter,
+        expected_is_sub_factor,
+    ):
+        """Case ID: IC-12A
+        测试目的: 验证 IC 切片指标列表接口按母因子/子因子 owner 类型筛选时返回数据归属正确。
+
+        请求参数:
+            is_sub_factor_id=0 或 1，limit=5。
+        返回值:
+            接口应返回 HTTP 200、success=True；如果存在 items，每条记录的 is_sub_factor_id 应与筛选条件一致。
+        """
+        response = factor_ic_api.list_slice_metrics(is_sub_factor_id=owner_filter, limit=5)
+        response_body = response.json()
+        errors = FactorICAssertionService.success_errors(response.status_code, response_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
+
+        data = response_body.get("data")
+        items = data.get("items") if isinstance(data, dict) else data if isinstance(data, list) else None
+        if not isinstance(items, list):
+            JSONResponseAssertionService.fail_with_api_json(response_body)
+        for item in items:
+            if "is_sub_factor_id" not in item or bool(item.get("is_sub_factor_id")) is not expected_is_sub_factor:
+                JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-13 批量 upsert IC 切片指标返回明确结果")
     def test_ic_13_batch_upsert_slice_metrics_success_with_auto_factor(
@@ -315,7 +375,7 @@ class TestFactorICAPI:
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
-        list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=False, symbol="BTCUSDT", limit=5)
+        list_response = factor_ic_api.list_slice_metrics(factor_id=factor_id, is_sub_factor_id=0, symbol="BTCUSDT", limit=5)
         list_body = list_response.json()
         errors = FactorICAssertionService.success_errors(list_response.status_code, list_body)
         if errors:

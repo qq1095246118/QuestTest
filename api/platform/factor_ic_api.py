@@ -227,13 +227,13 @@ class FactorICAPI:
 
     @staticmethod
     def clean_params(params: dict[str, Any] | None) -> dict[str, Any]:
-        """过滤查询参数中的 None 值。
+        """过滤查询参数中的 None 值，并把布尔查询参数转为接口可识别的 0/1。
 
         请求参数:
             params: 原始查询参数字典。
         返回值:
-            去掉 None 值后的查询参数字典；输入为空时返回空字典。
+            去掉 None 值后的查询参数字典；bool 值会转为 int；输入为空时返回空字典。
         """
         if not params:
             return {}
-        return {key: value for key, value in params.items() if value is not None}
+        return {key: int(value) if isinstance(value, bool) else value for key, value in params.items() if value is not None}

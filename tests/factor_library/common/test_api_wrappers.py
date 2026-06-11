@@ -62,8 +62,10 @@ class TestAPIWrappers:
             (lambda: FactorICAPI(token="token"), "get_sub_factor_summary", (66,), {"ic_scope": "cross_sectional", "time_window": "1d"}, "GET", "/api/v1/factor-ic/sub-factors/66/summary", {"ic_scope": "cross_sectional", "time_window": "1d"}, None),
             (lambda: FactorICAPI(token="token"), "get_sub_factor_symbol_window_metrics", (66,), {"universe_key": "altcoin", "limit": 5}, "GET", "/api/v1/factor-ic/sub-factors/66/symbol-window-metrics", {"universe_key": "altcoin", "limit": 5}, None),
             (lambda: FactorICAPI(token="token"), "list_summary_metrics", (), {"factor_id": 123, "limit": 5}, "GET", "/api/v1/factor-ic/summary-metrics", {"factor_id": 123, "limit": 5}, None),
+            (lambda: FactorICAPI(token="token"), "list_summary_metrics", (), {"is_sub_factor_id": True, "limit": 5}, "GET", "/api/v1/factor-ic/summary-metrics", {"is_sub_factor_id": 1, "limit": 5}, None),
             (lambda: FactorICAPI(token="token"), "batch_upsert_summary_metrics", ([{"factor_id": 123}],), {}, "POST", "/api/v1/factor-ic/summary-metrics/batch", None, {"metrics": [{"factor_id": 123}]}),
             (lambda: FactorICAPI(token="token"), "list_slice_metrics", (), {"factor_id": 123, "symbol": "BTCUSDT", "limit": 5}, "GET", "/api/v1/factor-ic/slice-metrics", {"factor_id": 123, "symbol": "BTCUSDT", "limit": 5}, None),
+            (lambda: FactorICAPI(token="token"), "list_slice_metrics", (), {"is_sub_factor_id": False, "symbol": "BTCUSDT", "limit": 5}, "GET", "/api/v1/factor-ic/slice-metrics", {"is_sub_factor_id": 0, "symbol": "BTCUSDT", "limit": 5}, None),
             (lambda: FactorICAPI(token="token"), "batch_upsert_slice_metrics", ([{"factor_id": 123}],), {}, "POST", "/api/v1/factor-ic/slice-metrics/batch", None, {"metrics": [{"factor_id": 123}]}),
             (lambda: FactorICAPI(token="token"), "list_runs", (), {"factor_id": 123, "limit": 5}, "GET", "/api/v1/factor-ic/runs", {"factor_id": 123, "limit": 5}, None),
             (lambda: FactorICAPI(token="token"), "create_run", ({"factor_id": 123, "ic_scope": "time_series"},), {}, "POST", "/api/v1/factor-ic/runs", None, {"factor_id": 123, "ic_scope": "time_series"}),
@@ -155,6 +157,10 @@ class TestAPIWrappers:
         assert calls[0]["url"].endswith(expected_path)
         if expected_params is not None:
             assert calls[0].get("params") == expected_params
+            for key, expected_value in expected_params.items():
+                actual_value = calls[0]["params"].get(key)
+                if type(expected_value) is int:
+                    assert type(actual_value) is int
         if expected_json is not None:
             assert calls[0].get("json") == expected_json
 

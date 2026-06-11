@@ -48,7 +48,7 @@ class FactorICTestDataService:
         返回值:
             首条符合 owner 类型的汇总指标字典；没有可用数据时跳过当前用例。
         """
-        body = factor_ic_api.list_summary_metrics(is_sub_factor_id=is_sub_factor_id, limit=20).json()
+        body = factor_ic_api.list_summary_metrics(is_sub_factor_id=int(is_sub_factor_id), limit=20).json()
         items = FactorICTestDataService.extract_items(body)
         for item in items:
             if bool(item.get("is_sub_factor_id")) is is_sub_factor_id and item.get("factor_id"):

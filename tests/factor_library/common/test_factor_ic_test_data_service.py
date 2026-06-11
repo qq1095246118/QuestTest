@@ -54,15 +54,17 @@ class FakeFactorICAPI:
         """
         self.summary_items = summary_items or []
         self.run_items = run_items or []
+        self.summary_metric_calls = []
 
     def list_summary_metrics(self, **params):
         """返回内存 IC 汇总指标列表。
 
         请求参数:
-            **params: 查询参数，本替身不使用，用于验证 service 会做客户端 owner 类型过滤。
+            **params: 查询参数，记录后用于验证 service 传给接口的 owner 类型筛选值。
         返回值:
             FakeResponse，data.items 为初始化时传入的 summary_items。
         """
+        self.summary_metric_calls.append(params)
         return FakeResponse({"success": True, "data": {"items": self.summary_items}})
 
     def list_runs(self, **params):
@@ -104,6 +106,21 @@ class TestFactorICTestDataService:
 
         assert factor_id == 59
 
+    def test_first_factor_id_with_summary_metric_queries_non_sub_factor_as_integer_zero(self):
+        """验证母因子 summary 派生查询使用接口可识别的整数 0。
+
+        请求参数:
+            汇总指标列表包含一条母因子指标。
+        返回值:
+            调用 list_summary_metrics 时 is_sub_factor_id 应为整数 0，而不是 Python False。
+        """
+        api = FakeFactorICAPI(summary_items=[{"factor_id": 59, "is_sub_factor_id": False}])
+
+        FactorICTestDataService.first_factor_id_with_summary_metric(api)
+
+        assert api.summary_metric_calls[0]["is_sub_factor_id"] == 0
+        assert api.summary_metric_calls[0]["is_sub_factor_id"] is not False
+
     def test_first_sub_factor_id_with_summary_metric_returns_sub_factor_id(self):
         """验证子因子 summary 正向查询从已有子因子指标派生 sub_factor_id。
 
@@ -122,6 +139,21 @@ class TestFactorICTestDataService:
         sub_factor_id = FactorICTestDataService.first_sub_factor_id_with_summary_metric(api)
 
         assert sub_factor_id == 9020
+
+    def test_first_sub_factor_id_with_summary_metric_queries_sub_factor_as_integer_one(self):
+        """验证子因子 summary 派生查询使用接口可识别的整数 1。
+
+        请求参数:
+            汇总指标列表包含一条子因子指标。
+        返回值:
+            调用 list_summary_metrics 时 is_sub_factor_id 应为整数 1，而不是 Python True。
+        """
+        api = FakeFactorICAPI(summary_items=[{"factor_id": 9020, "is_sub_factor_id": True}])
+
+        FactorICTestDataService.first_sub_factor_id_with_summary_metric(api)
+
+        assert api.summary_metric_calls[0]["is_sub_factor_id"] == 1
+        assert api.summary_metric_calls[0]["is_sub_factor_id"] is not True
 
     def test_first_run_id_returns_business_run_id_field(self):
         """验证 IC run 详情使用业务 run_id 字段。

@@ -448,6 +448,9 @@
 #### ADQ-03 缺少 api_key 创建量化账户失败
 ##### 删除 payload 中 api_key 后请求 POST /api/v1/admin/quant-accounts
 ###### 返回 400、401、403、409 或 422
+#### ADQ-04 重复量化账户创建失败
+##### 使用相同 exchange、email、api_key、secret_key 连续两次请求 POST /api/v1/admin/quant-accounts
+###### 第二次创建返回 400、401、403、409 或 422；如果接口允许重复创建则用例失败并登记清理重复数据
 #### ADQ-05 查询量化账户详情成功
 ##### 先创建量化账户，再请求 GET /api/v1/admin/quant-accounts/{account_id}
 ###### 详情接口返回 success=true
