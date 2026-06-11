@@ -28,7 +28,7 @@ class TestFactorScenario:
         请求参数:
             使用 auto theme_key 创建主题并登记清理，随后查询列表、详情、更新 cn_name，并置为状态 3。
         返回值:
-            链路内每个接口都应返回成功响应，列表中应能找到创建的 theme_key。
+            链路内每个接口都应返回成功响应，列表中应能找到创建的 theme_key，最终主题状态应为 3。
         """
         name = test_data_factory.name("theme", "fs_01")
         create_response = factor_resource_api.create_theme({"theme_key": name, "theme_name": name, "cn_name": name})
@@ -61,6 +61,7 @@ class TestFactorScenario:
         errors = FactorAssertionService.success_with_data_errors(status_response.status_code, status_response_body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(status_response_body)
+        assert status_response_body["data"].get("status") == 3
 
     @allure.title("FS-02 因子创建-列表-详情-更新-状态链路")
     def test_fs_02_factor_lifecycle_create_list_detail_update_status(self, factor_resource_api, test_data_factory, resource_tracker):
@@ -70,7 +71,7 @@ class TestFactorScenario:
         请求参数:
             使用 auto factor_name 创建因子并登记清理，随后查询列表、详情、更新 cn_name、置状态 3。
         返回值:
-            链路内每个接口都应返回成功响应。
+            链路内每个接口都应返回成功响应，最终因子详情状态应为 3。
         """
         payload = FactorTestDataService.build_factor_payload(factor_resource_api, test_data_factory, "fs_02")
         name = payload["factor_name"]
@@ -102,6 +103,9 @@ class TestFactorScenario:
         errors = FactorAssertionService.success_with_data_errors(status_response.status_code, status_response_body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(status_response_body)
+        factor_detail = status_response_body["data"].get("factor_detail")
+        assert isinstance(factor_detail, dict)
+        assert factor_detail.get("status") == 3
 
     @allure.title("FS-03 子因子创建-列表-详情-更新-状态-refresh 链路")
     def test_fs_03_sub_factor_lifecycle_create_list_detail_update_status_refresh(self, factor_resource_api, test_data_factory, resource_tracker):
@@ -111,7 +115,7 @@ class TestFactorScenario:
         请求参数:
             使用 auto sub_factor_name 创建子因子并登记清理，随后查询列表、详情、更新 cn_name、置状态 3 和 refresh。
         返回值:
-            链路内核心接口应返回成功响应，refresh 应返回非 500 的明确结果。
+            链路内核心接口应返回成功响应，最终子因子详情状态应为 3，refresh 应返回非 500 的明确结果。
         """
         payload = FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, "fs_03")
         name = payload["sub_factor_name"]
@@ -143,6 +147,10 @@ class TestFactorScenario:
         errors = FactorAssertionService.success_with_data_errors(status_response.status_code, status_response_body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(status_response_body)
+        response_data = status_response_body["data"]
+        sub_factor_detail = response_data.get("sub_factor_detail")
+        actual_status = sub_factor_detail.get("status") if isinstance(sub_factor_detail, dict) else response_data.get("status")
+        assert actual_status == 3
 
         try:
             refresh_response = factor_resource_api.refresh_sub_factor(sub_factor_id)

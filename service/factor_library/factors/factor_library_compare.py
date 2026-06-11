@@ -201,6 +201,8 @@ class FactorListCompareService:
         items = body["data"]["items"]
         factor_theme = query_params.get("factor_theme")
         factor_detail_status = query_params.get("factor_detail_status")
+        if factor_detail_status is None:
+            factor_detail_status = query_params.get("status")
 
         if factor_theme is not None:
             for index, item in enumerate(items):

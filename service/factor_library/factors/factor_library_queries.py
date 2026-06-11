@@ -10,7 +10,7 @@ class FactorListQuery:
 
     请求参数:
         page、limit: 分页参数。
-        factor_theme、created_by、operator_by、factor_detail_status: 筛选参数。
+        factor_theme、created_by、operator_by、status、factor_detail_status: 筛选参数。
         sort_by、sort_order: 排序参数。
     返回值:
         不可变的数据对象，供 DB 查询 service 生成 SQL 条件和分页偏移使用。
@@ -21,6 +21,7 @@ class FactorListQuery:
     factor_theme: str | None = None
     created_by: str | None = None
     operator_by: str | None = None
+    status: int | None = None
     factor_detail_status: int | None = None
     sort_by: str | None = None
     sort_order: str | None = None
@@ -66,9 +67,9 @@ class FactorListDBService:
         f.child_factor_count,
         f.metadata,
         f.latest_status_updated_at,
-        f.created_by,
+        COALESCE(NULLIF(TRIM(created_user.display_name), ''), f.created_by) AS created_by,
         f.created_by_uid,
-        f.operator_by,
+        COALESCE(NULLIF(TRIM(operator_user.display_name), ''), f.operator_by) AS operator_by,
         f.operator_by_uid,
         f.created_at,
         f.updated_at
@@ -135,7 +136,7 @@ class FactorListDBService:
         total = int((total_row or {}).get("total") or 0)
 
         page_params = {**params, "limit": query.limit, "offset": query.offset}
-        sort_column = FactorListDBService.SORT_COLUMNS.get(query.sort_by or "", "f.id")
+        sort_column = FactorListDBService.SORT_COLUMNS.get(query.sort_by or "", "f.updated_at")
         sort_order = "ASC" if (query.sort_order or "").lower() == "asc" else "DESC"
         id_rows = client.fetch_all(
             f"""
@@ -186,10 +187,11 @@ class FactorListDBService:
             predicates.append("t.theme_key = %(factor_theme)s")
             params["factor_theme"] = query.factor_theme
 
-        if query.factor_detail_status is not None:
+        detail_status = query.factor_detail_status if query.factor_detail_status is not None else query.status
+        if detail_status is not None:
             joins.append("JOIN factors_details fd ON fd.factor_id = f.id AND fd.is_sub_factor_id = 0")
             predicates.append("fd.status = %(factor_detail_status)s")
-            params["factor_detail_status"] = query.factor_detail_status
+            params["factor_detail_status"] = detail_status
 
         if query.created_by is not None:
             predicates.append("f.created_by = %(created_by)s")
@@ -218,6 +220,8 @@ class FactorListDBService:
             f"""
             SELECT {FactorListDBService.FACTOR_FIELDS}
             FROM factors f
+            LEFT JOIN app_users created_user ON created_user.id = f.created_by_uid
+            LEFT JOIN app_users operator_user ON operator_user.id = f.operator_by_uid
             WHERE f.id IN %(factor_ids)s
             """,
             {"factor_ids": tuple(factor_ids)},

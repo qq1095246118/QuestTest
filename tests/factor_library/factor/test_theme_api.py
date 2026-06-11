@@ -242,12 +242,12 @@ class TestThemeAPI:
     @allure.title("TH-11 更新主题状态成功")
     def test_th_11_update_theme_status_success(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: TH-11
-        测试目的: 验证管理员可以更新主题状态。
+        测试目的: 验证管理员可以更新主题状态，且返回主题状态与请求状态一致。
 
         请求参数:
             先创建主题并登记清理，再将状态更新为 3。
         返回值:
-            状态更新接口应返回成功响应。
+            状态更新接口应返回成功响应，data.status 应等于 3。
         """
         name = test_data_factory.name("theme", "th_11")
         created_body = factor_resource_api.create_theme({"theme_key": name, "theme_name": name, "cn_name": name}).json()
@@ -262,6 +262,9 @@ class TestThemeAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        assert isinstance(response_data, dict)
+        assert response_data.get("status") == 3
 
     @allure.title("TH-12 非法主题状态更新失败")
     def test_th_12_update_theme_status_invalid_value_fails(self, factor_resource_api):

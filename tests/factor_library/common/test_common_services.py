@@ -4,6 +4,8 @@ from service.common.http.http_client import HTTPClient
 from service.factor_library.common.auth_session import AuthSessionService
 from service.factor_library.common.resource_tracker import ResourceTracker
 from service.factor_library.common.test_data_factory import TestDataFactory
+from service.factor_library.factors.factor_library_compare import FactorListCompareService
+from service.factor_library.factors.factor_library_queries import FactorListDBService, FactorListQuery
 
 
 class TestCommonServices:
@@ -153,3 +155,134 @@ class TestCommonServices:
         assert len(calls) == 2
         assert calls[0]["kwargs"]["timeout"] == (60, 60)
         assert calls[1]["kwargs"]["timeout"] == (60, 60)
+
+    def test_factor_list_status_alias_checks_factor_detail_status(self):
+        """验证因子列表 status 查询参数会按详情状态校验接口返回。
+
+        请求参数:
+            构造 status=2 的因子列表查询参数和 factor_detail.status=3 的内存响应体。
+        返回值:
+            业务规则校验应返回 status 不一致错误。
+        """
+        body = {
+            "success": True,
+            "data": {
+                "items": [
+                    {
+                        "id": 1,
+                        "serial_number": "F001",
+                        "factor_name": "factor_1",
+                        "cn_name": "因子1",
+                        "factor_detail": {"factor_id": 1, "is_sub_factor_id": False, "status": 3},
+                        "themes": [],
+                    }
+                ],
+                "pagination": {"page": 1, "limit": 5, "total": 1},
+            },
+        }
+
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, {"status": 2})
+
+        assert errors
+        assert "factor_detail.status mismatch" in errors[0]
+
+    def test_factor_list_db_query_status_alias_filters_factor_detail_status(self):
+        """验证因子列表 DB 查询会把 status 参数映射为详情状态筛选。
+
+        请求参数:
+            使用 status=2 构造 FactorListQuery，并生成 DB 查询过滤条件。
+        返回值:
+            SQL 条件应 JOIN factors_details，并使用 fd.status 按 status 参数过滤。
+        """
+        where_sql, params = FactorListDBService.build_filters(FactorListQuery(status=2))
+
+        assert "JOIN factors_details fd" in where_sql
+        assert "fd.status = %(factor_detail_status)s" in where_sql
+        assert params == {"factor_detail_status": 2}
+
+    def test_factor_list_db_query_uses_updated_at_desc_as_default_sort(self):
+        """验证因子列表 DB 查询默认排序与接口默认排序一致。
+
+        请求参数:
+            使用未传 sort_by 的 FactorListQuery 和记录 SQL 的假 DB client 查询分页。
+        返回值:
+            生成的分页 SQL 应按 f.updated_at DESC、f.id DESC 排序。
+        """
+        executed_sql = []
+
+        class FakeDBClient:
+            """记录 DB 查询 SQL 的假只读 client。
+
+            请求参数:
+                无。
+            返回值:
+                提供 fetch_one 和 fetch_all 方法供 FactorListDBService 调用。
+            """
+
+            def fetch_one(self, sql, params):
+                """记录 count SQL 并返回空总数。
+
+                请求参数:
+                    sql: 待执行 SQL。
+                    params: SQL 参数。
+                返回值:
+                    total=0 的查询结果。
+                """
+                executed_sql.append(sql)
+                return {"total": 0}
+
+            def fetch_all(self, sql, params):
+                """记录分页 SQL 并返回空列表。
+
+                请求参数:
+                    sql: 待执行 SQL。
+                    params: SQL 参数。
+                返回值:
+                    空列表，表示当前页无数据。
+                """
+                executed_sql.append(sql)
+                return []
+
+        FactorListDBService.fetch_factor_list_page(FakeDBClient(), FactorListQuery(page=1, limit=5))
+
+        assert "ORDER BY sort_value DESC, f.id DESC" in executed_sql[1]
+        assert "f.updated_at AS sort_value" in executed_sql[1]
+
+    def test_factor_list_db_query_maps_user_display_names_like_api_response(self):
+        """验证因子列表 DB 查询按接口展示口径映射创建人和操作人。
+
+        请求参数:
+            使用记录 SQL 的假 DB client 调用 fetch_factors。
+        返回值:
+            查询 SQL 应关联 app_users，并优先使用非空 display_name 作为 created_by/operator_by。
+        """
+        executed_sql = []
+
+        class FakeDBClient:
+            """记录 fetch_factors SQL 的假只读 client。
+
+            请求参数:
+                无。
+            返回值:
+                提供 fetch_all 方法供 FactorListDBService.fetch_factors 调用。
+            """
+
+            def fetch_all(self, sql, params):
+                """记录 SQL 并返回空列表。
+
+                请求参数:
+                    sql: 待执行 SQL。
+                    params: SQL 参数。
+                返回值:
+                    空列表。
+                """
+                executed_sql.append(sql)
+                return []
+
+        FactorListDBService.fetch_factors(FakeDBClient(), [1])
+
+        sql = executed_sql[0]
+        assert "LEFT JOIN app_users created_user ON created_user.id = f.created_by_uid" in sql
+        assert "LEFT JOIN app_users operator_user ON operator_user.id = f.operator_by_uid" in sql
+        assert "COALESCE(NULLIF(TRIM(created_user.display_name), ''), f.created_by) AS created_by" in sql
+        assert "COALESCE(NULLIF(TRIM(operator_user.display_name), ''), f.operator_by) AS operator_by" in sql

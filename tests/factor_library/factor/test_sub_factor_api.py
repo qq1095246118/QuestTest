@@ -94,6 +94,31 @@ class TestSubFactorAPI:
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
+    @allure.title("SF-02B 按 status=1/2/3 筛选子因子列表成功")
+    @pytest.mark.parametrize("status", [1, 2, 3])
+    def test_sf_02b_list_sub_factors_filter_by_status_success(self, factor_resource_api, status):
+        """Case ID: SF-02B
+        测试目的: 验证子因子列表支持按库状态筛选，且返回子因子详情状态与请求状态一致。
+
+        请求参数:
+            page=1，limit=5，status 分别为 1、2、3。
+        返回值:
+            接口应返回 HTTP 200、success=True、分页结构正确，items 中每条 sub_factor_detail.status 应等于请求 status。
+        """
+        params = {"page": 1, "limit": 5, "status": status}
+        response = factor_resource_api.list_sub_factors(**params)
+        body = response.json()
+
+        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors.extend(FactorAssertionService.list_pagination_errors(body, params["page"], params["limit"]))
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+
+        for item in body["data"]["items"]:
+            sub_factor_detail = item.get("sub_factor_detail")
+            assert isinstance(sub_factor_detail, dict)
+            assert sub_factor_detail.get("status") == status
+
     @allure.title("SF-03 无效 token 查询子因子列表失败")
     def test_sf_03_list_sub_factors_invalid_token_unauthorized(self):
         """Case ID: SF-03
@@ -251,12 +276,12 @@ class TestSubFactorAPI:
     @allure.title("SF-11 更新子因子状态成功")
     def test_sf_11_update_sub_factor_status_success(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: SF-11
-        测试目的: 验证管理员可以更新子因子状态。
+        测试目的: 验证管理员可以更新子因子状态，且返回详情状态与请求状态一致。
 
         请求参数:
             先创建子因子并登记清理，再将状态更新为 3。
         返回值:
-            状态更新接口应返回成功响应。
+            状态更新接口应返回成功响应，data.status 或 data.sub_factor_detail.status 应等于 3。
         """
         data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_11")
         sub_factor_id = data.get("id")
@@ -270,16 +295,21 @@ class TestSubFactorAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        assert isinstance(response_data, dict)
+        sub_factor_detail = response_data.get("sub_factor_detail")
+        actual_status = sub_factor_detail.get("status") if isinstance(sub_factor_detail, dict) else response_data.get("status")
+        assert actual_status == 3
 
     @allure.title("SF-12 批量更新子因子状态成功")
     def test_sf_12_batch_update_sub_factor_status_success(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: SF-12
-        测试目的: 验证管理员可以批量更新子因子状态。
+        测试目的: 验证管理员可以批量更新子因子状态，且响应状态与请求状态一致。
 
         请求参数:
             先创建子因子并登记清理，再用 sub_factor_ids 批量更新状态为 3。
         返回值:
-            批量状态更新接口应返回成功响应。
+            批量状态更新接口应返回成功响应，data.status 应等于 3，updated_sub_factor_ids 应包含被更新子因子。
         """
         data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_12")
         sub_factor_id = data.get("id")
@@ -293,6 +323,10 @@ class TestSubFactorAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        assert isinstance(response_data, dict)
+        assert response_data.get("status") == 3
+        assert sub_factor_id in response_data.get("updated_sub_factor_ids", [])
 
     @allure.title("SF-13 创建子因子刷新任务返回明确结果")
     def test_sf_13_refresh_sub_factor_accepted_or_validation_error(self, factor_resource_api):
@@ -397,12 +431,12 @@ class TestSubFactorAPI:
     @allure.title("SF-18 复制子因子成功")
     def test_sf_18_copy_sub_factors_success_for_auto_sub_factor(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: SF-18
-        测试目的: 验证复制子因子接口可以处理自动化子因子。
+        测试目的: 验证复制子因子接口可以处理自动化子因子，且复制副本进入新挖库。
 
         请求参数:
             先创建 auto_test 子因子并登记源数据失效清理，再传 sub_factor_ids=[sub_factor_id]。
         返回值:
-            copy 接口应返回成功响应；copy 副本保留后由人工或定时任务清理。
+            copy 接口应返回成功响应；copy 副本详情状态应为 1，并保留后由人工或定时任务清理。
         """
         data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_18")
         sub_factor_id = data.get("id")
@@ -416,3 +450,20 @@ class TestSubFactorAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        copied_sub_factors = response_data.get("sub_factors") if isinstance(response_data, dict) else None
+        assert isinstance(copied_sub_factors, list)
+        assert copied_sub_factors
+        copied_sub_factor_id = copied_sub_factors[0].get("id")
+        assert copied_sub_factor_id
+        resource_tracker.track("sub_factor", copied_sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
+
+        copied_detail_response = factor_resource_api.get_sub_factor(copied_sub_factor_id)
+        copied_detail_body = copied_detail_response.json()
+
+        errors = FactorAssertionService.success_with_data_errors(copied_detail_response.status_code, copied_detail_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(copied_detail_body)
+        copied_sub_factor_detail = copied_detail_body["data"].get("sub_factor_detail")
+        assert isinstance(copied_sub_factor_detail, dict)
+        assert copied_sub_factor_detail.get("status") == 1

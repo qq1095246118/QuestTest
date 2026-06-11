@@ -37,11 +37,11 @@
 ##### 使用有效 token 请求 listFactors，GET /api/v1/factors?page=1&limit=5
 ###### 返回 success=true，items 和 pagination 结构完整，接口当前页数据与 DB 查询结果一致
 #### FA-03 第二页因子列表与第一页不重复且与 DB 一致
-##### 先请求第一页，再请求第二页，GET /api/v1/factors?page=1&limit=5 和 page=2&limit=5
-###### 第一页和第二页 id 不重复，第二页分页和字段数据与 DB 一致
+##### 先按 status=2 请求第一页，再按 status=2 请求第二页，GET /api/v1/factors?page=1&limit=5&status=2 和 page=2&limit=5&status=2
+###### 第一页和第二页 id 不重复，返回因子详情状态均为 2，第二页分页和字段数据与 DB 一致
 #### FA-05 按 updated_at 升序查询因子列表与 DB 一致
-##### 请求 listFactors，GET /api/v1/factors?page=1&limit=5&sort_by=updated_at&sort_order=asc
-###### 返回数据顺序与 DB 按相同排序查询结果一致
+##### 请求 listFactors，GET /api/v1/factors?page=1&limit=5&status=1&sort_by=updated_at&sort_order=asc
+###### 返回因子详情状态均为 1，数据顺序与 DB 按相同状态和排序查询结果一致
 #### FA-06 按 updated_at 降序查询因子列表与 DB 一致
 ##### 请求 listFactors，GET /api/v1/factors?page=1&limit=5&sort_by=updated_at&sort_order=desc
 ###### 返回数据顺序与 DB 按相同排序查询结果一致
@@ -51,6 +51,9 @@
 #### FA-08 按 factor_detail_status=1 筛选因子列表与 DB 一致
 ##### 请求 listFactors，GET /api/v1/factors?page=1&limit=5&factor_detail_status=1
 ###### 返回因子详情状态符合筛选条件，接口数据与 DB 一致
+#### FA-08B 按 status=1/2/3 筛选因子列表与 DB 一致
+##### 分别请求 listFactors，GET /api/v1/factors?page=1&limit=5&status=1、status=2、status=3
+###### 返回因子详情状态分别符合新挖库、有效库、失效库筛选条件，接口数据与 DB 一致
 #### FA-09 未带 token 查询因子列表
 ##### 不带 Authorization 请求 listFactors，GET /api/v1/factors
 ###### 返回 401 或 403，不返回因子列表数据
@@ -93,13 +96,13 @@
 ###### 返回 400、404 或 422
 #### FA-22 更新因子状态成功
 ##### 先创建 auto 因子，再请求 PUT /api/v1/factors/{factor_id}/status 将状态更新为 3
-###### 状态更新接口返回 success=true
+###### 状态更新接口返回 success=true，data.factor_detail.status 等于 3
 #### FA-23 批量更新因子状态成功
 ##### 先创建 auto 因子，再请求 PUT /api/v1/factors/status/batch 批量更新状态
-###### 批量状态更新接口返回 success=true
+###### 批量状态更新接口返回 success=true，data.status 等于 3，updated_factor_ids 包含被更新因子
 #### FA-24 复制因子成功
 ##### 先创建 auto 因子，再请求 POST /api/v1/factors/copy 复制该 factor_id
-###### copy 接口返回 success=true，副本保留后由人工或定时任务清理
+###### copy 接口返回 success=true，复制副本的 factor_detail.status 等于 1，副本保留后由人工或定时任务清理
 #### FA-25 因子图表汇总查询成功
 ##### 使用有效 token 请求 GET /api/v1/factors/graph?type=new
 ###### 返回 success=true，data 结构完整
@@ -142,7 +145,7 @@
 ###### 返回 400、404 或 422
 #### TH-11 更新主题状态成功
 ##### 先创建 auto 主题，再请求 PUT /api/v1/themes/{theme_id}/status 将状态更新为 3
-###### 状态更新接口返回 success=true
+###### 状态更新接口返回 success=true，data.status 等于 3
 #### TH-12 非法主题状态更新失败
 ##### 使用非法 status 请求 PUT /api/v1/themes/{theme_id}/status
 ###### 返回 400、401、403 或 422，不返回 500
@@ -153,6 +156,9 @@
 #### SF-02 按 factor_id 查询子因子列表成功
 ##### 从因子列表派生 factor_id，请求 GET /api/v1/sub-factors?factor_id={factor_id}
 ###### 返回 success=true，data 为子因子列表或分页结构
+#### SF-02B 按 status=1/2/3 筛选子因子列表成功
+##### 分别请求 GET /api/v1/sub-factors?page=1&limit=5&status=1、status=2、status=3
+###### 返回子因子详情状态分别符合新挖库、有效库、失效库筛选条件
 #### SF-03 无效 token 查询子因子列表失败
 ##### 使用伪造 Authorization 请求 GET /api/v1/sub-factors
 ###### 返回 401 或 403
@@ -179,10 +185,10 @@
 ###### 返回 400、404 或 422
 #### SF-11 更新子因子状态成功
 ##### 先创建 auto 子因子，再请求 PUT /api/v1/sub-factors/{sub_factor_id}/status 将状态更新为 3
-###### 状态更新接口返回 success=true
+###### 状态更新接口返回 success=true，data.status 或 data.sub_factor_detail.status 等于 3
 #### SF-12 批量更新子因子状态成功
 ##### 先创建 auto 子因子，再请求 PUT /api/v1/sub-factors/status/batch 批量更新状态
-###### 批量状态更新接口返回 success=true
+###### 批量状态更新接口返回 success=true，data.status 等于 3，updated_sub_factor_ids 包含被更新子因子
 #### SF-13 创建子因子刷新任务返回明确结果
 ##### 从子因子列表派生 sub_factor_id，请求 POST /api/v1/sub-factors/{sub_factor_id}/refresh
 ###### 返回成功、Accepted 或明确业务错误，HTTP 状态码小于 500
@@ -200,7 +206,7 @@
 ###### 返回 success=true，data 结构完整
 #### SF-18 复制子因子成功
 ##### 先创建 auto 子因子，再请求 POST /api/v1/sub-factors/copy 复制该 sub_factor_id
-###### copy 接口返回 success=true，副本保留后由人工或定时任务清理
+###### copy 接口返回 success=true，复制副本的 sub_factor_detail.status 等于 1，副本保留后由人工或定时任务清理
 ### 元数据
 #### FM-01 Agent Factory 配置查询成功
 ##### 使用有效 token 请求 GET /api/v1/agent-factory-config?coin_category=main
@@ -220,13 +226,13 @@
 ### 连贯场景
 #### FS-01 主题创建-列表-详情-更新-状态链路
 ##### 创建 auto 主题后依次查询列表、详情、更新 cn_name、更新状态
-###### 链路内每个接口返回成功，列表中能找到创建的 theme_key
+###### 链路内每个接口返回成功，列表中能找到创建的 theme_key，最终主题状态等于 3
 #### FS-02 因子创建-列表-详情-更新-状态链路
 ##### 创建 auto 因子后依次查询列表、详情、更新 cn_name、更新状态
-###### 链路内每个接口返回成功
+###### 链路内每个接口返回成功，最终因子详情状态等于 3
 #### FS-03 子因子创建-列表-详情-更新-状态-refresh 链路
 ##### 创建 auto 子因子后依次查询列表、详情、更新 cn_name、更新状态并触发 refresh
-###### 核心接口返回成功，refresh 返回非 500 的明确结果
+###### 核心接口返回成功，最终子因子详情状态等于 3，refresh 返回非 500 的明确结果
 ## FactorIC
 ### 因子 IC 查询
 #### IC-01 因子 IC summary 查询成功

@@ -59,15 +59,15 @@ class TestFactorListAPI:
     @pytest.mark.live_db
     def test_fa_03_page_two_does_not_overlap_first_page_and_matches_db(self, factor_api, db_client):
         """Case ID: FA-03
-        测试目的: 验证第二页因子列表与第一页不重复，并与 DB 当前页一致。
+        测试目的: 验证相同状态下第二页因子列表与第一页不重复，并与 DB 当前页一致。
 
         请求参数:
-            第一次请求 page=1，limit=5；第二次请求 page=2，limit=5。
+            第一次请求 page=1，limit=5，status=2；第二次请求 page=2，limit=5，status=2。
         返回值:
-            第一页和第二页 id 不应重复，第二页分页和字段数据应与 DB 一致。
+            第一页和第二页 id 不应重复，所有返回因子详情状态应为 2，第二页分页和字段数据应与 DB 一致。
         """
-        first_params = {"page": 1, "limit": 5}
-        second_params = {"page": 2, "limit": 5}
+        first_params = {"page": 1, "limit": 5, "status": 2}
+        second_params = {"page": 2, "limit": 5, "status": 2}
 
         first_response = factor_api.list_factors(**first_params)
         second_response = factor_api.list_factors(**second_params)
@@ -115,14 +115,14 @@ class TestFactorListAPI:
     @pytest.mark.live_db
     def test_fa_05_sort_updated_at_asc_matches_db(self, factor_api, db_client):
         """Case ID: FA-05
-        测试目的: 验证因子列表按 updated_at 升序排序时与 DB 顺序一致。
+        测试目的: 验证相同状态下因子列表按 updated_at 升序排序时与 DB 顺序一致。
 
         请求参数:
-            page=1，limit=5，sort_by=updated_at，sort_order=asc。
+            page=1，limit=5，status=1，sort_by=updated_at，sort_order=asc。
         返回值:
-            接口当前页 id 顺序和字段数据应与 DB 按相同排序查询的结果一致。
+            所有返回因子详情状态应为 1，接口当前页 id 顺序和字段数据应与 DB 按相同排序查询的结果一致。
         """
-        params = {"page": 1, "limit": 5, "sort_by": "updated_at", "sort_order": "asc"}
+        params = {"page": 1, "limit": 5, "status": 1, "sort_by": "updated_at", "sort_order": "asc"}
         response = factor_api.list_factors(**params)
         body = response.json()
 
@@ -239,6 +239,38 @@ class TestFactorListAPI:
             筛选后的接口分页和字段数据应与 DB 按相同详情状态查询的结果一致。
         """
         params = {"page": 1, "limit": 5, "factor_detail_status": 1}
+        response = factor_api.list_factors(**params)
+        body = response.json()
+
+        errors = FactorListCompareService.factor_list_api_errors(
+            response.status_code,
+            body,
+            expected_page=params["page"],
+            expected_limit=params["limit"],
+        )
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        errors = FactorListCompareService.factor_list_business_rule_errors(body, params)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        db_page = FactorListDBService.fetch_factor_list_page(db_client, FactorListQuery(**params))
+        mismatches = FactorListCompareService.factor_list_db_mismatches(body, db_page)
+        if mismatches:
+            JSONResponseAssertionService.fail_with_two_json("接口返回 JSON", body, "DB 查询 JSON", db_page)
+
+    @allure.title("FA-08B 按 status=1/2/3 筛选因子列表与 DB 一致")
+    @pytest.mark.live_db
+    @pytest.mark.parametrize("status", [1, 2, 3])
+    def test_fa_08b_filter_by_status_alias_matches_db(self, factor_api, db_client, status):
+        """Case ID: FA-08B
+        测试目的: 验证 status 查询参数作为 factor_detail_status 别名时，三类库状态筛选均与 DB 一致。
+
+        请求参数:
+            page=1，limit=5，status 分别为 1、2、3。
+        返回值:
+            返回因子详情状态应与 status 参数一致，接口分页和字段数据应与 DB 按相同状态查询的结果一致。
+        """
+        params = {"page": 1, "limit": 5, "status": status}
         response = factor_api.list_factors(**params)
         body = response.json()
 

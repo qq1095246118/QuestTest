@@ -190,12 +190,12 @@ class TestFactorAPI:
     @allure.title("FA-22 更新因子状态成功")
     def test_fa_22_update_factor_status_success(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: FA-22
-        测试目的: 验证管理员可以更新因子状态。
+        测试目的: 验证管理员可以更新因子状态，且返回详情状态与请求状态一致。
 
         请求参数:
             先创建因子并登记清理，再将状态更新为 3。
         返回值:
-            状态更新接口应返回成功响应。
+            状态更新接口应返回成功响应，data.factor_detail.status 应等于 3。
         """
         data = self.create_auto_factor(factor_resource_api, test_data_factory, "fa_22")
         factor_id = data.get("id")
@@ -209,16 +209,20 @@ class TestFactorAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        factor_detail = response_data.get("factor_detail") if isinstance(response_data, dict) else None
+        assert isinstance(factor_detail, dict)
+        assert factor_detail.get("status") == 3
 
     @allure.title("FA-23 批量更新因子状态成功")
     def test_fa_23_batch_update_factor_status_success(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: FA-23
-        测试目的: 验证管理员可以批量更新因子状态。
+        测试目的: 验证管理员可以批量更新因子状态，且响应状态与请求状态一致。
 
         请求参数:
             先创建因子并登记清理，再用 factor_ids 批量更新状态为 3。
         返回值:
-            批量状态更新接口应返回成功响应。
+            批量状态更新接口应返回成功响应，data.status 应等于 3，updated_factor_ids 应包含被更新因子。
         """
         data = self.create_auto_factor(factor_resource_api, test_data_factory, "fa_23")
         factor_id = data.get("id")
@@ -232,16 +236,20 @@ class TestFactorAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        assert isinstance(response_data, dict)
+        assert response_data.get("status") == 3
+        assert factor_id in response_data.get("updated_factor_ids", [])
 
     @allure.title("FA-24 复制因子成功")
     def test_fa_24_copy_factors_success_for_auto_factor(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: FA-24
-        测试目的: 验证复制因子接口可以处理自动化因子。
+        测试目的: 验证复制因子接口可以处理自动化因子，且复制副本进入新挖库。
 
         请求参数:
             先创建 auto_test 因子并登记源数据失效清理，再传 factor_ids=[factor_id]。
         返回值:
-            copy 接口应返回成功响应；copy 副本保留后由人工或定时任务清理。
+            copy 接口应返回成功响应；copy 副本详情状态应为 1，并保留后由人工或定时任务清理。
         """
         data = self.create_auto_factor(factor_resource_api, test_data_factory, "fa_24")
         factor_id = data.get("id")
@@ -255,6 +263,23 @@ class TestFactorAPI:
         errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
+        response_data = body["data"]
+        copied_factors = response_data.get("factors") if isinstance(response_data, dict) else None
+        assert isinstance(copied_factors, list)
+        assert copied_factors
+        copied_factor_id = copied_factors[0].get("id")
+        assert copied_factor_id
+        resource_tracker.track("factor", copied_factor_id, lambda value: factor_resource_api.update_factor_status(value, 3))
+
+        copied_detail_response = factor_resource_api.get_factor(copied_factor_id)
+        copied_detail_body = copied_detail_response.json()
+
+        errors = FactorAssertionService.success_with_data_errors(copied_detail_response.status_code, copied_detail_body)
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(copied_detail_body)
+        copied_factor_detail = copied_detail_body["data"].get("factor_detail")
+        assert isinstance(copied_factor_detail, dict)
+        assert copied_factor_detail.get("status") == 1
 
     @allure.title("FA-25 因子图表汇总查询成功")
     def test_fa_25_factor_graph_returns_valid_structure(self, factor_resource_api):
