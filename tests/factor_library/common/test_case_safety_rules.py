@@ -140,6 +140,34 @@ class TestCaseSafetyRules:
 
         assert violations == []
 
+    def test_xfail_marks_must_not_catch_assertion_error(self):
+        """验证 xfail 只允许捕获专用已知差异异常，不能吞掉 AssertionError。
+
+        请求参数:
+            扫描 tests/factor_library 下除 common 外的 test_*.py 文件。
+        返回值:
+            无返回值；发现 xfail 未声明 raises 或声明 AssertionError 时失败。
+        """
+        violations = []
+
+        for path in self.case_root.rglob("test_*.py"):
+            if "common" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+                    continue
+                for decorator in node.decorator_list:
+                    if not self._is_xfail_decorator(decorator):
+                        continue
+                    raises_value = self._xfail_raises_value(decorator)
+                    if raises_value is None:
+                        violations.append(f"{path.relative_to(self.case_root.parent)}::{node.name} missing raises")
+                    elif "AssertionError" in raises_value.split(","):
+                        violations.append(f"{path.relative_to(self.case_root.parent)}::{node.name} raises AssertionError")
+
+        assert violations == []
+
     def test_non_test_helpers_do_not_contain_final_assertions(self):
         """验证业务 case 内非 test helper 不包含最终断言。
 
@@ -368,3 +396,48 @@ class TestCaseSafetyRules:
         return module_name in blocked_modules or (
             module_name.startswith("service.factor_library.") and module_name.endswith("_assertions")
         )
+
+    def _is_xfail_decorator(self, decorator: ast.AST) -> bool:
+        """判断装饰器节点是否为 pytest.mark.xfail。
+
+        请求参数:
+            decorator: AST 装饰器节点。
+        返回值:
+            bool，命中 pytest.mark.xfail 时返回 True。
+        """
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        return (
+            isinstance(target, ast.Attribute)
+            and target.attr == "xfail"
+            and isinstance(target.value, ast.Attribute)
+            and target.value.attr == "mark"
+            and isinstance(target.value.value, ast.Name)
+            and target.value.value.id == "pytest"
+        )
+
+    def _xfail_raises_value(self, decorator: ast.AST) -> str | None:
+        """提取 xfail 装饰器中的 raises 参数名称。
+
+        请求参数:
+            decorator: pytest.mark.xfail 装饰器 AST 节点。
+        返回值:
+            raises 参数名称，多个异常用逗号拼接；未声明或无法解析时返回 None。
+        """
+        if not isinstance(decorator, ast.Call):
+            return None
+        for keyword in decorator.keywords:
+            if keyword.arg != "raises":
+                continue
+            if isinstance(keyword.value, ast.Name):
+                return keyword.value.id
+            if isinstance(keyword.value, ast.Attribute):
+                return keyword.value.attr
+            if isinstance(keyword.value, ast.Tuple):
+                values = []
+                for element in keyword.value.elts:
+                    if isinstance(element, ast.Name):
+                        values.append(element.id)
+                    elif isinstance(element, ast.Attribute):
+                        values.append(element.attr)
+                return ",".join(values) if values else None
+        return None

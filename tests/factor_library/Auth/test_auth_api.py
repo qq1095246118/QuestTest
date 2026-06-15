@@ -11,6 +11,10 @@ from service.common.http.response_utils import HTTPResponseService
 from service.factor_library.admin.admin_test_data import AdminTestDataService
 
 
+class KnownRegisterInviteCodeRequired(Exception):
+    """测试环境注册接口强制要求 invite_code 时抛出的已知差异异常。"""
+
+
 @pytest.mark.factor_library_api
 @allure.feature("Factor Library API")
 @allure.story("Auth")
@@ -24,7 +28,11 @@ class TestAuthAPI:
     """
 
     @allure.title("AU-01 新邮箱注册成功")
-    @pytest.mark.xfail(strict=True, reason="测试环境注册接口当前强制要求 invite_code，但新版接口文档未声明该入参。")
+    @pytest.mark.xfail(
+        raises=KnownRegisterInviteCodeRequired,
+        strict=True,
+        reason="测试环境注册接口当前强制要求 invite_code，但新版接口文档未声明该入参。",
+    )
     def test_au_01_register_new_email_success(self, admin_api, test_data_factory, resource_tracker):
         """Case ID: AU-01
         测试目的: 验证新邮箱可以注册成功。
@@ -43,6 +51,8 @@ class TestAuthAPI:
         except HTTPError as exc:
             response = HTTPResponseService.from_http_error(exc)
         body = response.json()
+        if response.status_code in {400, 422} and body.get("success") is False and body.get("error") == "invite_code is required":
+            raise KnownRegisterInviteCodeRequired(body["error"])
 
         errors = []
         if response.status_code != 200:

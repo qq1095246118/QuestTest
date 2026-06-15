@@ -11,6 +11,10 @@ from service.common.http.response_utils import HTTPResponseService
 from service.factor_library.admin.admin_test_data import AdminTestDataService
 
 
+class KnownRegisterInviteCodeRequired(Exception):
+    """测试环境注册接口强制要求 invite_code 时抛出的已知差异异常。"""
+
+
 @pytest.mark.factor_library_api
 @allure.feature("Factor Library API")
 @allure.story("Scenario")
@@ -55,7 +59,11 @@ class TestAuthScenario:
         assert login_data["user"]["email"] == me_data["email"]
 
     @allure.title("AS-02 注册-登录-me 成功链路")
-    @pytest.mark.xfail(strict=True, reason="测试环境注册接口当前强制要求 invite_code，导致注册登录链路无法按新版文档执行。")
+    @pytest.mark.xfail(
+        raises=KnownRegisterInviteCodeRequired,
+        strict=True,
+        reason="测试环境注册接口当前强制要求 invite_code，导致注册登录链路无法按新版文档执行。",
+    )
     def test_as_02_register_login_me_success(self, admin_api, test_data_factory, resource_tracker):
         """Case ID: AS-02
         测试目的: 验证新用户注册后可以登录并查询当前用户资料。
@@ -75,6 +83,12 @@ class TestAuthScenario:
         except HTTPError as exc:
             register_response = HTTPResponseService.from_http_error(exc)
         register_body = register_response.json()
+        if (
+            register_response.status_code in {400, 422}
+            and register_body.get("success") is False
+            and register_body.get("error") == "invite_code is required"
+        ):
+            raise KnownRegisterInviteCodeRequired(register_body["error"])
         if register_response.status_code != 200 or register_body.get("success") is not True:
             JSONResponseAssertionService.fail_with_api_json(register_body)
         user_id = AdminTestDataService.resolve_created_user_id(admin_api, register_body.get("data", {}), email)

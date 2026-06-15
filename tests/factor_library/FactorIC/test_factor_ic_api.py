@@ -12,10 +12,6 @@ from service.factor_library.factor_ic.factor_ic_test_data import FactorICTestDat
 from service.factor_library.factors.factor_test_data import FactorTestDataService
 
 
-class KnownFactorICBatchBodyMismatch(Exception):
-    """新版文档使用 items 但当前后端仍要求 metrics 时抛出的已知差异异常。"""
-
-
 @pytest.mark.factor_library_api
 @allure.feature("Factor Library API")
 @allure.story("FactorIC")
@@ -196,11 +192,6 @@ class TestFactorICAPI:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-11 批量 upsert IC 汇总指标返回明确结果")
-    @pytest.mark.xfail(
-        raises=KnownFactorICBatchBodyMismatch,
-        strict=True,
-        reason="新版 OpenAPI 要求 body.items，测试环境后端当前仍按旧字段 metrics 校验。",
-    )
     def test_ic_11_batch_upsert_summary_metrics_success_with_auto_factor(
         self,
         factor_ic_api,
@@ -229,8 +220,6 @@ class TestFactorICAPI:
         except HTTPError as exc:
             response = HTTPResponseService.from_http_error(exc)
         response_body = response.json()
-        if response_body.get("success") is False and response_body.get("error") == "metrics不能为空":
-            raise KnownFactorICBatchBodyMismatch(response_body["error"])
         errors = []
         if response.status_code != 200:
             errors.append(f"status_code={response.status_code}")
@@ -302,11 +291,6 @@ class TestFactorICAPI:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
     @allure.title("IC-13 批量 upsert IC 切片指标返回明确结果")
-    @pytest.mark.xfail(
-        raises=KnownFactorICBatchBodyMismatch,
-        strict=True,
-        reason="新版 OpenAPI 要求 body.items，测试环境后端当前仍按旧字段 metrics 校验。",
-    )
     def test_ic_13_batch_upsert_slice_metrics_success_with_auto_factor(
         self,
         factor_ic_api,
@@ -335,8 +319,6 @@ class TestFactorICAPI:
         except HTTPError as exc:
             response = HTTPResponseService.from_http_error(exc)
         response_body = response.json()
-        if response_body.get("success") is False and response_body.get("error") == "metrics不能为空":
-            raise KnownFactorICBatchBodyMismatch(response_body["error"])
         errors = []
         if response.status_code != 200:
             errors.append(f"status_code={response.status_code}")

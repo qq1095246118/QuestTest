@@ -11,6 +11,14 @@ from service.common.http.response_utils import HTTPResponseService
 from service.factor_library.factors.factor_test_data import FactorTestDataService
 
 
+class KnownDuplicateThemeAllowed(Exception):
+    """后端允许重复 theme_name 或 cn_name 创建主题时抛出的已知差异异常。"""
+
+
+class KnownThemeNoChangeUpdateAllowed(Exception):
+    """后端允许主题无变更更新时抛出的已知差异异常。"""
+
+
 @pytest.mark.factor_library_api
 @allure.feature("Factor Library API")
 @allure.story("factor")
@@ -190,7 +198,11 @@ class TestThemeAPI:
         assert response.status_code in {400, 409, 422}
 
     @allure.title("TH-06B 重复 theme_name 创建主题失败")
-    @pytest.mark.xfail(strict=True, reason="后端当前允许重复 theme_name 创建主题，和已确认规则不一致。")
+    @pytest.mark.xfail(
+        raises=KnownDuplicateThemeAllowed,
+        strict=True,
+        reason="后端当前允许重复 theme_name 创建主题，和已确认规则不一致。",
+    )
     def test_th_06b_create_duplicate_theme_name_fails(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: TH-06B
         测试目的: 验证重复 theme_name 不能创建主题。
@@ -217,10 +229,16 @@ class TestThemeAPI:
         duplicate_theme_id = body.get("data", {}).get("id") if isinstance(body.get("data"), dict) else None
         if duplicate_theme_id:
             resource_tracker.track("theme", duplicate_theme_id, lambda value: factor_resource_api.update_theme_status(value, 3))
+        if response.status_code == 200 and body.get("success") is True and duplicate_theme_id:
+            raise KnownDuplicateThemeAllowed("duplicate theme_name was created")
         assert response.status_code in {400, 409, 422}, JSONResponseAssertionService.attach_json("接口返回 JSON", body)
 
     @allure.title("TH-06C 重复 cn_name 创建主题失败")
-    @pytest.mark.xfail(strict=True, reason="后端当前允许重复 cn_name 创建主题，和已确认规则不一致。")
+    @pytest.mark.xfail(
+        raises=KnownDuplicateThemeAllowed,
+        strict=True,
+        reason="后端当前允许重复 cn_name 创建主题，和已确认规则不一致。",
+    )
     def test_th_06c_create_duplicate_theme_cn_name_fails(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: TH-06C
         测试目的: 验证重复 cn_name 不能创建主题。
@@ -248,6 +266,8 @@ class TestThemeAPI:
         duplicate_theme_id = body.get("data", {}).get("id") if isinstance(body.get("data"), dict) else None
         if duplicate_theme_id:
             resource_tracker.track("theme", duplicate_theme_id, lambda value: factor_resource_api.update_theme_status(value, 3))
+        if response.status_code == 200 and body.get("success") is True and duplicate_theme_id:
+            raise KnownDuplicateThemeAllowed("duplicate theme cn_name was created")
         assert response.status_code in {400, 409, 422}, JSONResponseAssertionService.attach_json("接口返回 JSON", body)
 
     @allure.title("TH-07 查询主题详情成功")
@@ -322,7 +342,11 @@ class TestThemeAPI:
             JSONResponseAssertionService.fail_with_api_json(body)
 
     @allure.title("TH-09B 无变更更新主题失败")
-    @pytest.mark.xfail(strict=True, reason="后端当前允许主题无变更更新，和已确认规则不一致。")
+    @pytest.mark.xfail(
+        raises=KnownThemeNoChangeUpdateAllowed,
+        strict=True,
+        reason="后端当前允许主题无变更更新，和已确认规则不一致。",
+    )
     def test_th_09b_update_theme_without_changes_fails(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: TH-09B
         测试目的: 验证主题无实际字段变更时不允许提交更新。
@@ -345,6 +369,10 @@ class TestThemeAPI:
             response = HTTPResponseService.from_http_error(exc)
 
         body = response.json() if response.content else {}
+        if response.status_code == 200 and body.get("success") is True:
+            response_data = body.get("data")
+            if isinstance(response_data, dict) and response_data.get("id") == theme_id:
+                raise KnownThemeNoChangeUpdateAllowed("theme no-change update was accepted")
         assert response.status_code in {400, 409, 422}, JSONResponseAssertionService.attach_json("接口返回 JSON", body)
 
     @allure.title("TH-10 更新不存在主题失败")

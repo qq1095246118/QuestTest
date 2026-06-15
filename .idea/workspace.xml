@@ -6,39 +6,14 @@
   <component name="ChangeListManager">
     <list default="true" id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="项目结构变动">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api/platform/factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_ic_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_assertions.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/admin/admin_test_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/auth/auth_assertions.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/common/resource_tracker.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/common/resource_tracker.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_assertions.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_assertions.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factors/factor_test_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_config_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_config_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_prompt_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_role_template_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_role_template_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_user_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_user_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_scenario.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_admin_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_admin_test_data_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_business_assertions.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_factor_test_data_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/conftest.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_metadata_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_metadata_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -146,7 +121,25 @@
       <recent name="$PROJECT_DIR$/reports/all" />
     </key>
   </component>
-  <component name="RunManager" selected="Python 测试.pytest (test_quantitative_trading_api.py 内)">
+  <component name="RunManager" selected="Python 测试.pytest (FactorIC 内)">
+    <configuration name="pytest (FactorIC 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="QuestTest" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/FactorIC" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/FactorIC&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
     <configuration name="pytest (Quantitative_Trading 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="QuestTest" />
       <option name="ENV_FILES" value="" />
@@ -165,13 +158,13 @@
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="pytest (test_factor_ic_api.py 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+    <configuration name="pytest (factor 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="QuestTest" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/factor" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
@@ -179,7 +172,7 @@
       <option name="_new_keywords" value="&quot;&quot;" />
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/factor&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
@@ -199,24 +192,6 @@
       <option name="_new_additionalArguments" value="&quot;&quot;" />
       <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
     <configuration name="tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
@@ -239,11 +214,11 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python 测试.pytest (FactorIC 内)" />
+        <item itemvalue="Python 测试.pytest (factor 内)" />
         <item itemvalue="Python 测试.pytest (test_quantitative_trading_api.py 内)" />
         <item itemvalue="Python 测试.pytest (Quantitative_Trading 内)" />
         <item itemvalue="Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest" />
-        <item itemvalue="Python 测试.pytest (test_factor_ic_api.py 内)" />
-        <item itemvalue="Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id 的 pytest" />
       </list>
     </recent_temporary>
   </component>
@@ -369,7 +344,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781159252433</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1781503111221</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1781503111221</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

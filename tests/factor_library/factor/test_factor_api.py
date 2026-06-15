@@ -11,6 +11,10 @@ from service.common.http.response_utils import HTTPResponseService
 from service.factor_library.factors.factor_test_data import FactorTestDataService
 
 
+class KnownFactorNoChangeUpdateAllowed(Exception):
+    """后端允许母因子无变更更新时抛出的已知差异异常。"""
+
+
 @pytest.mark.factor_library_api
 @allure.feature("Factor Library API")
 @allure.story("factor")
@@ -237,7 +241,11 @@ class TestFactorAPI:
             JSONResponseAssertionService.fail_with_api_json(body)
 
     @allure.title("FA-20B 无变更更新因子失败")
-    @pytest.mark.xfail(strict=True, reason="后端当前允许母因子无变更更新，和已确认规则不一致。")
+    @pytest.mark.xfail(
+        raises=KnownFactorNoChangeUpdateAllowed,
+        strict=True,
+        reason="后端当前允许母因子无变更更新，和已确认规则不一致。",
+    )
     def test_fa_20b_update_factor_without_changes_fails(self, factor_resource_api, test_data_factory, resource_tracker):
         """Case ID: FA-20B
         测试目的: 验证母因子无实际字段变更时不允许提交更新。
@@ -271,6 +279,10 @@ class TestFactorAPI:
             response = HTTPResponseService.from_http_error(exc)
 
         body = response.json() if response.content else {}
+        if response.status_code == 200 and body.get("success") is True:
+            response_data = body.get("data")
+            if isinstance(response_data, dict) and response_data.get("id") == factor_id:
+                raise KnownFactorNoChangeUpdateAllowed("factor no-change update was accepted")
         assert response.status_code in {400, 409, 422}, JSONResponseAssertionService.attach_json("接口返回 JSON", body)
 
     @allure.title("FA-21 更新不存在因子失败")

@@ -10,10 +10,6 @@ from service.factor_library.factor_ic.factor_ic_test_data import FactorICTestDat
 from service.factor_library.factors.factor_test_data import FactorTestDataService
 
 
-class KnownFactorICBatchBodyMismatch(Exception):
-    """新版文档使用 items 但当前后端仍要求 metrics 时抛出的已知差异异常。"""
-
-
 @pytest.mark.factor_library_api
 @allure.feature("Factor Library API")
 @allure.story("Scenario")
@@ -85,11 +81,6 @@ class TestFactorICScenario:
             JSONResponseAssertionService.fail_with_api_json(detail_response_body)
 
     @allure.title("ICS-02 upsert summary metrics 后查询 summary metrics")
-    @pytest.mark.xfail(
-        raises=KnownFactorICBatchBodyMismatch,
-        strict=True,
-        reason="新版 OpenAPI 要求 body.items，测试环境后端当前仍按旧字段 metrics 校验。",
-    )
     def test_ics_02_batch_upsert_summary_metrics_then_query_summary_metrics(
         self,
         factor_ic_api,
@@ -118,8 +109,6 @@ class TestFactorICScenario:
         except HTTPError as exc:
             upsert_response = HTTPResponseService.from_http_error(exc)
         upsert_response_body = upsert_response.json()
-        if upsert_response_body.get("success") is False and upsert_response_body.get("error") == "metrics不能为空":
-            raise KnownFactorICBatchBodyMismatch(upsert_response_body["error"])
         errors = []
         if upsert_response.status_code != 200:
             errors.append(f"status_code={upsert_response.status_code}")
@@ -140,11 +129,6 @@ class TestFactorICScenario:
             JSONResponseAssertionService.fail_with_api_json(list_body)
 
     @allure.title("ICS-03 upsert slice metrics 后查询 slice metrics")
-    @pytest.mark.xfail(
-        raises=KnownFactorICBatchBodyMismatch,
-        strict=True,
-        reason="新版 OpenAPI 要求 body.items，测试环境后端当前仍按旧字段 metrics 校验。",
-    )
     def test_ics_03_batch_upsert_slice_metrics_then_query_slice_metrics(
         self,
         factor_ic_api,
@@ -173,8 +157,6 @@ class TestFactorICScenario:
         except HTTPError as exc:
             upsert_response = HTTPResponseService.from_http_error(exc)
         upsert_response_body = upsert_response.json()
-        if upsert_response_body.get("success") is False and upsert_response_body.get("error") == "metrics不能为空":
-            raise KnownFactorICBatchBodyMismatch(upsert_response_body["error"])
         errors = []
         if upsert_response.status_code != 200:
             errors.append(f"status_code={upsert_response.status_code}")

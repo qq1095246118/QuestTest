@@ -163,7 +163,7 @@ class FactorICAPI:
         返回值:
             批量 upsert IC 汇总指标接口 requests.Response 对象。
         """
-        return self.post("/api/v1/factor-ic/summary-metrics/batch", json={"items": items})
+        return self.post("/api/v1/factor-ic/summary-metrics/batch", json={"metrics": items})
 
     def list_slice_metrics(self, **params: Any):
         """调用 IC 切片指标列表接口。
@@ -183,7 +183,7 @@ class FactorICAPI:
         返回值:
             批量 upsert IC 切片指标接口 requests.Response 对象。
         """
-        return self.post("/api/v1/factor-ic/slice-metrics/batch", json={"items": items})
+        return self.post("/api/v1/factor-ic/slice-metrics/batch", json={"metrics": items})
 
     def list_runs(self, **params: Any):
         """调用 IC 评估运行记录列表接口。
