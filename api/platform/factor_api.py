@@ -138,6 +138,39 @@ class FactorAPI:
         """
         return self.put("/api/v1/factors/status/batch", json={"factor_ids": factor_ids, "status": status})
 
+    def update_factor_with_approval(self, factor_id: Any, payload: dict[str, Any]):
+        """调用需审批的因子更新接口。
+
+        请求参数:
+            factor_id: 因子 ID。
+            payload: 更新因子的 JSON body。
+        返回值:
+            需审批因子更新接口 requests.Response 对象。
+        """
+        return self.put(f"/api/v1/factors/{factor_id}/with-approval", json=payload)
+
+    def update_factor_status_with_approval(self, factor_id: Any, status: Any):
+        """调用需审批的因子状态更新接口。
+
+        请求参数:
+            factor_id: 因子 ID。
+            status: 目标状态值。
+        返回值:
+            需审批因子状态更新接口 requests.Response 对象。
+        """
+        return self.put(f"/api/v1/factors/{factor_id}/status/with-approval", json={"status": status})
+
+    def batch_update_factor_status_with_approval(self, factor_ids: list[Any], status: Any):
+        """调用需审批的批量因子状态更新接口。
+
+        请求参数:
+            factor_ids: 因子 ID 列表。
+            status: 目标状态值。
+        返回值:
+            需审批批量因子状态更新接口 requests.Response 对象。
+        """
+        return self.put("/api/v1/factors/status/batch/with-approval", json={"factor_ids": factor_ids, "status": status})
+
     def notify_factor_result(self, run_id: Any):
         """调用因子挖掘结果通知接口。
 
@@ -236,6 +269,28 @@ class FactorAPI:
         """
         return self.put(f"/api/v1/themes/{theme_id}/status", json={"status": status})
 
+    def update_theme_with_approval(self, theme_id: Any, payload: dict[str, Any]):
+        """调用需审批的主题更新接口。
+
+        请求参数:
+            theme_id: 主题 ID。
+            payload: 更新主题的 JSON body。
+        返回值:
+            需审批主题更新接口 requests.Response 对象。
+        """
+        return self.put(f"/api/v1/themes/{theme_id}/with-approval", json=payload)
+
+    def update_theme_status_with_approval(self, theme_id: Any, status: Any):
+        """调用需审批的主题状态更新接口。
+
+        请求参数:
+            theme_id: 主题 ID。
+            status: 目标主题状态。
+        返回值:
+            需审批主题状态更新接口 requests.Response 对象。
+        """
+        return self.put(f"/api/v1/themes/{theme_id}/status/with-approval", json={"status": status})
+
     def list_sub_factors(self, **params: Any):
         """调用子因子列表接口。
 
@@ -277,6 +332,16 @@ class FactorAPI:
             子因子图表汇总接口 requests.Response 对象。
         """
         return self.get("/api/v1/sub-factors/graph", {"type": type, "from": from_date, "to": to_date})
+
+    def get_sub_factor_earliest_date(self):
+        """调用子因子最早创建日期接口。
+
+        请求参数:
+            无。
+        返回值:
+            子因子最早创建日期接口 requests.Response 对象。
+        """
+        return self.get("/api/v1/sub-factors/earliest-date")
 
     def get_sub_factor(self, sub_factor_id: Any):
         """调用子因子详情接口。
@@ -321,6 +386,42 @@ class FactorAPI:
         """
         return self.put(
             "/api/v1/sub-factors/status/batch",
+            json={"sub_factor_ids": sub_factor_ids, "status": status},
+        )
+
+    def update_sub_factor_with_approval(self, sub_factor_id: Any, payload: dict[str, Any]):
+        """调用需审批的子因子更新接口。
+
+        请求参数:
+            sub_factor_id: 子因子 ID。
+            payload: 更新子因子的 JSON body。
+        返回值:
+            需审批子因子更新接口 requests.Response 对象。
+        """
+        return self.put(f"/api/v1/sub-factors/{sub_factor_id}/with-approval", json=payload)
+
+    def update_sub_factor_status_with_approval(self, sub_factor_id: Any, status: Any):
+        """调用需审批的子因子状态更新接口。
+
+        请求参数:
+            sub_factor_id: 子因子 ID。
+            status: 目标状态值。
+        返回值:
+            需审批子因子状态更新接口 requests.Response 对象。
+        """
+        return self.put(f"/api/v1/sub-factors/{sub_factor_id}/status/with-approval", json={"status": status})
+
+    def batch_update_sub_factor_status_with_approval(self, sub_factor_ids: list[Any], status: Any):
+        """调用需审批的批量子因子状态更新接口。
+
+        请求参数:
+            sub_factor_ids: 子因子 ID 列表。
+            status: 目标状态值。
+        返回值:
+            需审批批量子因子状态更新接口 requests.Response 对象。
+        """
+        return self.put(
+            "/api/v1/sub-factors/status/batch/with-approval",
             json={"sub_factor_ids": sub_factor_ids, "status": status},
         )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from api.platform.admin_api import AdminAPI
+from api.platform.approval_api import ApprovalAPI
 from api.platform.auth_api import AuthAPI
 from api.platform.factor_api import FactorAPI
 from api.platform.factor_ic_api import FactorICAPI
@@ -90,6 +91,18 @@ def admin_api(token: str) -> AdminAPI:
     return AdminAPI(token=token)
 
 
+@pytest.fixture(scope="module")
+def approval_api(token: str) -> ApprovalAPI:
+    """创建 Approval 模块 API 客户端。
+
+    请求参数:
+        token: token fixture 返回的管理员 JWT。
+    返回值:
+        已带管理员 Authorization header 的 ApprovalAPI 实例。
+    """
+    return ApprovalAPI(token=token)
+
+
 @pytest.fixture(scope="session")
 def exchange_test_config() -> dict[str, str]:
     """读取交易所正向用例所需的测试凭证配置。
@@ -137,7 +150,8 @@ def resource_tracker() -> ResourceTracker:
     finally:
         cleanup_errors = tracker.cleanup_all()
         if cleanup_errors:
-            JSONResponseAssertionService.attach_json("清理失败 JSON", cleanup_errors)
+            detail = JSONResponseAssertionService.attach_json("清理失败 JSON", cleanup_errors)
+            pytest.fail(f"自动化资源清理失败，详见 Allure 附件。{detail}")
 
 
 @pytest.fixture(scope="module")

@@ -8,7 +8,6 @@ from api.platform.admin_api import AdminAPI
 from config.settings import settings
 from service.common.http.json_response_assertion import JSONResponseAssertionService
 from service.common.http.response_utils import HTTPResponseService
-from service.factor_library.admin.admin_assertions import AdminAssertionService
 from service.factor_library.admin.admin_test_data import AdminTestDataService
 
 
@@ -39,33 +38,6 @@ class TestAdminUserAPI:
             pytest.skip("用户列表为空，无法派生 user_id。")
         return items[0]["id"]
 
-    def create_auto_admin(self, admin_api, test_data_factory, case_id: str) -> dict:
-        """创建自动化管理员并返回接口 data。
-
-        请求参数:
-            admin_api: Admin API fixture。
-            test_data_factory: 自动化测试数据工厂 fixture。
-            case_id: 当前用例编号。
-        返回值:
-            创建管理员接口响应中的 data 字典。
-        """
-        email = test_data_factory.email(case_id)
-        payload = {
-            "email": email,
-            "password": "Aa123456789!",
-            "display_name": test_data_factory.name("admin", case_id),
-            "role": "admin",
-            "notes": "auto",
-        }
-        response = admin_api.create_admin(payload)
-        body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-        data = body["data"]
-        data["id"] = AdminTestDataService.resolve_created_user_id(admin_api, data, email)
-        return data
-
     @allure.title("ADU-01 用户列表查询成功")
     def test_adu_01_list_users_success(self, admin_api):
         """Case ID: ADU-01
@@ -78,7 +50,10 @@ class TestAdminUserAPI:
         """
         response = admin_api.list_users()
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -94,7 +69,10 @@ class TestAdminUserAPI:
         """
         response = admin_api.list_users(status="active")
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -128,10 +106,25 @@ class TestAdminUserAPI:
         返回值:
             创建管理员接口应返回成功响应。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_05")
-        user_id = data.get("id")
-        if user_id:
-            resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
+        email = test_data_factory.email("adu_05")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_05"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        response = admin_api.create_admin(payload)
+        response_body = response.json()
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(response_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, response_body["data"], email)
+        resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
     @allure.title("ADU-06 重复管理员邮箱创建失败")
     def test_adu_06_create_duplicate_admin_fails(self, admin_api, test_data_factory, resource_tracker):
@@ -167,15 +160,32 @@ class TestAdminUserAPI:
         返回值:
             更新用户接口应返回成功响应。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_07")
-        user_id = data.get("id")
-        if not user_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+        email = test_data_factory.email("adu_07")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_07"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        create_response = admin_api.create_admin(payload)
+        create_body = create_response.json()
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         response = admin_api.update_user(user_id, {"notes": "updated"})
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -206,14 +216,31 @@ class TestAdminUserAPI:
         返回值:
             删除用户接口应返回成功响应。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_09")
-        user_id = data.get("id")
-        if not user_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+        email = test_data_factory.email("adu_09")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_09"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        create_response = admin_api.create_admin(payload)
+        create_body = create_response.json()
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
 
         response = admin_api.delete_user(user_id)
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -229,7 +256,10 @@ class TestAdminUserAPI:
         """
         response = admin_api.get_user_permissions(self.first_user_id(admin_api))
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -243,15 +273,32 @@ class TestAdminUserAPI:
         返回值:
             替换权限接口应返回成功响应。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_11")
-        user_id = data.get("id")
-        if not user_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+        email = test_data_factory.email("adu_11")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_11"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        create_response = admin_api.create_admin(payload)
+        create_body = create_response.json()
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         response = admin_api.replace_user_permissions(user_id, [])
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -265,10 +312,24 @@ class TestAdminUserAPI:
         返回值:
             接口应成功或返回明确参数错误，不应返回 500。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_12")
-        user_id = data.get("id")
-        if not user_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+        email = test_data_factory.email("adu_12")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_12"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        create_response = admin_api.create_admin(payload)
+        create_body = create_response.json()
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         permissions_body = admin_api.list_permissions().json()
@@ -296,10 +357,24 @@ class TestAdminUserAPI:
         返回值:
             接口应成功或返回明确参数错误，不应返回 500。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_13")
-        user_id = data.get("id")
-        if not user_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+        email = test_data_factory.email("adu_13")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_13"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        create_response = admin_api.create_admin(payload)
+        create_body = create_response.json()
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         permissions_body = admin_api.list_permissions().json()
@@ -344,14 +419,31 @@ class TestAdminUserAPI:
         返回值:
             重置密码接口应返回成功响应。
         """
-        data = self.create_auto_admin(admin_api, test_data_factory, "adu_15")
-        user_id = data.get("id")
-        if not user_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+        email = test_data_factory.email("adu_15")
+        payload = {
+            "email": email,
+            "password": "Aa123456789!",
+            "display_name": test_data_factory.name("admin", "adu_15"),
+            "role": "admin",
+            "notes": "auto",
+        }
+        create_response = admin_api.create_admin(payload)
+        create_body = create_response.json()
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
+        user_id = AdminTestDataService.resolve_created_user_id(admin_api, create_body["data"], email)
         resource_tracker.track("admin_user", user_id, lambda value: admin_api.delete_user(value))
 
         response = admin_api.reset_admin_password(user_id, "Bb123456789!")
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)

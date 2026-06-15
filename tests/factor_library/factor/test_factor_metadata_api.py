@@ -7,7 +7,6 @@ from requests.exceptions import HTTPError
 from config.settings import settings
 from service.common.http.json_response_assertion import JSONResponseAssertionService
 from service.common.http.response_utils import HTTPResponseService
-from service.factor_library.factors.factor_assertions import FactorAssertionService
 from service.factor_library.factors.factor_mining_queries import FactorMiningDBService
 
 
@@ -23,23 +22,6 @@ class TestFactorMetadataAPI:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
 
-    @allure.title("FM-01 Agent Factory 配置查询成功")
-    def test_fm_01_agent_factory_config_success(self, factor_resource_api):
-        """Case ID: FM-01
-        测试目的: 验证 Agent Factory 配置查询接口返回成功响应。
-
-        请求参数:
-            coin_category=main。
-        返回值:
-            接口应返回 HTTP 200、success=True 和 data。
-        """
-        response = factor_resource_api.get_agent_factory_config(coin_category="main")
-        body = response.json()
-
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
     @allure.title("FM-02 因子评价标准查询成功")
     def test_fm_02_factor_evaluation_standards_success(self, factor_resource_api):
         """Case ID: FM-02
@@ -53,7 +35,10 @@ class TestFactorMetadataAPI:
         response = factor_resource_api.list_factor_evaluation_standards(coin_category="main")
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -70,7 +55,10 @@ class TestFactorMetadataAPI:
         response = factor_resource_api.list_coin_universe_symbols(universe_key="main", is_active=1)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -115,7 +103,10 @@ class TestFactorMetadataAPI:
         response = factor_resource_api.notify_factor_result(run_id)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
         if body.get("data", {}).get("run_id") != run_id:

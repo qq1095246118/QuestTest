@@ -64,6 +64,54 @@ class FactorTestDataService:
         }
 
     @staticmethod
+    def build_theme_payload(test_data_factory: Any, case_id: str) -> dict[str, Any]:
+        """构造可成功创建主题的请求 body。
+
+        请求参数:
+            test_data_factory: 自动化测试数据工厂，需提供 name 方法。
+            case_id: 当前用例编号或场景标识。
+        返回值:
+            带 theme_key、theme_name、cn_name 和 theme_tags 的主题创建 payload。
+        """
+        name = test_data_factory.name("theme", case_id)
+        return {"theme_key": name, "theme_name": name, "cn_name": name, "theme_tags": "auto"}
+
+    @staticmethod
+    def build_level_three_sub_factor_payload(
+        test_data_factory: Any,
+        case_id: str,
+        parent_sub_factor_ids: list[int],
+        factor_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        """构造三级及以上子因子的创建 body。
+
+        请求参数:
+            test_data_factory: 自动化测试数据工厂，需提供 name 方法。
+            case_id: 当前用例编号或场景标识。
+            parent_sub_factor_ids: 父级子因子 ID 列表。
+            factor_ids: 可选母因子 ID 列表，必须是父级已关联母因子的子集。
+        返回值:
+            带 parent_sub_factor_ids、level=3 的创建子因子 payload。
+        """
+        name = test_data_factory.name("sub_factor_l3", case_id)
+        payload: dict[str, Any] = {
+            "serial_prefix": "AUTO",
+            "sub_factor_name": name,
+            "cn_name": name,
+            "level": 3,
+            "parent_sub_factor_ids": parent_sub_factor_ids,
+            "window": "24",
+            "window_value": "24",
+            "window_unit": "1h",
+            "formula_summary": "auto sub factor level 3",
+            "sub_factor_tags": "auto",
+            "metadata": {"source": "api_test"},
+        }
+        if factor_ids is not None:
+            payload["factor_ids"] = factor_ids
+        return payload
+
+    @staticmethod
     def first_theme_id(factor_resource_api: Any) -> int:
         """从主题列表派生一个真实主题 ID。
 

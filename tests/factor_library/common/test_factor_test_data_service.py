@@ -146,3 +146,37 @@ class TestFactorTestDataService:
 
         with pytest.raises(pytest.skip.Exception):
             FactorTestDataService.build_sub_factor_payload(api, factory, "sf_04")
+
+    def test_build_theme_payload_contains_unique_theme_fields(self):
+        """验证主题创建 payload 包含唯一主题字段。
+
+        请求参数:
+            固定 run_id 的 TestDataFactory。
+        返回值:
+            payload 应包含 theme_key、theme_name、cn_name 和 theme_tags。
+        """
+        factory = TestDataFactory(run_id="20260610130000")
+
+        payload = FactorTestDataService.build_theme_payload(factory, "th_04")
+
+        assert payload["theme_key"].startswith("auto_test_20260610130000_theme_th_04_")
+        assert payload["theme_name"] == payload["theme_key"]
+        assert payload["cn_name"] == payload["theme_key"]
+        assert payload["theme_tags"] == "auto"
+
+    def test_build_level_three_sub_factor_payload_contains_parent_ids(self):
+        """验证三级子因子 payload 包含父级子因子关系。
+
+        请求参数:
+            parent_sub_factor_ids=[11, 12]，factor_ids=[8]。
+        返回值:
+            payload 应包含 level=3、parent_sub_factor_ids 和 factor_ids。
+        """
+        factory = TestDataFactory(run_id="20260610130000")
+
+        payload = FactorTestDataService.build_level_three_sub_factor_payload(factory, "sf_l3", [11, 12], [8])
+
+        assert payload["level"] == 3
+        assert payload["parent_sub_factor_ids"] == [11, 12]
+        assert payload["factor_ids"] == [8]
+        assert payload["sub_factor_name"].startswith("auto_test_20260610130000_sub_factor_l3_sf_l3_")

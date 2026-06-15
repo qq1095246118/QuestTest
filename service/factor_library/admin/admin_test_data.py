@@ -15,6 +15,52 @@ class AdminTestDataService:
     """
 
     @staticmethod
+    def build_admin_payload(test_data_factory: Any, case_id: str, role: str = "admin") -> dict[str, Any]:
+        """构造创建管理员账号 body。
+
+        请求参数:
+            test_data_factory: 自动化测试数据工厂，需提供 email 方法。
+            case_id: 当前用例编号或场景标识。
+            role: admin 或 super_admin。
+        返回值:
+            创建管理员接口 JSON body。
+        """
+        email = test_data_factory.email(case_id)
+        return {
+            "email": email,
+            "password": "AutoPass123!",
+            "display_name": email.split("@")[0],
+            "role": role,
+            "status": "active",
+            "notes": "auto_test",
+        }
+
+    @staticmethod
+    def build_role_template_payload(
+        test_data_factory: Any,
+        case_id: str,
+        permissions: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """构造角色模板创建 body。
+
+        请求参数:
+            test_data_factory: 自动化测试数据工厂，需提供 role_name 方法。
+            case_id: 当前用例编号或场景标识。
+            permissions: 权限 code 列表；不传时使用空列表。
+        返回值:
+            创建角色模板接口 JSON body。
+        """
+        role_name = test_data_factory.role_name(case_id)
+        return {
+            "role_name": role_name,
+            "display_name": role_name,
+            "description": "auto_test",
+            "permissions": permissions or [],
+            "can_edit": True,
+            "can_delete": True,
+        }
+
+    @staticmethod
     def build_quant_account_payload(test_data_factory: Any, case_id: str) -> dict[str, Any]:
         """构造符合后端 schema 的量化账号创建 body。
 

@@ -54,6 +54,17 @@ class ResourceTracker:
         """
         self.resources.append(TrackedResource(resource_type=resource_type, value=value, cleanup=cleanup))
 
+    def track_approval_cancel(self, approval_id: Any, approval_api: Any) -> None:
+        """登记 pending 审批取消清理动作。
+
+        请求参数:
+            approval_id: 待取消审批 ID。
+            approval_api: 需提供 cancel_approval 方法的 ApprovalAPI 实例。
+        返回值:
+            无，副作用是把取消审批动作加入清理列表。
+        """
+        self.track("approval", approval_id, lambda value: approval_api.cancel_approval(value))
+
     def cleanup_all(self) -> list[dict[str, Any]]:
         """按逆序清理已登记资源。
 

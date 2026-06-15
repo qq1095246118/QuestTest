@@ -6,15 +6,40 @@
   <component name="ChangeListManager">
     <list default="true" id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="项目结构变动">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api/platform/factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_ic_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/env.test" beforeDir="false" afterPath="$PROJECT_DIR$/config/env.test" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_assertions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/admin/admin_test_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/auth/auth_assertions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/common/resource_tracker.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/common/resource_tracker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_assertions.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_assertions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_test_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_library/factors/factor_test_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_config_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_config_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_prompt_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_role_template_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_role_template_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_scenario.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_user_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_user_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_scenario.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_admin_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_admin_test_data_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_business_assertions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_test_data_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_factor_test_data_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/conftest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_metadata_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_metadata_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -336,7 +361,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781146469006</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="项目结构变动">
+      <option name="closed" value="true" />
+      <created>1781159252433</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1781159252433</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

@@ -108,6 +108,43 @@ class TestAdminTestDataService:
         assert payload["ic_good_min"] == 0.01
         assert payload["icir_better_max"] == 9.99
 
+    def test_build_admin_payload_uses_role_and_auto_email(self):
+        """验证管理员创建 payload 包含角色和 auto 邮箱。
+
+        请求参数:
+            role=super_admin，固定 run_id 的 TestDataFactory。
+        返回值:
+            payload 应包含 email、password、display_name、role、status 和 notes。
+        """
+        factory = TestDataFactory(run_id="20260610150000")
+
+        payload = AdminTestDataService.build_admin_payload(factory, "adu_super", role="super_admin")
+
+        assert payload["email"].endswith("@example.com")
+        assert payload["password"] == "AutoPass123!"
+        assert payload["display_name"]
+        assert payload["role"] == "super_admin"
+        assert payload["status"] == "active"
+        assert payload["notes"] == "auto_test"
+
+    def test_build_role_template_payload_uses_permissions_and_flags(self):
+        """验证角色模板 payload 包含权限和可编辑删除标识。
+
+        请求参数:
+            permissions=["factor:list"]，固定 run_id 的 TestDataFactory。
+        返回值:
+            payload 应包含 role_name、display_name、permissions、can_edit 和 can_delete。
+        """
+        factory = TestDataFactory(run_id="20260610150000")
+
+        payload = AdminTestDataService.build_role_template_payload(factory, "adr_flags", permissions=["factor:list"])
+
+        assert payload["role_name"].startswith("auto_test_20260610150000_role_adr_flags_")
+        assert payload["display_name"] == payload["role_name"]
+        assert payload["permissions"] == ["factor:list"]
+        assert payload["can_edit"] is True
+        assert payload["can_delete"] is True
+
     def test_resolve_created_user_id_prefers_create_response_id(self):
         """验证创建响应已返回 id 时不再查询用户列表。
 

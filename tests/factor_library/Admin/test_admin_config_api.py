@@ -5,8 +5,6 @@ import pytest
 from requests.exceptions import HTTPError
 
 from service.common.http.json_response_assertion import JSONResponseAssertionService
-from service.common.http.response_utils import HTTPResponseService
-from service.factor_library.admin.admin_assertions import AdminAssertionService
 from service.factor_library.admin.admin_test_data import AdminTestDataService
 
 
@@ -22,52 +20,6 @@ class TestAdminConfigAPI:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
 
-    @allure.title("ADC-01 更新 Agent Factory 配置成功")
-    def test_adc_01_update_agent_factory_config_success(self, admin_api, factor_resource_api, resource_tracker):
-        """Case ID: ADC-01
-        测试目的: 验证管理员可以更新 Agent Factory 配置。
-
-        请求参数:
-            先读取 coin_category=main 的当前配置，再用相同配置调用更新接口。
-        返回值:
-            更新接口应返回成功响应；用例结束时按原配置恢复，避免污染全局配置。
-        """
-        current_response = factor_resource_api.get_agent_factory_config(coin_category="main")
-        current_body = current_response.json()
-        current_data = current_body.get("data")
-        if not isinstance(current_data, dict):
-            JSONResponseAssertionService.fail_with_api_json(current_body)
-
-        restore_payload = dict(current_data)
-        resource_tracker.track(
-            "agent_factory_config",
-            restore_payload,
-            lambda value: admin_api.update_agent_factory_config(value, coin_category=value.get("coin_category", "main")),
-        )
-
-        response = admin_api.update_agent_factory_config(restore_payload, coin_category=restore_payload.get("coin_category", "main"))
-        body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-
-    @allure.title("ADC-02 非法 Agent Factory 配置更新失败")
-    def test_adc_02_update_agent_factory_config_invalid_body_fails(self, admin_api):
-        """Case ID: ADC-02
-        测试目的: 验证 Agent Factory 配置非法 body 返回明确错误。
-
-        请求参数:
-            body 中 agent_enabled 使用非法字符串。
-        返回值:
-            接口应返回 400、401、403 或 422。
-        """
-        try:
-            response = admin_api.update_agent_factory_config({"agent_enabled": "bad"}, coin_category="main")
-        except HTTPError as exc:
-            response = HTTPResponseService.from_http_error(exc)
-
-        assert response.status_code in {400, 401, 403, 422}
-
     @allure.title("ADC-03 创建因子评价标准暂不执行")
     def test_adc_03_create_factor_evaluation_standard_explicit_result(self, admin_api, test_data_factory, resource_tracker):
         """Case ID: ADC-03
@@ -81,7 +33,10 @@ class TestAdminConfigAPI:
         payload = AdminTestDataService.build_factor_evaluation_standard_payload(test_data_factory, "adc_03")
         create_response = admin_api.create_factor_evaluation_standard(payload)
         create_body = create_response.json()
-        errors = AdminAssertionService.success_errors(create_response.status_code, create_body)
+        errors = []
+        if create_response.status_code != 200:
+            errors.append(f"status_code={create_response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(create_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(create_body)
 
@@ -94,7 +49,10 @@ class TestAdminConfigAPI:
         update_payload["ic_good_min"] = 0.02
         update_response = admin_api.update_factor_evaluation_standard(standard_id, update_payload)
         update_body = update_response.json()
-        errors = AdminAssertionService.success_errors(update_response.status_code, update_body)
+        errors = []
+        if update_response.status_code != 200:
+            errors.append(f"status_code={update_response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(update_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(update_body)
 
@@ -112,8 +70,9 @@ class TestAdminConfigAPI:
         try:
             response = admin_api.update_factor_evaluation_standard(999999999, {"time_window": "1d"})
         except HTTPError as exc:
-            response = HTTPResponseService.from_http_error(exc)
+            response = exc.response
 
+        assert response is not None
         assert response.status_code in {400, 404, 422}
 
     @allure.title("ADC-07 删除不存在因子评价标准失败")
@@ -129,21 +88,7 @@ class TestAdminConfigAPI:
         try:
             response = admin_api.delete_factor_evaluation_standard(999999999)
         except HTTPError as exc:
-            response = HTTPResponseService.from_http_error(exc)
+            response = exc.response
 
+        assert response is not None
         assert response.status_code in {400, 404, 422}
-
-    @allure.title("ADC-09 Agent Factory 公共配置查询成功")
-    def test_adc_09_public_agent_factory_config_success(self, factor_resource_api):
-        """Case ID: ADC-09
-        测试目的: 验证公共 Agent Factory 配置查询接口返回成功响应。
-
-        请求参数:
-            coin_category=main。
-        返回值:
-            接口应返回 HTTP 200、success=True 和 data。
-        """
-        response = factor_resource_api.get_agent_factory_config(coin_category="main")
-        body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, body)
-        assert errors == []

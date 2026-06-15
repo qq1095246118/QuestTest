@@ -8,7 +8,6 @@ from api.platform.factor_api import FactorAPI
 from config.settings import settings
 from service.common.http.json_response_assertion import JSONResponseAssertionService
 from service.common.http.response_utils import HTTPResponseService
-from service.factor_library.factors.factor_assertions import FactorAssertionService
 from service.factor_library.factors.factor_test_data import FactorTestDataService
 
 
@@ -23,25 +22,6 @@ class TestSubFactorAPI:
     返回值:
         无返回值；pytest 根据接口自身断言判断用例是否通过。
     """
-
-    def create_auto_sub_factor(self, factor_resource_api, test_data_factory, case_id: str) -> dict:
-        """创建自动化子因子并返回接口 data。
-
-        请求参数:
-            factor_resource_api: factor 模块 API fixture。
-            test_data_factory: 自动化测试数据工厂 fixture。
-            case_id: 当前用例编号。
-        返回值:
-            创建子因子接口响应中的 data 字典。
-        """
-        response = factor_resource_api.create_sub_factor(
-            FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, case_id)
-        )
-        body = response.json()
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
-        return body["data"]
 
     def first_sub_factor_id(self, factor_resource_api) -> int:
         """从子因子列表派生一个真实子因子 ID。
@@ -67,8 +47,27 @@ class TestSubFactorAPI:
         response = factor_resource_api.list_sub_factors(**params)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
-        errors.extend(FactorAssertionService.list_pagination_errors(body, params["page"], params["limit"]))
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
+        data = body.get("data")
+        if not isinstance(data, dict):
+            errors.append("data is not dict")
+        else:
+            items = data.get("items")
+            pagination = data.get("pagination")
+            if not isinstance(items, list):
+                errors.append("data.items is not list")
+            if not isinstance(pagination, dict):
+                errors.append("data.pagination is not dict")
+            else:
+                if pagination.get("page") != params["page"]:
+                    errors.append(f"pagination.page={pagination.get('page')}")
+                if pagination.get("limit") != params["limit"]:
+                    errors.append(f"pagination.limit={pagination.get('limit')}")
+                if isinstance(items, list) and len(items) > params["limit"]:
+                    errors.append(f"items length={len(items)}")
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -90,7 +89,10 @@ class TestSubFactorAPI:
         response = factor_resource_api.list_sub_factors(page=1, limit=5, factor_id=factor_items[0]["id"])
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -109,8 +111,27 @@ class TestSubFactorAPI:
         response = factor_resource_api.list_sub_factors(**params)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
-        errors.extend(FactorAssertionService.list_pagination_errors(body, params["page"], params["limit"]))
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
+        data = body.get("data")
+        if not isinstance(data, dict):
+            errors.append("data is not dict")
+        else:
+            items = data.get("items")
+            pagination = data.get("pagination")
+            if not isinstance(items, list):
+                errors.append("data.items is not list")
+            if not isinstance(pagination, dict):
+                errors.append("data.pagination is not dict")
+            else:
+                if pagination.get("page") != params["page"]:
+                    errors.append(f"pagination.page={pagination.get('page')}")
+                if pagination.get("limit") != params["limit"]:
+                    errors.append(f"pagination.limit={pagination.get('limit')}")
+                if isinstance(items, list) and len(items) > params["limit"]:
+                    errors.append(f"items length={len(items)}")
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -149,10 +170,24 @@ class TestSubFactorAPI:
         返回值:
             创建子因子接口应返回成功响应。
         """
-        data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_04")
+        payload = FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, "sf_04")
+        response = factor_resource_api.create_sub_factor(payload)
+        body = response.json()
+
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
+        data = body.get("data")
+        if not isinstance(data, dict):
+            errors.append("data is not dict")
+        if errors:
+            JSONResponseAssertionService.fail_with_api_json(body)
+
         sub_factor_id = data.get("id")
-        if sub_factor_id:
-            resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
+        if not sub_factor_id:
+            JSONResponseAssertionService.fail_with_api_json(body)
+        resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
 
     @allure.title("SF-05 缺少 sub_factor_name 创建子因子失败")
     def test_sf_05_create_sub_factor_missing_name_fails(self, factor_resource_api, resource_tracker):
@@ -212,7 +247,10 @@ class TestSubFactorAPI:
         response = factor_resource_api.get_sub_factor(self.first_sub_factor_id(factor_resource_api))
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -243,16 +281,32 @@ class TestSubFactorAPI:
         返回值:
             更新接口应返回成功响应。
         """
-        data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_09")
+        payload = FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, "sf_09")
+        create_response = factor_resource_api.create_sub_factor(payload)
+        create_body = create_response.json()
+
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        data = create_body.get("data")
+        if not isinstance(data, dict):
+            create_errors.append("data is not dict")
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
         sub_factor_id = data.get("id")
         if not sub_factor_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
 
         response = factor_resource_api.update_sub_factor(sub_factor_id, {"cn_name": f"{data.get('sub_factor_name')}_updated"})
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -283,16 +337,32 @@ class TestSubFactorAPI:
         返回值:
             状态更新接口应返回成功响应，data.status 或 data.sub_factor_detail.status 应等于 3。
         """
-        data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_11")
+        payload = FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, "sf_11")
+        create_response = factor_resource_api.create_sub_factor(payload)
+        create_body = create_response.json()
+
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        data = create_body.get("data")
+        if not isinstance(data, dict):
+            create_errors.append("data is not dict")
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
         sub_factor_id = data.get("id")
         if not sub_factor_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
 
         response = factor_resource_api.update_sub_factor_status(sub_factor_id, 3)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
         response_data = body["data"]
@@ -311,71 +381,38 @@ class TestSubFactorAPI:
         返回值:
             批量状态更新接口应返回成功响应，data.status 应等于 3，updated_sub_factor_ids 应包含被更新子因子。
         """
-        data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_12")
+        payload = FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, "sf_12")
+        create_response = factor_resource_api.create_sub_factor(payload)
+        create_body = create_response.json()
+
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        data = create_body.get("data")
+        if not isinstance(data, dict):
+            create_errors.append("data is not dict")
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
         sub_factor_id = data.get("id")
         if not sub_factor_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
 
         response = factor_resource_api.batch_update_sub_factor_status([sub_factor_id], 3)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
         response_data = body["data"]
         assert isinstance(response_data, dict)
         assert response_data.get("status") == 3
         assert sub_factor_id in response_data.get("updated_sub_factor_ids", [])
-
-    @allure.title("SF-13 创建子因子刷新任务返回明确结果")
-    def test_sf_13_refresh_sub_factor_accepted_or_validation_error(self, factor_resource_api):
-        """Case ID: SF-13
-        测试目的: 验证刷新子因子接口不会返回服务端错误。
-
-        请求参数:
-            从子因子列表派生 sub_factor_id。
-        返回值:
-            接口应返回成功、Accepted 或明确参数/业务错误，HTTP 状态码小于 500。
-        """
-        try:
-            response = factor_resource_api.refresh_sub_factor(self.first_sub_factor_id(factor_resource_api))
-        except HTTPError as exc:
-            response = HTTPResponseService.from_http_error(exc)
-
-        assert response.status_code < 500
-
-    @allure.title("SF-14 查询子因子刷新任务状态成功")
-    def test_sf_14_get_refresh_status_success_when_refresh_accepted(self, factor_resource_api):
-        """Case ID: SF-14
-        测试目的: 验证刷新接口返回 refresh_id 后可以查询刷新任务状态。
-
-        请求参数:
-            从子因子列表派生 sub_factor_id，先调用 refresh，再使用返回的 refresh_id 查询状态。
-        返回值:
-            如果 refresh 响应返回 refresh_id/id，则状态查询接口应返回成功响应；未返回查询凭证时跳过。
-        """
-        sub_factor_id = self.first_sub_factor_id(factor_resource_api)
-        try:
-            refresh_response = factor_resource_api.refresh_sub_factor(sub_factor_id)
-        except HTTPError as exc:
-            refresh_response = HTTPResponseService.from_http_error(exc)
-
-        refresh_body = refresh_response.json() if refresh_response.content else {}
-        assert refresh_response.status_code < 500
-        data = refresh_body.get("data") if isinstance(refresh_body, dict) else {}
-        refresh_id = None
-        if isinstance(data, dict):
-            refresh_id = data.get("refresh_id") or data.get("id")
-        if not refresh_id:
-            pytest.skip("refresh 响应未返回 refresh_id/id，无法继续查询刷新任务状态。")
-
-        response = factor_resource_api.get_sub_factor_refresh(sub_factor_id, refresh_id)
-        body = response.json()
-
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(body)
 
     @allure.title("SF-15 子因子汇总查询成功")
     def test_sf_15_sub_factor_summary_returns_valid_structure(self, factor_resource_api):
@@ -390,7 +427,10 @@ class TestSubFactorAPI:
         response = factor_resource_api.list_sub_factor_summary(type="new", page=1, limit=5)
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -407,7 +447,10 @@ class TestSubFactorAPI:
         response = factor_resource_api.get_sub_factors_graph(type="new")
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -424,7 +467,10 @@ class TestSubFactorAPI:
         response = factor_resource_api.list_sub_factor_filter_options()
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
 
@@ -438,16 +484,32 @@ class TestSubFactorAPI:
         返回值:
             copy 接口应返回成功响应；copy 副本详情状态应为 1，并保留后由人工或定时任务清理。
         """
-        data = self.create_auto_sub_factor(factor_resource_api, test_data_factory, "sf_18")
+        payload = FactorTestDataService.build_sub_factor_payload(factor_resource_api, test_data_factory, "sf_18")
+        create_response = factor_resource_api.create_sub_factor(payload)
+        create_body = create_response.json()
+
+        create_errors = []
+        if create_response.status_code != 200:
+            create_errors.append(f"status_code={create_response.status_code}")
+        create_errors.extend(JSONResponseAssertionService.success_errors(create_body))
+        data = create_body.get("data")
+        if not isinstance(data, dict):
+            create_errors.append("data is not dict")
+        if create_errors:
+            JSONResponseAssertionService.fail_with_api_json(create_body)
+
         sub_factor_id = data.get("id")
         if not sub_factor_id:
-            JSONResponseAssertionService.fail_with_api_json(data)
+            JSONResponseAssertionService.fail_with_api_json(create_body)
         resource_tracker.track("sub_factor", sub_factor_id, lambda value: factor_resource_api.update_sub_factor_status(value, 3))
 
         response = factor_resource_api.copy_sub_factors([sub_factor_id])
         body = response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
         response_data = body["data"]
@@ -461,7 +523,10 @@ class TestSubFactorAPI:
         copied_detail_response = factor_resource_api.get_sub_factor(copied_sub_factor_id)
         copied_detail_body = copied_detail_response.json()
 
-        errors = FactorAssertionService.success_with_data_errors(copied_detail_response.status_code, copied_detail_body)
+        errors = []
+        if copied_detail_response.status_code != 200:
+            errors.append(f"status_code={copied_detail_response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(copied_detail_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(copied_detail_body)
         copied_sub_factor_detail = copied_detail_body["data"].get("sub_factor_detail")

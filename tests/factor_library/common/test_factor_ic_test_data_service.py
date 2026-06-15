@@ -235,3 +235,32 @@ class TestFactorICTestDataService:
         assert item["metrics"]["ic"] == 0.12
         assert item["slice_start"] == "2026-01-01T00:00:00Z"
         assert item["ic"] == 0.12
+
+    def test_build_slice_metric_item_contains_v2_required_dimensions(self):
+        """验证切片指标 item 包含新版唯一键维度字段。
+
+        请求参数:
+            run_id=auto_run，factor_id=123。
+        返回值:
+            item 应包含 run_id、factor_id、is_sub_factor_id、ic_scope、calculation_mode、window 和 slice 时间字段。
+        """
+        item = FactorICTestDataService.build_slice_metric_item("auto_run", 123)
+
+        for key in [
+            "run_id",
+            "factor_id",
+            "is_sub_factor_id",
+            "ic_scope",
+            "calculation_mode",
+            "factor_bar_interval",
+            "factor_window_bars",
+            "return_bar_interval",
+            "forward_return_bars",
+            "universe_key",
+            "symbol",
+            "window_scope",
+            "sample_segment",
+            "slice_start",
+            "slice_end",
+        ]:
+            assert key in item

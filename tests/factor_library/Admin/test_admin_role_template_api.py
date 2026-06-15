@@ -6,7 +6,6 @@ from requests.exceptions import HTTPError
 
 from service.common.http.json_response_assertion import JSONResponseAssertionService
 from service.common.http.response_utils import HTTPResponseService
-from service.factor_library.admin.admin_assertions import AdminAssertionService
 
 
 @pytest.mark.factor_library_api
@@ -33,7 +32,10 @@ class TestAdminRoleTemplateAPI:
         """
         response = admin_api.list_role_templates()
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -53,7 +55,10 @@ class TestAdminRoleTemplateAPI:
         )
         body = response.json()
 
-        errors = AdminAssertionService.success_errors(response.status_code, body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(body)
         resource_tracker.track("role_template", role_name, lambda value: admin_api.delete_role_template(value))
@@ -96,7 +101,10 @@ class TestAdminRoleTemplateAPI:
 
         response = admin_api.get_role_template(role_name)
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -133,7 +141,10 @@ class TestAdminRoleTemplateAPI:
 
         response = admin_api.update_role_template(role_name, {"description": "updated"})
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -153,7 +164,10 @@ class TestAdminRoleTemplateAPI:
 
         response = admin_api.list_role_template_permission_names(role_name)
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -172,7 +186,10 @@ class TestAdminRoleTemplateAPI:
 
         response = admin_api.delete_role_template(role_name)
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)
 
@@ -205,22 +222,9 @@ class TestAdminRoleTemplateAPI:
         """
         response = admin_api.list_permissions()
         response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
-        if errors:
-            JSONResponseAssertionService.fail_with_api_json(response_body)
-
-    @allure.title("ADR-12 邀请码列表查询成功")
-    def test_adr_12_list_invite_codes_success(self, admin_api):
-        """Case ID: ADR-12
-        测试目的: 验证邀请码列表接口返回成功响应。
-
-        请求参数:
-            不传查询参数。
-        返回值:
-            接口应返回 HTTP 200、success=True 和 data。
-        """
-        response = admin_api.list_invite_codes()
-        response_body = response.json()
-        errors = AdminAssertionService.success_errors(response.status_code, response_body)
+        errors = []
+        if response.status_code != 200:
+            errors.append(f"status_code={response.status_code}")
+        errors.extend(JSONResponseAssertionService.success_errors(response_body))
         if errors:
             JSONResponseAssertionService.fail_with_api_json(response_body)

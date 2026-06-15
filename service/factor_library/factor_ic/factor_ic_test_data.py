@@ -199,3 +199,67 @@ class FactorICTestDataService:
         if isinstance(data, dict) and isinstance(data.get("items"), list):
             return data["items"]
         return []
+
+    @staticmethod
+    def find_summary_metric_item(body: Any, factor_id: int, run_id: str) -> dict[str, Any] | None:
+        """从 IC summary metrics 列表响应中查找本次写入的指标。
+
+        请求参数:
+            body: summary metrics 列表接口 JSON 响应体。
+            factor_id: 本次自动化创建的母因子 ID。
+            run_id: 本次自动化写入 metrics 时使用的 run_id。
+        返回值:
+            匹配 factor_id、run_id 且 mean_ic 不为空的指标字典；未匹配时返回 None。
+        """
+        return next(
+            (
+                item
+                for item in FactorICTestDataService.extract_items(body)
+                if isinstance(item, dict)
+                and item.get("factor_id") == factor_id
+                and item.get("run_id") == run_id
+                and item.get("mean_ic") is not None
+            ),
+            None,
+        )
+
+    @staticmethod
+    def find_slice_metric_item(body: Any, factor_id: int, run_id: str, symbol: str) -> dict[str, Any] | None:
+        """从 IC slice metrics 列表响应中查找本次写入的指标。
+
+        请求参数:
+            body: slice metrics 列表接口 JSON 响应体。
+            factor_id: 本次自动化创建的母因子 ID。
+            run_id: 本次自动化写入 metrics 时使用的 run_id。
+            symbol: 本次自动化写入 metrics 时使用的交易对。
+        返回值:
+            匹配 factor_id、run_id、symbol 且 ic 不为空的指标字典；未匹配时返回 None。
+        """
+        return next(
+            (
+                item
+                for item in FactorICTestDataService.extract_items(body)
+                if isinstance(item, dict)
+                and item.get("factor_id") == factor_id
+                and item.get("run_id") == run_id
+                and item.get("symbol") == symbol
+                and item.get("ic") is not None
+            ),
+            None,
+        )
+
+    @staticmethod
+    def owner_type_mismatch_items(body: Any, expected_is_sub_factor: bool) -> list[dict[str, Any]]:
+        """筛选 IC 列表响应中 owner 类型不符合预期的指标。
+
+        请求参数:
+            body: IC metrics 列表接口 JSON 响应体。
+            expected_is_sub_factor: True 表示期望子因子指标，False 表示期望母因子指标。
+        返回值:
+            缺少 is_sub_factor_id 或 owner 类型与预期不一致的 item 列表。
+        """
+        return [
+            item
+            for item in FactorICTestDataService.extract_items(body)
+            if "is_sub_factor_id" not in item or bool(item.get("is_sub_factor_id")) is not expected_is_sub_factor
+        ]
