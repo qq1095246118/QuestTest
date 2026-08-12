@@ -8,6 +8,7 @@
 2. 根据新版接口文档更新受影响的旧接口回归用例。
 3. 先验证接口自身的入参约束、响应结构和业务关系，再验证接口返回与只读数据库的一致性。
 4. 不使用当前环境探测到的固定新闻 ID、数量、日期或响应内容倒推正确结果。
+5. 用例以业务规则、接口数据关系和数据库一致性为主；兼容性、性能和纯格式规范不扩展为独立用例大类。
 
 ## 2. 事实与边界
 
@@ -38,6 +39,7 @@
 
 - 不新增或设计 `POST /api/v1/smart_search` 的业务用例。新版 PDF 虽然包含该接口，但当前任务已经明确新接口只做 `events/recall`。
 - 不覆盖用户身份鉴权、HTTP 方法错误、Content-Type 错误、限流、性能、并发、外部搜索服务故障注入、ES/LLM 故障注入。
+- 不覆盖浏览器、客户端版本、字符集兼容等兼容性矩阵。
 - 不通过数据库写入、修改或清理测试数据。
 - 不把当前环境中某个固定关键词的固定返回数量写成稳定预期。
 
@@ -79,14 +81,15 @@
 4. `data.matched_by` 只能是 `tag`、`title` 或 `null`。
 5. `data.gap_days` 等于请求值或文档默认值。
 6. `total_candidates`、`filtered_noise`、`occurrences` 为非负整数。
-7. `events` 为数组，数组长度等于 `occurrences`，且不超过 `limit`。
+7. `events` 为数组，`occurrences` 表示截断前的聚类事件总数，`len(events) = min(occurrences, limit)`。
 8. 每个事件的 `news_id`、`doc_id`、`title`、`publish_time`、`impact_events` 类型符合文档。
 9. `doc_id` 等于 `news:` 加上字符串形式的 `news_id`。
 10. 有事件时按 `publish_time` 倒序；无命中时 `matched_by=null` 且 `events=[]`。
+11. `occurrences <= total_candidates`，返回的 `news_id` 和 `doc_id` 均不重复。
 
-### 4.3 正向用例矩阵
+### 4.3 业务与接口用例矩阵
 
-新增 `E01` 至 `E16`，每条用例独立执行：
+新增 `E01` 至 `E15`，重点验证事件召回的业务分支和字段关系：
 
 | 编号 | 场景 | 重点 |
 |---|---|---|
@@ -94,28 +97,30 @@
 | E02 | 标签命中优先 | 验证有标签命中时 `matched_by=tag`，不退回标题路径 |
 | E03 | 无标签时标题兜底 | 验证标题分词匹配并返回 `matched_by=title` |
 | E04 | 完全无命中 | 验证 `matched_by=null`、`events=[]` 及计数字段关系 |
-| E05 | `gap_days=1` | 验证最小合法间隔被接受，并按间隔聚类 |
-| E06 | `gap_days=90` | 验证最大合法间隔被接受，聚类不会超过接口上限逻辑 |
-| E07 | 调小 `gap_days` | 同一关键词使用更小间隔时，验证事件拆分关系，而不是固定数量 |
-| E08 | 调大 `gap_days` | 同一关键词使用更大间隔时，验证事件合并关系，而不是固定数量 |
-| E09 | `limit=1` | 验证最多返回一条、`occurrences <= 1` |
-| E10 | `limit=200` | 验证最大合法返回上限被接受 |
-| E11 | `window_days` 时间窗 | 验证事件均落在最近 N 天窗口内 |
-| E12 | 默认促销过滤 | 验证 `exclude_promo=true` 时结果标题不包含文档定义的促销词，并记录 `filtered_noise` |
-| E13 | 关闭促销过滤 | 验证 `exclude_promo=false` 不启用该过滤，不能强制要求一定出现促销结果 |
-| E14 | 显式传入默认值 | 验证显式传 `gap_days=7`、`limit=50`、`exclude_promo=true` 与省略参数的语义一致 |
-| E15 | 全部可选参数同时传入 | 验证参数组合不会互相覆盖，响应回显有效参数 |
-| E16 | 聚类代表和顺序 | 验证每组只保留最早新闻，最终事件按时间倒序返回 |
+| E05 | 调小和调大 `gap_days` | 对同一关键词分别请求较小、默认、较大间隔；候选数保持不变，事件数随间隔增大不得增加 |
+| E06 | 聚类间隔边界 | 通过数据库候选时间线验证相邻间隔 `<= gap_days` 合并、`> gap_days` 才拆成新事件 |
+| E07 | 每组保留最早新闻 | 重建可追溯候选组，验证接口代表新闻是组内发布时间最早的一条 |
+| E08 | 最终按时间倒序 | 验证接口先选择每组最早新闻，再把各组代表按时间倒序返回 |
+| E09 | `limit` 只截断列表 | 对同一条件比较 `limit=1` 与大 limit；`total_candidates`、`occurrences` 不变，仅 `events` 被截断且保留最近事件 |
+| E10 | `window_days` 时间窗 | 与全历史结果比较，验证时间窗内候选和事件均为全历史结果的受限集合 |
+| E11 | 时间窗边界和时区 | 按请求发起时间计算起点，验证返回时间不早于边界；区分新闻发布时间与标签 UTC 写入时间 |
+| E12 | 默认促销过滤 | 验证 `exclude_promo=true` 时结果标题不包含文档定义的促销词，并核对过滤数量关系 |
+| E13 | 关闭促销过滤 | 与默认过滤使用同一关键词；关闭后 `filtered_noise=0`，原始候选数等于过滤后候选数加被过滤数 |
+| E14 | 计数守恒与唯一性 | 验证候选数、聚类事件数、limit 截断后数组长度以及事件 ID 去重关系 |
+| E15 | 全部可选参数组合 | 同时传入 `gap_days`、`limit`、`window_days`、`exclude_promo`，验证各参数都作用于对应阶段且互不覆盖 |
 
-E07、E08 只断言同一数据集在参数变化下的单调关系：通常 `gap_days` 越小，事件拆分不会减少；越大，事件合并不会增加。若数据边界或时间相等导致无法证明关系，应以结构和聚类规则断言，不把经验表中的数量写死。
+E05 只断言同一批候选数据上的单调关系，不写死经验表中的事件数量。E06、E07 只有在数据库能够完整还原该次匹配候选时才做全量聚类对账；若存在数据库无法还原的 ES 候选，必须明确报告数据源缺口，不能将近似 SQL 的结果当作正确预期。
 
 ### 4.4 数据一致性用例
 
-E17 至 E19 专门验证接口返回与数据库的可追溯关系：
+E16 至 E21 专门验证接口返回与数据库的可追溯关系：
 
-- E17：使用响应事件的 `news_id` 查询 `btc_impact_tag`，逐条核对 `impact_events`，并验证标签命中事件的 `matched_by` 与标签数据存在关系。
-- E18：对普通新闻 ID 使用 `LEFT JOIN` 查询 `news_information`，核对标题和发布时间；接口 ID 在本地新闻表不存在时，不把该情况误判为接口结构错误。
-- E19：验证 `window_days` 的时间边界、候选数、去重数和最终事件数组的关系；时间边界按接口返回的 `publish_time` 与请求执行时间统一时区计算。
+- E16：使用响应事件的 `news_id` 查询 `btc_impact_tag`，逐条核对接口 `impact_events` 与表字段一致。
+- E17：核对 `btc_impact_tag.impact_events` 与 `result_json.impact_events` 内部一致，避免接口读取到过期或不一致的标签快照。
+- E18：使用 `LEFT JOIN news_information` 核对返回事件的标题和发布时间；有 DB 行时必须一致，无 DB 行时明确标记为命名空间数据源缺口。
+- E19：对标签命中关键词从 `btc_impact_tag.impact_events` 反查候选，验证 `matched_by=tag` 的数据依据，并确认标签路径优先于标题兜底。
+- E20：同时覆盖普通 ID 与 `news_id >= 9000000000` 的命名空间 ID；两类 ID 都核对 `doc_id` 和标签，新闻主表只在实际存在记录时核对。
+- E21：核对 `gap_days`、`limit`、`window_days`、`exclude_promo` 变化前后的字段不变量和变量，防止参数被接受但未真正参与业务计算。
 
 普通新闻的 SQL 采用响应 ID 参数化，不把 ID 拼接到 SQL 字符串中。示例结构如下，实际执行时通过数据库驱动绑定 JSON 数组参数：
 
@@ -141,25 +146,35 @@ LEFT JOIN `perception-test`.news_information ni
 ORDER BY r.news_id;
 ```
 
-标签核对 SQL 使用本次响应的实际 ID：
+标签核对 SQL 同样使用本次响应的实际 ID，并通过 `JSON_TABLE` 参数化：
 
 ```sql
+WITH requested_ids AS (
+    SELECT jt.news_id
+    FROM JSON_TABLE(
+        %s,
+        '$[*]' COLUMNS (news_id BIGINT PATH '$')
+    ) AS jt
+)
 SELECT
-    news_id,
-    impact_events,
-    impacted_dimensions,
-    core_dimensions,
-    all_dimensions,
-    direction,
-    confidence,
-    degraded,
-    updated_at
-FROM `perception-test`.btc_impact_tag
-WHERE news_id IN (...本次响应中的实际 news_id...)
-ORDER BY news_id;
+    r.news_id AS requested_news_id,
+    CASE WHEN t.news_id IS NULL THEN 0 ELSE 1 END AS tag_row_found,
+    t.impact_events,
+    JSON_EXTRACT(t.result_json, '$.impact_events') AS snapshot_impact_events,
+    t.impacted_dimensions,
+    t.core_dimensions,
+    t.all_dimensions,
+    t.direction,
+    t.confidence,
+    t.degraded,
+    t.updated_at
+FROM requested_ids r
+LEFT JOIN `perception-test`.btc_impact_tag t
+    ON t.news_id = r.news_id
+ORDER BY r.news_id;
 ```
 
-自动化实现时 `IN (...)` 也必须改成驱动占位符，以上文档中的省略号只表示设计阶段的 SQL 形态，不是可直接执行的拼接方式。
+数据库驱动将本次响应 ID 序列化为 JSON 字符串后绑定到 `%s`，不能拼接 ID。
 
 对于 `news_id >= 9000000000`：
 
@@ -167,24 +182,23 @@ ORDER BY news_id;
 - 优先查询 `btc_impact_tag` 进行标签对账。
 - 不要求 `news_information` 必须存在对应行，因为这类 ID 可能来自 Redis 命名空间。
 
-### 4.5 负向用例矩阵
+### 4.5 必要的接口参数用例
 
-新增 `E20` 至 `E31`：
+只保留直接关系到接口可用性的必要校验，不扩展客户端兼容和格式规范矩阵。新增 `E22` 至 `E30`：
 
 | 编号 | 输入 | 预期 |
 |---|---|---|
-| E20 | 缺少 `keyword` | HTTP 422，错误定位 `keyword` |
-| E21 | `keyword=""` | HTTP 422，违反最小长度 |
-| E22 | `keyword` 为整数或对象 | HTTP 422，类型错误 |
-| E23 | `gap_days=0` | HTTP 422 |
-| E24 | `gap_days=91` | HTTP 422 |
-| E25 | `gap_days` 为非整数字符串 | HTTP 422 |
-| E26 | `limit=0` | HTTP 422 |
-| E27 | `limit=201` | HTTP 422 |
-| E28 | `limit` 为非整数字符串 | HTTP 422 |
-| E29 | `window_days=0` | HTTP 422 |
-| E30 | `window_days` 为非整数字符串 | HTTP 422 |
-| E31 | `exclude_promo` 为非布尔值 | HTTP 422 |
+| E22 | 缺少 `keyword` | HTTP 422，错误定位 `keyword` |
+| E23 | `keyword=""` | HTTP 422，违反最小长度 |
+| E24 | `gap_days=0` | HTTP 422，低于业务下限 |
+| E25 | `gap_days=91` | HTTP 422，超过业务上限 |
+| E26 | `limit=0` | HTTP 422，低于业务下限 |
+| E27 | `limit=201` | HTTP 422，超过业务上限 |
+| E28 | `window_days=0` | HTTP 422，时间窗必须至少为 1 天 |
+| E29 | 整数参数传不可解析值 | 分别验证 `gap_days`、`limit`、`window_days` 不会静默回退默认值 |
+| E30 | `exclude_promo` 传不可解析值 | HTTP 422，不能静默按默认 `true` 执行 |
+
+GET query 参数在传输层都是文本，因此不设计“`keyword` 为整数或对象”的伪类型场景；`keyword=123` 对接口而言是合法字符串关键词。E29 中各整数参数作为独立操作和结果书写，但归为同一个接口参数解析场景，不重复扩展相同断言。
 
 负向用例统一要求：
 
@@ -249,8 +263,8 @@ rank_score = keyword_hits * 1000 + freshness_score
 
 完成后 `docs/search_api_test_cases.md` 应包含：
 
-- 原有 76 条旧接口用例，更新受影响的字段、排序和 DB 规则。
-- `E01-E31` 事件召回用例，其中 E01-E19 为正向/数据一致性场景，E20-E31 为参数负向场景。
+- 原有 76 条旧接口用例，更新受影响的字段、排序和 DB 规则；不额外增加性能、兼容性或纯规范回归用例。
+- `E01-E30` 事件召回用例，其中 E01-E21 为业务、接口成功和数据一致性场景，E22-E30 为必要参数场景。
 - 统一记录当前 OpenAPI 落后于新版 PDF 的事实。
 - 不包含 `smart_search` 新接口业务用例，不包含自动化 Python 代码。
 
