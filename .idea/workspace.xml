@@ -4,374 +4,171 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="项目结构变动">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/platform/factor_ic_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" afterDir="false" />
+    <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/.agents/skills/brainstorming" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/dispatching-parallel-agents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/executing-plans" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/finishing-a-development-branch" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/receiving-code-review" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/requesting-code-review" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/subagent-driven-development" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/superpowers" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/systematic-debugging" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/test-driven-development" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/using-git-worktrees" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/using-superpowers" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/verification-before-completion" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/writing-plans" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/skills/writing-skills" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/.codex-plugin/plugin.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/CODE_OF_CONDUCT.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/LICENSE" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/assets/app-icon.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/assets/superpowers-small.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/frame-template.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/helper.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/server.cjs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/start-server.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/stop-server.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/spec-document-reviewer-prompt.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/visual-companion.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/dispatching-parallel-agents/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/dispatching-parallel-agents/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/executing-plans/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/executing-plans/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/finishing-a-development-branch/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/finishing-a-development-branch/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/receiving-code-review/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/receiving-code-review/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/requesting-code-review/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/requesting-code-review/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/requesting-code-review/code-reviewer.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/code-quality-reviewer-prompt.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/implementer-prompt.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/spec-reviewer-prompt.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/CREATION-LOG.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/condition-based-waiting-example.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/condition-based-waiting.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/defense-in-depth.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/find-polluter.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/root-cause-tracing.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-academic.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-pressure-1.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-pressure-2.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-pressure-3.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/test-driven-development/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/test-driven-development/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/test-driven-development/testing-anti-patterns.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-git-worktrees/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-git-worktrees/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/references/codex-tools.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/references/copilot-tools.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/references/gemini-tools.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/verification-before-completion/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/verification-before-completion/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-plans/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-plans/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-plans/plan-document-reviewer-prompt.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/SKILL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/agents/openai.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/anthropic-best-practices.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/examples/CLAUDE_MD_TESTING.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/graphviz-conventions.dot" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/persuasion-principles.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/render-graphs.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/testing-skills-with-subagents.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Jenkinsfile" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/admin_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/approval_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/auth_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_ic_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/platform/factor_library_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/env.example" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/env.prod" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/env.test" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/AI_GENERATION_GUIDE.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-08-12-search-api-v2-test-cases.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-08-12-search-api-v2-test-cases-design.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pytest.ini" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/common/db/mysql_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/common/db/ssh_tunnel.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/common/http/http_client.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/common/http/json_response_assertion.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/common/http/response_utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_db_queries.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_test_data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/approval/approval_db_queries.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/approval/approval_test_data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/common/auth_session.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/common/resource_tracker.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/common/test_data_factory.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_db_queries.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_library_compare.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_library_queries.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_mining_queries.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_test_data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_config_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_quant_account_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_role_template_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_scenario.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_user_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Approval/test_approval_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Approval/test_approval_scenario.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_admin_test_data_service.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_approval_test_data_service.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_common_services.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_mining_db_service.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_test_data_service.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_json_response_assertion.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_settings_config.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/conftest.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_list_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_metadata_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="26764" />
-  </component>
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
-  </component>
-  <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
-  </component>
-  <component name="GitHubPullRequestSearchHistory">{
-  &quot;lastFilter&quot;: {
-    &quot;state&quot;: &quot;OPEN&quot;,
-    &quot;assignee&quot;: &quot;qq1095246118&quot;
-  }
-}</component>
-  <component name="GithubDefaultAccount">
-    <option name="defaultAccountId" value="9dc199da-2e6a-48c5-bf70-897f44c0d3fb" />
-  </component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/qq1095246118/QuestTest.git&quot;,
-    &quot;accountId&quot;: &quot;9dc199da-2e6a-48c5-bf70-897f44c0d3fb&quot;
-  }
-}</component>
   <component name="McpProjectServerCommands">
     <commands />
     <urls />
   </component>
-  <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 1,
-  &quot;fromUser&quot;: false
-}</component>
-  <component name="ProjectId" id="3DfFY1ch5CurLuMhgM1PXUPxTQ6" />
-  <component name="ProjectViewState">
-    <option name="hideEmptyMiddlePackages" value="true" />
-    <option name="showLibraryContents" value="true" />
-  </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python 测试.pytest (Admin 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (FactorIC 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (Quantitative_Trading 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (factor 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (factors 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_binance_full_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_binance_usdm_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_coinglass_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_factor_data_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_factor_ic_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_kline_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_open_interest_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.pytest (test_quantitative_trading_api.py 内).executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_02_list_users_filter_by_status_success 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.Admin.test_admin_user_api.TestAdminUserAPI.test_adu_10_get_user_permissions_success 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_01_factor_summary_success_with_real_factor_id 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.auth.test_login_api.TestLoginAPI 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.factor_library.factors.test_factor_list_api.TestFactorListAPI 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_binance_db_accuracy.test_binance_raw_and_metadata_db_accuracy 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_binance_full_api.test_bf_batch_bounds_param_002 的 pytest.executor&quot;: &quot;Debug&quot;,
-    &quot;Python 测试.tests.test_binance_full_api.test_bf_complete_boundary_001 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_coinglass_api.test_cg_controlled_summary_dqc_001 的 pytest.executor&quot;: &quot;Debug&quot;,
-    &quot;Python 测试.tests.test_kline_api.test_binance_full_usdm_kline_time_bounds_boundary_001 的 pytest.executor&quot;: &quot;Debug&quot;,
-    &quot;Python 测试.tests.test_kline_api.test_kd_usdm_raw_dqc_001 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_kline_api.test_kline_fetch_boundary_001 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_kline_api.test_kline_fetch_normal_001 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_kline_api.test_kline_fetch_param_error_001_missing_symbol 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_kline_api.test_kline_usdm_curated_normal_001 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python 测试.tests.test_kline_api_cases.test_migrated_kline_api_cases 的 pytest.executor&quot;: &quot;Run&quot;,
-    &quot;Python.a.executor&quot;: &quot;Run&quot;,
-    &quot;Python.fetch_selected_usdm_1h_klines.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;codex/kline-case-design&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/wrh/Downloads/QuestTest/docs&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;ml.llm.LLMConfigurable&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "git-widget-placeholder": "codex/kline-case-design"
   }
-}</component>
-  <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/docs" />
-      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_kline_all_future_raw_1h" />
-      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_1h_usdm_kline_raw" />
-      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_kline_all_future_raw" />
-      <recent name="$PROJECT_DIR$/artifacts/reports/db_accuracy/db_exports/binance_usdm_funding_rate_raw" />
-    </key>
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/reports/1m" />
-      <recent name="$PROJECT_DIR$/reports/1h" />
-      <recent name="$PROJECT_DIR$/reports/all" />
-    </key>
-  </component>
-  <component name="RunManager" selected="Python 测试.pytest (FactorIC 内)">
-    <configuration name="pytest (FactorIC 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/FactorIC" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/FactorIC&quot;" />
-      <option name="_new_targetType" value="&quot;PATH&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="pytest (Quantitative_Trading 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/Quantitative_Trading" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Quantitative_Trading&quot;" />
-      <option name="_new_targetType" value="&quot;PATH&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="pytest (factor 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/factor_library/factor" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/factor&quot;" />
-      <option name="_new_targetType" value="&quot;PATH&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="pytest (test_quantitative_trading_api.py 内)" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/factor_library/Quantitative_Trading/test_quantitative_trading_api.py&quot;" />
-      <option name="_new_targetType" value="&quot;PATH&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="QuestTest" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="RUN_TOOL" value="" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
-    <recent_temporary>
-      <list>
-        <item itemvalue="Python 测试.pytest (FactorIC 内)" />
-        <item itemvalue="Python 测试.pytest (factor 内)" />
-        <item itemvalue="Python 测试.pytest (test_quantitative_trading_api.py 内)" />
-        <item itemvalue="Python 测试.pytest (Quantitative_Trading 内)" />
-        <item itemvalue="Python 测试.tests.factor_library.FactorIC.test_factor_ic_api.TestFactorICAPI.test_ic_06_sub_factor_summary_success_with_real_sub_factor_id 的 pytest" />
-      </list>
-    </recent_temporary>
-  </component>
-  <component name="SharedIndexes">
-    <attachedChunks>
-      <set>
-        <option value="bundled-python-sdk-83fa46d5d5d4-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.33514.19" />
-      </set>
-    </attachedChunks>
-  </component>
-  <component name="SvnConfiguration">
-    <configuration>$USER_HOME$/.subversion</configuration>
-  </component>
+}]]></component>
   <component name="TaskManager">
-    <task active="true" id="Default" summary="默认任务">
-      <changelist id="1683ddea-d5aa-4053-a3e7-fd04b41d0fe1" name="更改" comment="" />
-      <created>1778665260593</created>
-      <option name="number" value="Default" />
-      <option name="presentableId" value="Default" />
-      <updated>1778665260593</updated>
-    </task>
-    <task id="LOCAL-00001" summary="数据中台用例+数据库数据验证 case">
-      <option name="closed" value="true" />
-      <created>1779087836190</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1779087836190</updated>
-    </task>
-    <task id="LOCAL-00002" summary="bug 修复">
-      <option name="closed" value="true" />
-      <created>1779163923559</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1779163923559</updated>
-    </task>
-    <task id="LOCAL-00003" summary="指定时间+指定市场+对比结果脚本">
-      <option name="closed" value="true" />
-      <created>1779176860542</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1779176860542</updated>
-    </task>
-    <task id="LOCAL-00004" summary="功能修复">
-      <option name="closed" value="true" />
-      <created>1779247503316</created>
-      <option name="number" value="00004" />
-      <option name="presentableId" value="LOCAL-00004" />
-      <option name="project" value="LOCAL" />
-      <updated>1779247503316</updated>
-    </task>
-    <task id="LOCAL-00005" summary="bug 修复">
-      <option name="closed" value="true" />
-      <created>1779267517158</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1779267517158</updated>
-    </task>
-    <task id="LOCAL-00006" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1779420995121</created>
-      <option name="number" value="00006" />
-      <option name="presentableId" value="LOCAL-00006" />
-      <option name="project" value="LOCAL" />
-      <updated>1779420995121</updated>
-    </task>
-    <task id="LOCAL-00007" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1779421042613</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
-      <option name="project" value="LOCAL" />
-      <updated>1779421042613</updated>
-    </task>
-    <task id="LOCAL-00008" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1779532321346</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1779532321346</updated>
-    </task>
-    <task id="LOCAL-00009" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1780909299375</created>
-      <option name="number" value="00009" />
-      <option name="presentableId" value="LOCAL-00009" />
-      <option name="project" value="LOCAL" />
-      <updated>1780909299375</updated>
-    </task>
-    <task id="LOCAL-00010" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1781091712011</created>
-      <option name="number" value="00010" />
-      <option name="presentableId" value="LOCAL-00010" />
-      <option name="project" value="LOCAL" />
-      <updated>1781091712011</updated>
-    </task>
-    <task id="LOCAL-00011" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1781096471874</created>
-      <option name="number" value="00011" />
-      <option name="presentableId" value="LOCAL-00011" />
-      <option name="project" value="LOCAL" />
-      <updated>1781096471874</updated>
-    </task>
-    <task id="LOCAL-00012" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1781146469006</created>
-      <option name="number" value="00012" />
-      <option name="presentableId" value="LOCAL-00012" />
-      <option name="project" value="LOCAL" />
-      <updated>1781146469006</updated>
-    </task>
-    <task id="LOCAL-00013" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1781159252433</created>
-      <option name="number" value="00013" />
-      <option name="presentableId" value="LOCAL-00013" />
-      <option name="project" value="LOCAL" />
-      <updated>1781159252433</updated>
-    </task>
-    <task id="LOCAL-00014" summary="项目结构变动">
-      <option name="closed" value="true" />
-      <created>1781503111221</created>
-      <option name="number" value="00014" />
-      <option name="presentableId" value="LOCAL-00014" />
-      <option name="project" value="LOCAL" />
-      <updated>1781503111221</updated>
-    </task>
-    <option name="localTasksCounter" value="15" />
     <servers />
-  </component>
-  <component name="Vcs.Log.Tabs.Properties">
-    <option name="TAB_STATES">
-      <map>
-        <entry key="MAIN">
-          <value>
-            <State />
-          </value>
-        </entry>
-      </map>
-    </option>
-  </component>
-  <component name="VcsManagerConfiguration">
-    <MESSAGE value="数据中台用例+数据库数据验证 case" />
-    <MESSAGE value="指定时间+指定市场+对比结果脚本" />
-    <MESSAGE value="功能修复" />
-    <MESSAGE value="bug 修复" />
-    <MESSAGE value="项目结构变动" />
-    <option name="LAST_COMMIT_MESSAGE" value="项目结构变动" />
   </component>
 </project>

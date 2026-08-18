@@ -1,53 +1,206 @@
+"""环境配置加载与类型化访问。"""
+
+from __future__ import annotations
+
 import os
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Mapping
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-CONFIG_DIR = Path(__file__).resolve().parent
-ENV_FILE = CONFIG_DIR / f"env.{os.getenv('TEST_ENV', 'test')}"
+import yaml
 
 
-class Settings(BaseSettings):
-    """测试环境配置对象。
+@dataclass(frozen=True)
+class ApiSettings:
+    """保存 HTTP 客户端需要的配置。
 
-    请求参数:
-        从 config/env.<env> 和环境变量读取接口、账号、DB、SSH 配置。
-    返回值:
-        pydantic settings 实例，供 API、service 和 pytest fixture 读取运行配置。
+    参数来自 YAML 配置和环境变量；实例字段包含接口地址、超时、重试和可选鉴权 Token。
+    返回值由 ``SettingsLoader.load`` 创建，供 API 层构造 HTTP 客户端使用。
     """
 
-    env: str = "test"
-    base_url: str = ""
-
-    factor_email: str = ""
-    factor_password: str = ""
-
-    factor_db_host: str = ""
-    factor_db_port: int = 3306
-    factor_db_name: str = ""
-    factor_db_user: str = ""
-    factor_db_password: str = ""
-    factor_webhook_secret: str = ""
-
-    factor_ssh_enabled: bool = False
-    factor_ssh_host: str = ""
-    factor_ssh_port: int = 22
-    factor_ssh_user: str = ""
-    factor_ssh_key_path: str = ""
-    factor_ssh_password: str = ""
-
-    exchange_test_exchange: str = ""
-    exchange_test_account_type: str = ""
-    exchange_test_api_key: str = ""
-    exchange_test_api_secret: str = ""
-    exchange_test_api_passphrase: str = ""
-
-    model_config = SettingsConfigDict(
-        env_file=ENV_FILE,
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    base_url: str
+    timeout_seconds: float
+    retry_attempts: int
+    retry_backoff_seconds: float
+    auth_token: str | None
 
 
-settings = Settings()
+@dataclass(frozen=True)
+class DatabaseSettings:
+    """保存关系型数据库连接所需的配置。
+
+    参数来自 YAML 配置和环境变量；支持 SQLite 的 ``dsn`` 以及 MySQL 的 host、port、name、username、password。
+    返回值由 ``SettingsLoader.load`` 创建，供 DB 层按驱动建立连接使用。
+    """
+
+    driver: str
+    host: str
+    port: int
+    name: str
+    username: str
+    password: str | None
+    dsn: str | None
+
+
+@dataclass(frozen=True)
+class ReportSettings:
+    """保存测试报告输出配置。
+
+    参数为 JUnit XML 的相对或绝对输出路径。
+    返回值由 ``SettingsLoader.load`` 创建，供脚本或 CI 读取。
+    """
+
+    junit_path: str
+
+
+@dataclass(frozen=True)
+class Settings:
+    """聚合当前测试环境的全部类型化配置。
+
+    参数包括环境名称以及 API、数据库、报告子配置。
+    返回值由 ``SettingsLoader.load`` 返回，供 Fixture、API、DB 和 Service 使用。
+    """
+
+    environment: str
+    api: ApiSettings
+    database: DatabaseSettings
+    reports: ReportSettings
+
+
+class SettingsLoader:
+    """按默认配置、环境配置、环境变量的优先级加载框架配置。"""
+
+    _ENVIRONMENT_OVERRIDES: dict[str, tuple[str, str]] = {
+        "AUTOMATION_API_BASE_URL": ("api", "base_url"),
+        "AUTOMATION_API_AUTH_TOKEN": ("api", "auth_token"),
+        "AUTOMATION_API_TIMEOUT_SECONDS": ("api", "timeout_seconds"),
+        "AUTOMATION_API_RETRY_ATTEMPTS": ("api", "retry_attempts"),
+        "AUTOMATION_API_RETRY_BACKOFF_SECONDS": ("api", "retry_backoff_seconds"),
+        "AUTOMATION_DB_DRIVER": ("database", "driver"),
+        "AUTOMATION_DB_HOST": ("database", "host"),
+        "AUTOMATION_DB_PORT": ("database", "port"),
+        "AUTOMATION_DB_NAME": ("database", "name"),
+        "AUTOMATION_DB_USERNAME": ("database", "username"),
+        "AUTOMATION_DB_PASSWORD": ("database", "password"),
+        "AUTOMATION_DB_DSN": ("database", "dsn"),
+    }
+
+    @classmethod
+    def load(cls, environment: str | None = None, project_root: Path | None = None) -> Settings:
+        """加载指定环境的配置。
+
+        参数 ``environment`` 是 ``config/<environment>.yaml`` 的环境名，缺省时读取 ``AUTOMATION_ENV`` 或使用 ``test``；
+        ``project_root`` 是项目根目录，缺省时从当前模块推导。
+        返回合并默认配置、环境配置和环境变量后的 ``Settings``；配置文件缺失或字段类型错误时抛出异常。
+        """
+
+        root = project_root or Path(__file__).resolve().parents[1]
+        selected_environment = environment or os.getenv("AUTOMATION_ENV", "test")
+        default_data = cls._read_yaml(root / "config" / "default.yaml")
+        environment_data = cls._read_yaml(root / "config" / f"{selected_environment}.yaml")
+        merged_data = cls._deep_merge(default_data, environment_data)
+        cls._apply_environment_overrides(merged_data)
+        merged_data["environment"] = selected_environment
+        return cls._to_settings(merged_data)
+
+    @staticmethod
+    def _read_yaml(path: Path) -> dict[str, Any]:
+        """读取一个 YAML 配置文件。
+
+        参数 ``path`` 是需要读取的 YAML 文件路径。
+        返回解析后的字典；文件不存在、根节点不是对象或 YAML 格式错误时抛出异常。
+        """
+
+        with path.open("r", encoding="utf-8") as file:
+            content = yaml.safe_load(file) or {}
+        if not isinstance(content, dict):
+            raise ValueError(f"Configuration root must be an object: {path}")
+        return content
+
+    @classmethod
+    def _deep_merge(cls, base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+        """递归合并两层配置字典。
+
+        参数 ``base`` 是低优先级默认配置，``override`` 是高优先级环境配置。
+        返回不修改输入对象的合并结果；同名非对象字段由 ``override`` 覆盖。
+        """
+
+        result = dict(base)
+        for key, value in override.items():
+            base_value = result.get(key)
+            if isinstance(base_value, Mapping) and isinstance(value, Mapping):
+                result[key] = cls._deep_merge(base_value, value)
+            else:
+                result[key] = value
+        return result
+
+    @classmethod
+    def _apply_environment_overrides(cls, config: dict[str, Any]) -> None:
+        """把已设置的环境变量覆盖到嵌套配置中。
+
+        参数 ``config`` 是待修改的合并配置字典。
+        不返回值；仅处理 ``_ENVIRONMENT_OVERRIDES`` 中明确定义的变量，未设置的变量不改变配置。
+        """
+
+        for variable, (section, key) in cls._ENVIRONMENT_OVERRIDES.items():
+            value = os.getenv(variable)
+            if value is not None:
+                config.setdefault(section, {})[key] = value
+
+    @staticmethod
+    def _to_settings(data: Mapping[str, Any]) -> Settings:
+        """将原始配置字典转换为类型化配置对象。
+
+        参数 ``data`` 是已完成合并的原始配置字典。
+        返回 ``Settings``；缺少必需的结构字段或数值无法转换时抛出 ``ValueError``。
+        """
+
+        api = SettingsLoader._section(data, "api")
+        database = SettingsLoader._section(data, "database")
+        reports = SettingsLoader._section(data, "reports")
+        return Settings(
+            environment=str(data.get("environment", "test")),
+            api=ApiSettings(
+                base_url=str(api.get("base_url", "")).rstrip("/"),
+                timeout_seconds=float(api.get("timeout_seconds", 30)),
+                retry_attempts=int(api.get("retry_attempts", 0)),
+                retry_backoff_seconds=float(api.get("retry_backoff_seconds", 0)),
+                auth_token=SettingsLoader._optional_string(api.get("auth_token")),
+            ),
+            database=DatabaseSettings(
+                driver=str(database.get("driver", "sqlite")).lower(),
+                host=str(database.get("host", "")),
+                port=int(database.get("port", 0) or 0),
+                name=str(database.get("name", "")),
+                username=str(database.get("username", "")),
+                password=SettingsLoader._optional_string(database.get("password")),
+                dsn=SettingsLoader._optional_string(database.get("dsn")),
+            ),
+            reports=ReportSettings(junit_path=str(reports.get("junit_path", "reports/junit.xml"))),
+        )
+
+    @staticmethod
+    def _section(data: Mapping[str, Any], name: str) -> Mapping[str, Any]:
+        """取得并校验一个配置区段。
+
+        参数 ``data`` 是原始配置字典，``name`` 是区段名称。
+        返回该区段的映射；区段不存在或不是对象时抛出 ``ValueError``。
+        """
+
+        section = data.get(name)
+        if not isinstance(section, Mapping):
+            raise ValueError(f"Configuration section must be an object: {name}")
+        return section
+
+    @staticmethod
+    def _optional_string(value: Any) -> str | None:
+        """将可选配置值标准化为字符串或 ``None``。
+
+        参数 ``value`` 是原始配置值。
+        返回去除首尾空白后的字符串；空值和空白字符串返回 ``None``。
+        """
+
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None

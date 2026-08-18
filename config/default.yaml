@@ -1,0 +1,16 @@
+environment: default
+api:
+  base_url: ""
+  timeout_seconds: 30
+  retry_attempts: 2
+  retry_backoff_seconds: 0.25
+database:
+  driver: sqlite
+  host: ""
+  port: 0
+  name: ""
+  username: ""
+  password: ""
+  dsn: ""
+reports:
+  junit_path: reports/junit.xml

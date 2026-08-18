@@ -1,116 +1,55 @@
-# QuestTest API 自动化测试框架
+# QuestTest
 
-QuestTest 是一个单一职责项目：只负责因子库接口自动化测试，并输出 Allure 报告。
+QuestTest 是一个面向 HTTP/JSON 接口自动化的 Python 3.12 pytest 框架。项目架构、职责边界和后续改造规则以 [框架设计文档](docs/automation-test-framework-design.md) 为准。
 
-## 项目边界
-
-只保留：
-
-- 因子库接口请求封装
-- pytest 接口自动化用例
-- 接口响应结构、DB 一致性和上下游一致性的 service 比较支撑
-- Allure 测试结果与报告元数据
-
-不放入：
-
-- 与接口自动化和 Allure 报告无关的任何代码、文档、脚本或产物
-
-## 目录结构
+## 分层结构
 
 ```text
-QuestTest/
-  api/
-    platform/                  # 因子库接口请求封装
-  config/                      # 环境配置
-  service/
-    common/
-      db/                      # 通用只读 DB 与 SSH tunnel 校验支撑
-      http/                    # 通用 HTTP 客户端和重试
-    factor_library/
-      factors/                 # 因子库 factors 接口服务支撑
-  tests/
-    factor_library/
-      Auth/                    # Auth 接口自动化用例
-      Chat/                    # Chat 接口自动化用例
-      Runs/                    # Runs 接口自动化用例
-      factor/                  # factor 接口自动化用例
-      Admin/                   # Admin 接口自动化用例
-      Approval/                # Approval 接口自动化用例
-      FactorIC/                # FactorIC 接口自动化用例
-      Quantitative_Trading/    # Quantitative Trading 接口自动化用例
-      common/                  # 公共 service、规则和 wrapper 单元测试
-  docs/                        # 接口自动化说明
-  pytest.ini                   # pytest + Allure 配置
-  requirements.txt
+tests/cases -> service -> api
+                     -> db
+tests/cases -> tools
+api、db、service -> config
 ```
 
-## 环境准备
+- `tests/`：可执行场景、静态测试数据和 pytest Fixture。
+- `service/`：可复用的业务流程编排，不放测试断言。
+- `api/`：资源或领域级 HTTP 请求封装，不放业务断言。
+- `db/`：连接、事务、参数化查询和按实体组织的 Repository。
+- `tools/`：无业务含义的断言、测试数据、时间和文件工具。
+- `config/`：默认、测试和预发环境配置；敏感信息只通过环境变量注入。
+- `reports/`：运行生成的 JUnit XML，不提交报告内容。
 
-推荐 Python：
+## 安装
 
 ```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12
+/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e '.[test]'
 ```
 
-安装依赖：
+## 配置
+
+配置加载优先级为：`config/default.yaml` < `config/<环境>.yaml` < 环境变量。
 
 ```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pip install -r requirements.txt
+set -a
+source .env.example
+set +a
+export AUTOMATION_API_BASE_URL='https://test.example.com'
+export AUTOMATION_DB_HOST='127.0.0.1'
+export AUTOMATION_DB_NAME='automation_test'
+export AUTOMATION_DB_USERNAME='automation_user'
+export AUTOMATION_DB_PASSWORD='replace-with-secret'
 ```
 
-创建本地配置：
+真实密码、Token 和生产凭据不得写入 YAML、JSON、Python 代码或版本库。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
+
+## 运行
 
 ```bash
-cp config/env.example config/env.test
+.venv/bin/python -m pytest --env test --junitxml reports/junit.xml
+.venv/bin/python scripts/run_tests.py --env test
+.venv/bin/python scripts/run_tests.py --env test --marker smoke
 ```
 
-配置 `config/env.<env>` 中的 `BASE_URL`、因子库登录账号和只读 DB 连接信息。
-
-## 常用命令
-
-收集测试：
-
-```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest --collect-only -q
-```
-
-运行全部接口自动化测试：
-
-```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v
-```
-
-按业务域运行：
-
-```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest tests/factor_library -v
-```
-
-切换环境：
-
-```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v --env=prod
-```
-
-生成并打开 Allure 报告：
-
-```bash
-/Users/wrh/.pyenv/versions/3.12.0/bin/python3.12 -m pytest -v --alluredir=./allure-results --clean-alluredir
-allure generate ./allure-results -o ./allure-report --clean
-allure open ./allure-report
-```
-
-## 维护规则
-
-- 新接口请求封装放在 `api/platform/`。
-- 新 pytest 用例放在 `tests/<business_domain>/<api_or_resource>/`，第一层是业务域，第二层是接口或资源模块，第三层是对应接口的可执行自动化用例文件。
-- 测试用例文件使用传统 class 组织：先定义 `Test<业务对象或接口能力>` 类，再在类中定义 `test_*` 用例方法。
-- 通用 HTTP、只读 DB 能力放在 `service/common/`。
-- 业务接口专属服务支撑放在 `service/<business_domain>/<api_or_resource>/`，与 `tests/<business_domain>/<api_or_resource>/` 对齐。
-- `api/` 和 `service/` 层使用 class 组织能力，普通业务方法放在对应类中，不在模块顶层散放 `def`；pytest `conftest.py` 中的 fixture/hook 除外。
-- 少量请求参数直接写在对应 pytest 用例文件里，避免为少量场景额外拆分配置层。
-- case 层只保留可执行用例和最终断言；复杂响应解析、接口与 DB 比较、上下游数据整理放在对应 `service/<business_domain>/<api_or_resource>/` 中。
-- 不做每行注释；每个 `def` 用 docstring 说明用途、请求参数和返回值。
-- 不新增与接口自动化和 Allure 报告无关的目录或文件。
-- 不创建 `__init__.py`；项目使用 Python namespace package 和 pytest importlib 模式。
-- 不创建隐藏文件或隐藏目录；`.git` 和用于 agent skills 的 `.agents/` 是例外。环境配置统一使用 `config/env.<env>`，不要使用 `.env`。
+当前示例全部使用 Mock HTTP 与临时 SQLite 文件，不会访问真实接口或数据库。后续接入真实业务时，按接口资源在 `api/` 建立封装，按业务能力在 `service/` 建立编排，按数据实体在 `db/` 建立 Repository，并在 `tests/cases/` 编写可执行场景。

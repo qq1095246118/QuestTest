@@ -1,0 +1,14 @@
+.env
+.venv/
+.python-version
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+reports/*
+!reports/.gitkeep
+*.log
+.idea/
+.DS_Store

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "questtest"
+version = "0.1.0"
+description = "Layered API automation test framework"
+requires-python = ">=3.12"
+dependencies = [
+    "PyMySQL>=1.1,<2",
+    "PyYAML>=6,<7",
+    "requests>=2.32,<3",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8,<9",
+]
+
+[tool.setuptools.packages.find]
+include = ["api*", "config*", "db*", "service*", "tools*"]
+exclude = ["reports*", "scripts*", "tests*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+junit_family = "xunit2"
+markers = [
+    "smoke: core checks that do not require a real environment",
+    "regression: repeatable regression coverage",
+    "integration: cases that require a configured external API or database",
+]

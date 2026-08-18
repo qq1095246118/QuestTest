@@ -1,0 +1,4 @@
+environment: staging
+database:
+  driver: mysql
+  port: 3306
