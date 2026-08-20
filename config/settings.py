@@ -26,6 +26,30 @@ class ApiSettings:
 
 
 @dataclass(frozen=True)
+class AccountCredentials:
+    """保存一个自动化测试账号的登录凭据。
+
+    参数 ``email`` 和 ``password`` 只能由环境变量或密钥服务注入。
+    返回值由 ``SettingsLoader.load`` 创建，供测试启动阶段调用登录接口；任一字段未配置时对应账号不可用。
+    """
+
+    email: str | None
+    password: str | None
+
+
+@dataclass(frozen=True)
+class AuthenticationSettings:
+    """保存有权限和无权限两类测试账号。
+
+    参数 ``privileged`` 用于正常业务请求，``restricted`` 用于验证已登录但权限不足的 403 场景。
+    返回值由 ``SettingsLoader.load`` 创建，账号密码不会写入静态配置。
+    """
+
+    privileged: AccountCredentials
+    restricted: AccountCredentials
+
+
+@dataclass(frozen=True)
 class DatabaseSettings:
     """保存关系型数据库连接所需的配置。
 
@@ -54,16 +78,39 @@ class ReportSettings:
 
 
 @dataclass(frozen=True)
+class FactorComboSettings:
+    """保存组合因子真实流程测试需要的运行参数。
+
+    参数来自 YAML 配置和环境变量；包含投研 Agent 地址、轮询间隔、轮询超时、最大研究轮次及 Worker 回调开关。
+    返回值由 ``SettingsLoader.load`` 创建，供组合因子测试 Fixture 使用。
+    """
+
+    agent_uid: str | None
+    poll_interval_seconds: float
+    poll_timeout_seconds: float
+    max_research_rounds: int
+    worker_contracts_enabled: bool
+    cleanup_test_data: bool
+    agent_base_url: str | None
+    refresh_poll_interval_seconds: float
+    refresh_poll_timeout_seconds: float
+    max_refresh_polls: int
+    max_technical_retries: int
+
+
+@dataclass(frozen=True)
 class Settings:
     """聚合当前测试环境的全部类型化配置。
 
-    参数包括环境名称以及 API、数据库、报告子配置。
+    参数包括环境名称以及 API、认证账号、数据库、组合因子、报告子配置。
     返回值由 ``SettingsLoader.load`` 返回，供 Fixture、API、DB 和 Service 使用。
     """
 
     environment: str
     api: ApiSettings
+    authentication: AuthenticationSettings
     database: DatabaseSettings
+    factor_combo: FactorComboSettings
     reports: ReportSettings
 
 
@@ -76,6 +123,10 @@ class SettingsLoader:
         "AUTOMATION_API_TIMEOUT_SECONDS": ("api", "timeout_seconds"),
         "AUTOMATION_API_RETRY_ATTEMPTS": ("api", "retry_attempts"),
         "AUTOMATION_API_RETRY_BACKOFF_SECONDS": ("api", "retry_backoff_seconds"),
+        "AUTOMATION_PRIVILEGED_EMAIL": ("authentication", "privileged_email"),
+        "AUTOMATION_PRIVILEGED_PASSWORD": ("authentication", "privileged_password"),
+        "AUTOMATION_RESTRICTED_EMAIL": ("authentication", "restricted_email"),
+        "AUTOMATION_RESTRICTED_PASSWORD": ("authentication", "restricted_password"),
         "AUTOMATION_DB_DRIVER": ("database", "driver"),
         "AUTOMATION_DB_HOST": ("database", "host"),
         "AUTOMATION_DB_PORT": ("database", "port"),
@@ -83,6 +134,23 @@ class SettingsLoader:
         "AUTOMATION_DB_USERNAME": ("database", "username"),
         "AUTOMATION_DB_PASSWORD": ("database", "password"),
         "AUTOMATION_DB_DSN": ("database", "dsn"),
+        "AUTOMATION_FACTOR_COMBO_AGENT_UID": ("factor_combo", "agent_uid"),
+        "AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL": ("factor_combo", "agent_base_url"),
+        "AUTOMATION_FACTOR_COMBO_POLL_INTERVAL_SECONDS": ("factor_combo", "poll_interval_seconds"),
+        "AUTOMATION_FACTOR_COMBO_POLL_TIMEOUT_SECONDS": ("factor_combo", "poll_timeout_seconds"),
+        "AUTOMATION_FACTOR_COMBO_MAX_RESEARCH_ROUNDS": ("factor_combo", "max_research_rounds"),
+        "AUTOMATION_FACTOR_COMBO_WORKER_CONTRACTS": ("factor_combo", "worker_contracts_enabled"),
+        "AUTOMATION_FACTOR_COMBO_CLEANUP_TEST_DATA": ("factor_combo", "cleanup_test_data"),
+        "AUTOMATION_FACTOR_COMBO_REFRESH_POLL_INTERVAL_SECONDS": (
+            "factor_combo",
+            "refresh_poll_interval_seconds",
+        ),
+        "AUTOMATION_FACTOR_COMBO_REFRESH_POLL_TIMEOUT_SECONDS": (
+            "factor_combo",
+            "refresh_poll_timeout_seconds",
+        ),
+        "AUTOMATION_FACTOR_COMBO_MAX_REFRESH_POLLS": ("factor_combo", "max_refresh_polls"),
+        "AUTOMATION_FACTOR_COMBO_MAX_TECHNICAL_RETRIES": ("factor_combo", "max_technical_retries"),
     }
 
     @classmethod
@@ -156,16 +224,28 @@ class SettingsLoader:
         """
 
         api = SettingsLoader._section(data, "api")
+        authentication = SettingsLoader._section(data, "authentication")
         database = SettingsLoader._section(data, "database")
+        factor_combo = SettingsLoader._section(data, "factor_combo")
         reports = SettingsLoader._section(data, "reports")
         return Settings(
             environment=str(data.get("environment", "test")),
             api=ApiSettings(
                 base_url=str(api.get("base_url", "")).rstrip("/"),
-                timeout_seconds=float(api.get("timeout_seconds", 30)),
+                timeout_seconds=float(api.get("timeout_seconds", 60)),
                 retry_attempts=int(api.get("retry_attempts", 0)),
                 retry_backoff_seconds=float(api.get("retry_backoff_seconds", 0)),
-                auth_token=SettingsLoader._optional_string(api.get("auth_token")),
+                auth_token=SettingsLoader._normalize_auth_token(api.get("auth_token")),
+            ),
+            authentication=AuthenticationSettings(
+                privileged=AccountCredentials(
+                    email=SettingsLoader._optional_string(authentication.get("privileged_email")),
+                    password=SettingsLoader._optional_string(authentication.get("privileged_password")),
+                ),
+                restricted=AccountCredentials(
+                    email=SettingsLoader._optional_string(authentication.get("restricted_email")),
+                    password=SettingsLoader._optional_string(authentication.get("restricted_password")),
+                ),
             ),
             database=DatabaseSettings(
                 driver=str(database.get("driver", "sqlite")).lower(),
@@ -175,6 +255,21 @@ class SettingsLoader:
                 username=str(database.get("username", "")),
                 password=SettingsLoader._optional_string(database.get("password")),
                 dsn=SettingsLoader._optional_string(database.get("dsn")),
+            ),
+            factor_combo=FactorComboSettings(
+                agent_uid=SettingsLoader._optional_string(factor_combo.get("agent_uid")),
+                poll_interval_seconds=float(factor_combo.get("poll_interval_seconds", 5)),
+                poll_timeout_seconds=float(factor_combo.get("poll_timeout_seconds", 600)),
+                max_research_rounds=int(factor_combo.get("max_research_rounds", 2)),
+                worker_contracts_enabled=SettingsLoader._to_boolean(
+                    factor_combo.get("worker_contracts_enabled", False)
+                ),
+                cleanup_test_data=SettingsLoader._to_boolean(factor_combo.get("cleanup_test_data", False)),
+                agent_base_url=SettingsLoader._optional_string(factor_combo.get("agent_base_url")),
+                refresh_poll_interval_seconds=float(factor_combo.get("refresh_poll_interval_seconds", 10)),
+                refresh_poll_timeout_seconds=float(factor_combo.get("refresh_poll_timeout_seconds", 10800)),
+                max_refresh_polls=int(factor_combo.get("max_refresh_polls", 1080)),
+                max_technical_retries=int(factor_combo.get("max_technical_retries", 2)),
             ),
             reports=ReportSettings(junit_path=str(reports.get("junit_path", "reports/junit.xml"))),
         )
@@ -204,3 +299,37 @@ class SettingsLoader:
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    @staticmethod
+    def _normalize_auth_token(value: Any) -> str | None:
+        """标准化 API Token 并移除可选的 Bearer 前缀。
+
+        参数 ``value`` 是 YAML 或环境变量中的 Token 值。
+        返回不含 ``Bearer`` 前缀的 Token；空值返回 ``None``，避免 HTTP 客户端生成重复鉴权前缀。
+        """
+
+        normalized = SettingsLoader._optional_string(value)
+        if normalized is None:
+            return None
+        if normalized.lower().startswith("bearer "):
+            normalized = normalized[7:].strip()
+        return normalized or None
+
+    @staticmethod
+    def _to_boolean(value: Any) -> bool:
+        """将 YAML 或环境变量中的布尔配置转换为布尔值。
+
+        参数 ``value`` 是原始配置值，可为布尔值、数字或字符串。
+        返回转换后的布尔值；无法识别的值抛出 ``ValueError``，避免错误开启真实环境写入行为。
+        """
+
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int):
+            return value != 0
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"", "0", "false", "no", "off", "none", "null"}:
+            return False
+        raise ValueError(f"Configuration value must be boolean-like: {value!r}")

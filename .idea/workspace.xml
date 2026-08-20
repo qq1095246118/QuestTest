@@ -4,160 +4,24 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/.agents/skills/brainstorming" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/dispatching-parallel-agents" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/executing-plans" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/finishing-a-development-branch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/receiving-code-review" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/requesting-code-review" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/subagent-driven-development" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/superpowers" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/systematic-debugging" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/test-driven-development" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/using-git-worktrees" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/using-superpowers" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/verification-before-completion" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/writing-plans" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/skills/writing-skills" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/.codex-plugin/plugin.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/CODE_OF_CONDUCT.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/LICENSE" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/README.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/assets/app-icon.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/assets/superpowers-small.svg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/frame-template.html" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/helper.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/server.cjs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/start-server.sh" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/scripts/stop-server.sh" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/spec-document-reviewer-prompt.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/brainstorming/visual-companion.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/dispatching-parallel-agents/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/dispatching-parallel-agents/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/executing-plans/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/executing-plans/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/finishing-a-development-branch/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/finishing-a-development-branch/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/receiving-code-review/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/receiving-code-review/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/requesting-code-review/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/requesting-code-review/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/requesting-code-review/code-reviewer.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/code-quality-reviewer-prompt.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/implementer-prompt.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/subagent-driven-development/spec-reviewer-prompt.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/CREATION-LOG.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/condition-based-waiting-example.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/condition-based-waiting.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/defense-in-depth.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/find-polluter.sh" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/root-cause-tracing.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-academic.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-pressure-1.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-pressure-2.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/systematic-debugging/test-pressure-3.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/test-driven-development/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/test-driven-development/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/test-driven-development/testing-anti-patterns.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-git-worktrees/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-git-worktrees/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/references/codex-tools.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/references/copilot-tools.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/using-superpowers/references/gemini-tools.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/verification-before-completion/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/verification-before-completion/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-plans/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-plans/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-plans/plan-document-reviewer-prompt.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/agents/openai.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/anthropic-best-practices.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/examples/CLAUDE_MD_TESTING.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/graphviz-conventions.dot" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/persuasion-principles.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/render-graphs.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.agents/vendor/superpowers/skills/writing-skills/testing-skills-with-subagents.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Jenkinsfile" beforeDir="false" />
+    <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="大版本更新">
+      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/admin_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/approval_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/auth_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/factor_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/factor_ic_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/platform/factor_library_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/env.example" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/env.prod" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/env.test" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/default.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/default.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/AI_GENERATION_GUIDE.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/superpowers/plans/2026-08-12-search-api-v2-test-cases.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/superpowers/specs/2026-08-12-search-api-v2-test-cases-design.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/test_cases_factor_library_xmind_paste.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pytest.ini" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/common/db/mysql_client.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/common/db/ssh_tunnel.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/common/http/http_client.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/common/http/json_response_assertion.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/common/http/response_utils.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_db_queries.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/admin/admin_test_data.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/approval/approval_db_queries.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/approval/approval_test_data.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/common/auth_session.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/common/resource_tracker.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/common/test_data_factory.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_db_queries.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factor_ic/factor_ic_test_data.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_library_compare.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_library_queries.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_mining_queries.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor_library/factors/factor_test_data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/automation-test-framework-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/automation-test-framework-design.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_config_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_quant_account_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_role_template_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_scenario.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Admin/test_admin_user_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Approval/test_approval_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Approval/test_approval_scenario.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/Auth/test_auth_scenario.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/FactorIC/test_factor_ic_scenario.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_admin_test_data_service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_api_wrappers.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_approval_test_data_service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_case_safety_rules.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_common_services.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_ic_test_data_service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_mining_db_service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_factor_test_data_service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_json_response_assertion.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/common/test_settings_config.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/conftest.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_list_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_metadata_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_factor_scenario.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_sub_factor_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/factor_library/factor/test_theme_api.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="McpProjectServerCommands">
     <commands />
@@ -165,10 +29,25 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "git-widget-placeholder": "codex/kline-case-design"
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "git-widget-placeholder": "codex/kline-case-design",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
 }]]></component>
   <component name="TaskManager">
+    <task id="LOCAL-00001" summary="大版本更新">
+      <option name="closed" value="true" />
+      <created>1787041530149</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1787041530150</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="大版本更新" />
+    <option name="LAST_COMMIT_MESSAGE" value="大版本更新" />
   </component>
 </project>

@@ -1,0 +1,67 @@
+"""查询组合任务状态接口测试。"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from api.factor_combo_api import FactorComboAPI
+from db.factor_combo_repository import FactorComboRepository
+
+
+@pytest.mark.integration
+@pytest.mark.external_agent
+class TestFactorComboRunStatusAPI:
+    """验证真实 Run 状态响应、进度字段、运行关联和查询只读性。"""
+
+    def test_poll_run_status_returns_consistent_progress_without_mutation(
+        self,
+        factor_combo_completed_real_run_context: dict[str, Any],
+        factor_combo_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """轮询真实 Run 至完成，并验证每次状态响应关联一致且额外查询不改变业务指针。"""
+
+        run = factor_combo_completed_real_run_context["run"]
+        snapshots = factor_combo_completed_real_run_context["status_snapshots"]
+        assert snapshots, "状态轮询至少应返回一个快照"
+        for snapshot in snapshots:
+            assert snapshot.get("form_id") == run.form.form_id, snapshot
+            assert snapshot.get("pipeline_run_id") == run.pipeline_run_id, snapshot
+            assert isinstance(snapshot.get("pipeline_status"), str) and snapshot["pipeline_status"], snapshot
+            assert snapshot.get("recommended_action") in {"wait", "wait_result", "read_result", "retry_run"}, snapshot
+            for field in ("total_step_count", "completed_step_count", "failed_step_count", "running_step_count"):
+                assert isinstance(snapshot.get(field), int) and snapshot[field] >= 0, snapshot
+        before_row = factor_combo_repository.get_form(run.form.form_id)
+
+        response = factor_combo_api.get_run_status(run.form.form_id, run.pipeline_run_id)
+        body = response.json()
+        after_row = factor_combo_repository.get_form(run.form.form_id)
+
+        assert response.status_code == 200, body
+        assert body.get("success") is True, body
+        assert body.get("data", {}).get("pipeline_status") == "completed", body
+        assert before_row is not None and after_row is not None, {"api": body, "before": before_row, "after": after_row}
+        for field in ("status", "factor_combo_id", "factor_combo_experiment_info_id", "pipeline_run_id"):
+            assert before_row.get(field) == after_row.get(field), {
+                "api": body,
+                "before": before_row,
+                "after": after_row,
+            }
+
+    def test_mismatched_run_id_is_rejected(
+        self,
+        factor_combo_real_run_context: dict[str, Any],
+        factor_combo_api: FactorComboAPI,
+    ) -> None:
+        """使用不属于当前表单的运行 ID 查询状态，并验证接口拒绝关联错误。"""
+
+        form = factor_combo_real_run_context["form"]
+
+        response = factor_combo_api.get_run_status(form.form_id, "combo-999999999-0000000000000000")
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body

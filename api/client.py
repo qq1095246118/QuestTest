@@ -27,7 +27,7 @@ class HTTPClient:
     """封装超时、鉴权、重试和基础请求日志的 HTTP 客户端。"""
 
     _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-    _IDEMPOTENT_METHODS = {"GET", "HEAD", "OPTIONS"}
+    _IDEMPOTENT_METHODS = {"GET", "HEAD", "OPTIONS", "PUT", "DELETE"}
 
     def __init__(
         self,
@@ -54,16 +54,21 @@ class HTTPClient:
         json_body: Any | None = None,
         headers: Mapping[str, str] | None = None,
         timeout_seconds: float | None = None,
+        retryable: bool | None = None,
     ) -> requests.Response:
         """发送一个 JSON HTTP 请求并按配置重试可安全重放的请求。
 
         参数 ``method`` 是 HTTP 方法，``path`` 是相对路径，``params`` 是查询参数，``json_body`` 是任意 JSON 请求体，
-        ``headers`` 是附加请求头，``timeout_seconds`` 可覆盖默认超时。
+        ``headers`` 是附加请求头，``timeout_seconds`` 可覆盖默认超时；``retryable`` 可显式声明业务请求是否可安全重放，
+        未传时按照 HTTP 幂等方法判断。
         返回服务端的原始 ``requests.Response``，由上层 API、Service 或 Case 判断业务结果；网络错误在不可重试或重试耗尽时抛出。
         """
 
         url = self._build_url(path)
         normalized_method = method.upper()
+        request_is_retryable = (
+            normalized_method in self._IDEMPOTENT_METHODS if retryable is None else retryable
+        )
         request_headers = self._build_headers(headers)
         attempts = max(self._settings.retry_attempts, 0) + 1
         for attempt in range(attempts):
@@ -86,7 +91,7 @@ class HTTPClient:
                     elapsed_seconds,
                     type(error).__name__,
                 )
-                if not self._should_retry(normalized_method, attempt, attempts):
+                if not self._should_retry(request_is_retryable, attempt, attempts):
                     raise
                 self._sleep_before_retry(attempt)
                 continue
@@ -95,7 +100,7 @@ class HTTPClient:
             self._logger.info("HTTP %s %s -> %s in %.3fs", normalized_method, path, response.status_code, elapsed_seconds)
             if response.status_code not in self._RETRYABLE_STATUS_CODES:
                 return response
-            if not self._should_retry(normalized_method, attempt, attempts):
+            if not self._should_retry(request_is_retryable, attempt, attempts):
                 return response
             self._sleep_before_retry(attempt)
 
@@ -126,14 +131,14 @@ class HTTPClient:
             result.update(headers)
         return result
 
-    def _should_retry(self, method: str, attempt: int, attempts: int) -> bool:
+    def _should_retry(self, retryable: bool, attempt: int, attempts: int) -> bool:
         """判断当前失败是否允许自动重试。
 
-        参数 ``method`` 是规范化 HTTP 方法，``attempt`` 是从零开始的当前次数，``attempts`` 是总次数。
-        返回 ``True`` 表示对幂等请求仍有剩余次数并应继续重试，否则返回 ``False``。
+        参数 ``retryable`` 表示当前请求可安全重放，``attempt`` 是从零开始的当前次数，``attempts`` 是总次数。
+        返回 ``True`` 表示可重放请求仍有剩余次数并应继续重试，否则返回 ``False``。
         """
 
-        return method in self._IDEMPOTENT_METHODS and attempt + 1 < attempts
+        return retryable and attempt + 1 < attempts
 
     def _sleep_before_retry(self, attempt: int) -> None:
         """按线性退避在两次可重试请求之间等待。

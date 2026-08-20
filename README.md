@@ -36,13 +36,21 @@ set -a
 source .env.example
 set +a
 export AUTOMATION_API_BASE_URL='https://test.example.com'
+export AUTOMATION_PRIVILEGED_EMAIL='replace-with-privileged-account'
+export AUTOMATION_PRIVILEGED_PASSWORD='replace-with-privileged-password'
+export AUTOMATION_RESTRICTED_EMAIL='replace-with-restricted-account'
+export AUTOMATION_RESTRICTED_PASSWORD='replace-with-restricted-password'
+export AUTOMATION_DB_DRIVER='mysql'
 export AUTOMATION_DB_HOST='127.0.0.1'
+export AUTOMATION_DB_PORT='3306'
 export AUTOMATION_DB_NAME='automation_test'
 export AUTOMATION_DB_USERNAME='automation_user'
 export AUTOMATION_DB_PASSWORD='replace-with-secret'
 ```
 
 真实密码、Token 和生产凭据不得写入 YAML、JSON、Python 代码或版本库。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
+
+运行真实用例时，框架会分别使用有权限和无权限账号调用 `POST /auth/login` 获取 JWT，再通过 `GET /me` 校验账号身份。JWT 只保存在当前 pytest 进程内；正常业务响应为 `401` 时不会自动重新登录。`AUTOMATION_API_AUTH_TOKEN` 仅保留为有权限账号的临时调试回退，不能替代无权限账号。
 
 ## 运行
 
@@ -52,4 +60,34 @@ export AUTOMATION_DB_PASSWORD='replace-with-secret'
 .venv/bin/python scripts/run_tests.py --env test --marker smoke
 ```
 
-当前示例全部使用 Mock HTTP 与临时 SQLite 文件，不会访问真实接口或数据库。后续接入真实业务时，按接口资源在 `api/` 建立封装，按业务能力在 `service/` 建立编排，按数据实体在 `db/` 建立 Repository，并在 `tests/cases/` 编写可执行场景。
+默认命令不会访问真实接口或数据库。组合因子台用例必须显式使用 `--live`，并且基础地址必须包含 `/api/v1`：
+
+```bash
+# 表单、工作单及真实 Agent Run 接口
+export AUTOMATION_FACTOR_COMBO_AGENT_UID='replace-with-test-agent-uid'
+export AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL='https://test-factor-frontend.questvector.ai/api/v2'
+.venv/bin/python -m pytest tests/cases/factor_combo -v --live --env test
+
+# 额外开启测试环境的 Worker 回调契约用例
+export AUTOMATION_FACTOR_COMBO_WORKER_CONTRACTS='true'
+.venv/bin/python -m pytest tests/cases/factor_combo -v --live --env test
+```
+
+`AUTOMATION_FACTOR_COMBO_CLEANUP_TEST_DATA=true` 会在用例结束后清理当前用例创建且未被真实 Pipeline 使用的数据；默认保留数据用于排查。真实 Agent Run 可能仍被外部任务占用，因此框架会保护其表单，不做自动清理。
+
+开启清理时，框架会同时删除测试子因子唯一拥有的 IC summary、IC 切片、因子值切片和刷新任务记录；`factor_ic_runs` 没有因子归属字段，可能被共享，因此只保留 Run 主记录，避免误删其他因子的计算批次。
+
+真实端到端链路的完整通过条件是：Pipeline 返回结构化结果、登记成功、登记请求幂等重放复用同一个 `refresh_task_id`、Performance Refresh 的所有任务单元完成、登记后的子因子详情能查询到刷新数据，并且数据库的 `factor_ic_summary_metrics`/`factor_ic_runs`/`factor_validity_status` 能证明同一复合子因子的实际计算结果已经落库。summary 的中位数、标准差、正值率、IS/OOS、t-stat、分层、多空和评分等新版字段都可作为计算证据；有效性引用的 summary ID 必须能回指同一因子和 Run。API 明确返回的字段（包括 `null`）必须与 DB 一致，不能因 DB 为 `NULL` 而忽略。测试脚本不会手工调用刷新任务创建接口，也不会把登记时的占位有效性快照当成计算结果。独立接口用例严格验证首次登记 `201/false`；E2E 在首次响应丢失时可从同请求重试得到的 `200/true` 恢复，但仍会再次重放并核对相同资源与刷新任务。
+
+真实 Run 启动和结构化结果读取有明确的恢复边界：首次启动必须返回 `202 + idempotent_replay=false`，重放必须返回 `200 + idempotent_replay=true`；启动 `409` 只允许复用当前表单已有的合法 Run。结果接口暂时返回 `404` 时会先回查 Run 状态，只有确认仍可等待才继续读取同一个 Run，避免把结果延迟误判成无效或重复启动任务。状态查询网络异常或轮询超时也不会自动创建新 Run；只有服务端明确返回失败终态或 `retry_run` 才允许使用 `force_fresh_pipeline_run=true`，且强制新建请求不会被 HTTP 客户端自动重放。
+
+刷新轮询可通过以下环境变量调整：
+
+```bash
+export AUTOMATION_FACTOR_COMBO_REFRESH_POLL_INTERVAL_SECONDS=10
+export AUTOMATION_FACTOR_COMBO_REFRESH_POLL_TIMEOUT_SECONDS=10800
+export AUTOMATION_FACTOR_COMBO_MAX_REFRESH_POLLS=1080
+export AUTOMATION_FACTOR_COMBO_MAX_TECHNICAL_RETRIES=2
+```
+
+组合因子台的十个主接口分别对应 `tests/cases/factor_combo/` 下十个 `test_*_api.py` 文件。Worker 回调用例使用测试环境兼容认领接口准备前置状态，不通过 Case 层 SQL 修改业务状态；接口响应与数据库持久化是两组独立断言。

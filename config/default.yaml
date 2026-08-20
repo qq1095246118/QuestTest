@@ -1,9 +1,14 @@
 environment: default
 api:
   base_url: ""
-  timeout_seconds: 30
+  timeout_seconds: 60
   retry_attempts: 2
   retry_backoff_seconds: 0.25
+authentication:
+  privileged_email: ""
+  privileged_password: ""
+  restricted_email: ""
+  restricted_password: ""
 database:
   driver: sqlite
   host: ""
@@ -12,5 +17,17 @@ database:
   username: ""
   password: ""
   dsn: ""
+factor_combo:
+  agent_uid: ""
+  agent_base_url: ""
+  poll_interval_seconds: 5
+  poll_timeout_seconds: 600
+  max_research_rounds: 2
+  worker_contracts_enabled: false
+  cleanup_test_data: false
+  refresh_poll_interval_seconds: 10
+  refresh_poll_timeout_seconds: 10800
+  max_refresh_polls: 1080
+  max_technical_retries: 2
 reports:
   junit_path: reports/junit.xml

@@ -34,4 +34,6 @@ markers = [
     "smoke: core checks that do not require a real environment",
     "regression: repeatable regression coverage",
     "integration: cases that require a configured external API or database",
+    "worker_contract: cases that call test-only Worker compatibility endpoints",
+    "external_agent: cases that start or poll a real research Agent run",
 ]

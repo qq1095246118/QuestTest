@@ -202,6 +202,23 @@ def test_business_action_returns_expected_status():
     assert repository.find_by_id(entity.id) is not None
 ```
 
+### 7.1 组合因子真实链路的额外约束
+
+组合因子台的 Worker 回调合约测试和真实 Agent 端到端测试必须分开标记、分开准备数据：
+
+1. Worker 合约测试可以使用测试环境的兼容认领接口和 `simulation_mode=true`，只验证接口契约与数据库持久化，不得把模拟结果称为真实计算通过。
+2. 真实流程必须使用已经存在且对当前账号可见的 Agent。查询 Agent 列表时同时携带 Factor JWT 和与 JWT 对应的 `X-User-Id`；测试代码不得手工创建 Agent Session。
+3. 真实 Pipeline 结果必须原样传递给登记接口。测试代码不得固定或补造报告、公式、指标或有效性标志。
+4. 登记响应中的 `refresh_task_id` 是后端自动创建的刷新任务标识。测试代码只允许调用 `GET /factor/performance/runs/{task_id}` 轮询，不得手工调用刷新任务创建接口。
+5. 只有刷新任务状态为 `completed` 且 `completed_factors`、`incomplete_factors` 和 `summary` 的任务单元全部完整时，才能把流程标记为 `PASS_REGISTERED`。登记接口返回 201 只能证明登记阶段完成，不能代表整个入库流程完成。
+6. 真实流程最终必须在 Refresh 完成后重新读取登记生成的子因子，并确认详情接口中出现刷新后的 IC/有效性数据；登记阶段的 DB 读取只能证明登记资源已落库，不能代替刷新后的最终回查。同时必须在数据库的新版 `factor_ic_summary_metrics`、`factor_ic_runs` 和 `factor_validity_status` 中核对同一复合子因子的非空计算结果及汇总关联。`factor_ic_summary_metrics` 的中位数、标准差、正值率、IS/OOS、t-stat、分层、多空和评分字段都属于可核验的计算证据，不能只检查 `mean_ic`。登记时写入的 `factor_combo_register:*` 初始有效性快照不能作为刷新证据，已废弃的 `factor_mining_symbol_window_metric` 不能作为新版指标来源。若刷新响应明确返回指标计算 `run_id`，还必须与数据库 Run 一致；有效性快照引用的每个 summary ID 还必须能在明细中找到同一因子、同一子因子标识和同一 Run。刷新失败、部分完成、查询超时或回查缺少数据分别记录为 `FAIL_REFRESH`、`FAIL_TECHNICAL` 或 `FAIL_CONTRACT`，不得转换为 `skip` 或 `xfail`。
+7. 真实 Run 的启动请求必须通过同一个 Service 入口发送。首次创建要求 HTTP 202 且 `idempotent_replay=false`，同请求重放要求 HTTP 200 且 `idempotent_replay=true`；HTTP 409 只能复用响应或数据库表单中与当前表单一致的合法 `pipeline_run_id`，不能再次盲目启动。
+8. 读取结构化结果遇到 HTTP 404 时，必须先查询同一 Run 的状态。状态仍未完成时继续等待并读取原 Run，状态已经失败时记录技术失败；不得把“结果暂未发布”直接当成业务无效，也不得因为一次 404 重启已完成的 Run。
+9. 登记重放的 `sub_factor_id`、`registration_id` 和业务 `combo_id` 必须分别与首次响应一致，并按正整数业务语义比较；登记接口返回“已完成”409 时只查询现有表单、版本和登记映射，不能再次登记或手工创建刷新任务。
+10. 真实 Run 的状态查询遇到网络异常、临时 HTTP 错误或轮询超时时，只能在原 `pipeline_run_id` 上有限重试并保留诊断；除非状态接口明确返回失败终态或 `recommended_action=retry_run`，否则不得设置 `force_fresh_pipeline_run=true`。强制新 Run 的 POST 请求不得启用底层自动重试。
+11. 独立接口用例中，全新组合版本的首次登记必须是 HTTP 201 且 `idempotent_replay=false`。真实 E2E 遇到首次响应丢失时，允许把同请求自动重试得到的 HTTP 200 且 `idempotent_replay=true` 作为恢复结果，但仍须再实际重放一次并复用同一个刷新任务。两条路径都必须校验版本、子因子、因子详情、有效性快照和登记标记的 ID/哈希关系；登记因子名必须与原 Pipeline 报告一致。登记后的子因子回查必须在明确指标容器中看到 IC、有效性或计算结果，普通报告元数据不能作为刷新证据。
+12. API/DB 对账以字段是否明确返回为边界：API 没有返回的字段不猜测；API 明确返回的字段包括显式 `null` 时，DB 必须存在对应列且值一致，不能因为 DB 值为 `NULL` 就跳过。JSON 布尔和 MySQL `tinyint(1)` 按业务布尔值比较，普通数值仍按 Decimal 容差比较。指标的 `summary_id`、`run_id`、范围和窗口身份必须同时满足；明确 ID/Run 命中多条 DB 记录时应判为契约失败，不能静默通过。仅旧离线替身提供聚合计数而没有 summary 明细时可保留兼容模式，真实 Repository 必须使用新版明细查询。
+
 接口契约测试可以直接调用 `api`，数据库访问测试可以直接调用 `db`，避免 Service 层把底层问题隐藏掉。
 
 ## 8. 配置和敏感信息
@@ -210,6 +227,7 @@ def test_business_action_returns_expected_status():
 - 用户名、密码、Token 等敏感信息通过环境变量或密钥服务注入。
 - 配置加载顺序建议为：默认配置 < 环境配置 < 环境变量。
 - 配置中不得提交真实密码、Token 或生产数据库凭据。
+- 组合因子 Agent API 地址、刷新轮询间隔、最大等待时间和轮询次数通过 `AUTOMATION_FACTOR_COMBO_*` 环境变量注入；真实测试只接受测试环境的 Factor `/api/v1` 和 Agent `/api/v2` 地址。
 
 ## 9. 报告和日志
 
@@ -239,6 +257,8 @@ def test_business_action_returns_expected_status():
 6. 为公共方法添加类型、参数说明和异常说明。
 7. 生成 README，说明安装依赖、选择环境、运行测试和查看报告的命令。
 8. 生成基础 `.gitignore`，忽略报告、日志、缓存和敏感配置。
+
+组合因子测试数据清理只删除能按本次生成子因子唯一定位的 `factor_ic_summary_metrics`、`factor_ic_slice_metrics`、`factor_value_slice_metrics` 和 `sub_factor_refreshes` 行；`factor_ic_runs` 没有因子归属字段，可能被多个因子共享，除非后续数据模型提供明确归属，否则只保留其审计记录，不按测试流程删除。
 
 ## 12. 验收标准
 
