@@ -51,6 +51,14 @@ class TestSubmitFactorComboFormAPI:
         assert [int(row["sub_factor_id"]) for row in member_rows] == [
             choice.sub_factor_id for choice in choices
         ], {"api": body, "db": member_rows}
+        factor_combo_service.validate_submitted_form_persistence(
+            body["data"],
+            payload,
+            submitted,
+            form_row,
+            pool_row,
+            member_rows,
+        )
 
     def test_submit_parent_factor_uses_ranked_top_twelve_children(
         self,
@@ -62,7 +70,7 @@ class TestSubmitFactorComboFormAPI:
         parent = factor_combo_repository.find_ranked_parent_with_sub_factors()
         assert parent is not None, "测试数据库需要至少一个拥有两个有效评分子因子的母因子"
         session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(session_id, [parent.factor_name])
+        payload = factor_combo_service.build_form_payload(session_id, [parent.factor_name], is_sub_factor=0)
 
         response = factor_combo_service.submit_form(payload)
         body = response.json()
@@ -76,13 +84,28 @@ class TestSubmitFactorComboFormAPI:
         assert actual_ids == expected_ids, {"api": body, "expected_sub_factor_ids": expected_ids, "db": member_rows}
         assert 2 <= len(actual_ids) <= 12, {"api": body, "db": member_rows}
         assert len(actual_ids) == len(set(actual_ids)), {"api": body, "db": member_rows}
+        form_row = factor_combo_repository.get_form(submitted.form_id)
+        pool_row = factor_combo_repository.get_pool(submitted.pool_id)
+        assert form_row is not None and pool_row is not None, {
+            "api": body,
+            "form": form_row,
+            "pool": pool_row,
+        }
+        factor_combo_service.validate_submitted_form_persistence(
+            body["data"],
+            payload,
+            submitted,
+            form_row,
+            pool_row,
+            member_rows,
+        )
 
-    def test_submit_mixed_parent_and_child_deduplicates_pool(
+    def test_submit_mixed_parent_and_child_is_rejected_without_persistence(
         self,
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """同时提交母因子及其子因子，并验证展开结果允许混选且不产生重复成员。"""
+        """在同一请求中混用母因子和子因子，并验证类型约束拒绝且不产生表单。"""
 
         parent = factor_combo_repository.find_ranked_parent_with_sub_factors()
         assert parent is not None, "测试数据库需要至少一个拥有两个有效评分子因子的母因子"
@@ -90,19 +113,19 @@ class TestSubmitFactorComboFormAPI:
         payload = factor_combo_service.build_form_payload(
             session_id,
             [parent.factor_name, parent.sub_factors[0].sub_factor_name],
+            is_sub_factor=0,
         )
+        before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_service.submit_form(payload)
         body = response.json()
 
-        assert response.status_code == 202, body
-        assert body.get("success") is True, body
-        submitted = factor_combo_service.require_submitted_form(response, session_id)
-        member_rows = factor_combo_repository.get_pool_members(submitted.form_id)
-        actual_ids = [int(row["sub_factor_id"]) for row in member_rows]
-        expected_ids = [choice.sub_factor_id for choice in parent.sub_factors]
-        assert actual_ids == expected_ids, {"api": body, "expected_sub_factor_ids": expected_ids, "db": member_rows}
-        assert len(actual_ids) == len(set(actual_ids)), {"api": body, "db": member_rows}
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
+            "api": body,
+            "before_count": before_count,
+        }
 
     @pytest.mark.parametrize(
         ("case_name", "session_value", "expected_status"),
@@ -160,13 +183,13 @@ class TestSubmitFactorComboFormAPI:
             None,
         ],
     )
-    def test_method_groups_accepts_any_json_value(
+    def test_method_groups_json_values_are_persisted_without_shape_guessing(
         self,
         method_groups: Any,
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """提交不同 JSON 类型的方法配置，并验证接口按最新契约原样保存。"""
+        """提交合法 JSON 的不同 method_groups 形态，并验证接口原样持久化而不由测试猜测结构。"""
 
         choices = factor_combo_repository.find_sub_factor_pair()
         assert choices is not None, "测试数据库至少需要两个可用子因子"
@@ -181,10 +204,29 @@ class TestSubmitFactorComboFormAPI:
         body = response.json()
 
         assert response.status_code == 202, body
+        assert body.get("success") is True, body
         submitted = factor_combo_service.require_submitted_form(response, session_id)
         form_row = factor_combo_repository.get_form(submitted.form_id)
-        assert form_row is not None, {"api": body, "db": form_row}
-        assert form_row["form_json"]["method_groups"] == method_groups, {"api": body, "db": form_row}
+        pool_row = factor_combo_repository.get_pool(submitted.pool_id)
+        member_rows = factor_combo_repository.get_pool_members(submitted.form_id)
+        assert form_row is not None and pool_row is not None, {
+            "api": body,
+            "form": form_row,
+            "pool": pool_row,
+        }
+        factor_combo_service.validate_submitted_form_persistence(
+            body["data"],
+            payload,
+            submitted,
+            form_row,
+            pool_row,
+            member_rows,
+        )
+        assert form_row["form_json"]["method_groups"] == method_groups, {
+            "api": body,
+            "request": method_groups,
+            "db": form_row,
+        }
 
     @pytest.mark.parametrize(
         ("objectives", "expected_status"),
@@ -231,15 +273,14 @@ class TestSubmitFactorComboFormAPI:
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """提交三个截面寻优目标，并验证目标和优先级完整持久化。"""
+        """提交截面预测指标和经济代理指标，并验证目标和优先级完整持久化。"""
 
         choices = factor_combo_repository.find_sub_factor_pair()
         assert choices is not None, "测试数据库至少需要两个可用子因子"
         session_id = factor_combo_service.create_session()
         objectives = [
             {"code": "cs-ic-spearman", "priority": 1},
-            {"code": "cs-icir", "priority": 2},
-            {"code": "cs-score", "priority": 3},
+            {"code": "sharpe", "priority": 2},
         ]
         payload = factor_combo_service.build_form_payload(
             session_id,
@@ -258,6 +299,17 @@ class TestSubmitFactorComboFormAPI:
             "api": body,
             "db": form_row,
         }
+        pool_row = factor_combo_repository.get_pool(submitted.pool_id)
+        member_rows = factor_combo_repository.get_pool_members(submitted.form_id)
+        assert pool_row is not None, {"api": body, "db": pool_row}
+        factor_combo_service.validate_submitted_form_persistence(
+            body["data"],
+            payload,
+            submitted,
+            form_row,
+            pool_row,
+            member_rows,
+        )
 
     def test_cycle_parameters_and_transaction_cost_match_work_order(
         self,

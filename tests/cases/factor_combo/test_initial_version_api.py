@@ -27,6 +27,7 @@ class TestCreateInitialFactorComboVersionAPI:
         """使用满足全部前置条件的临时表单创建版本，并核对响应和三张业务表的完整映射。"""
 
         worker_form = factor_combo_worker_service.create_worker_form()
+        request_payload = factor_combo_worker_service.build_initial_version_payload(worker_form)
         response = factor_combo_worker_service.create_initial_version_request(worker_form)
         body = response.json()
 
@@ -65,6 +66,13 @@ class TestCreateInitialFactorComboVersionAPI:
         assert form["factor_combo_experiment_info_id"] is None, {"api": body, "db": form}
         assert form["pipeline_run_id"] == worker_form.pipeline_run_id, {"api": body, "db": form}
         assert len(components) == len(worker_form.components), {"api": body, "db": components}
+        factor_combo_worker_service.validate_combo_version_persistence(
+            data,
+            request_payload,
+            form,
+            version,
+            components,
+        )
 
         expected_components = {
             int(component["component_sub_factor_id"]): component for component in worker_form.components
@@ -337,16 +345,23 @@ class TestCreateInitialFactorComboVersionAPI:
         """将第二个组件改为池外子因子，并验证返回错误且版本、组件和表单指针全部回滚。"""
 
         worker_form = factor_combo_worker_service.create_worker_form()
-        outside = factor_combo_repository.find_sub_factor_outside_pool(worker_form.submitted.pool_id)
-        if outside is None:
-            pytest.skip("测试数据库没有当前锁定池以外的可用子因子")
         components = deepcopy(list(worker_form.components))
+        outside = factor_combo_repository.find_sub_factor_outside_pool(worker_form.submitted.pool_id)
+        assert outside is not None, {
+            "form_id": worker_form.submitted.form_id,
+            "pool_id": worker_form.submitted.pool_id,
+            "reason": "测试库没有可用于构造池外组件的真实子因子",
+        }
+        outside_sub_factor_id = outside.sub_factor_id
         components[1]["component_factor_id"] = outside.parent_factor_id
-        components[1]["component_sub_factor_id"] = outside.sub_factor_id
-
-        response = factor_combo_worker_service.create_initial_version_request(worker_form, components=components)
+        components[1]["component_sub_factor_id"] = outside_sub_factor_id
+        response = factor_combo_worker_service.create_initial_version_request(
+            worker_form,
+            components=components,
+        )
         body = response.json()
         form = factor_combo_repository.get_form(worker_form.submitted.form_id)
+        pool_members = factor_combo_repository.get_pool_members(worker_form.submitted.form_id)
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
@@ -354,21 +369,27 @@ class TestCreateInitialFactorComboVersionAPI:
         assert factor_combo_repository.count_versions_for_form(worker_form.submitted.form_id) == 0, body
         assert form is not None and form["factor_combo_id"] is None, {"api": body, "db": form}
         assert form["factor_combo_experiment_info_id"] is None, {"api": body, "db": form}
+        assert all(int(member["sub_factor_id"]) != outside_sub_factor_id for member in pool_members), {
+            "api": body,
+            "pool_members": pool_members,
+        }
 
     def test_unrelated_parent_factor_with_pool_sub_factor_is_allowed(
         self,
         factor_combo_worker_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """使用真实存在但未关联该子因子的母因子，并验证当前契约只要求 ID 存在和子因子在池内。"""
+        """使用真实或测试临时的未关联母因子，并验证当前契约只要求 ID 存在和子因子在池内。"""
 
         worker_form = factor_combo_worker_service.create_worker_form()
         components = deepcopy(list(worker_form.components))
         sub_factor_id = int(components[0]["component_sub_factor_id"])
         current_parent_id = int(components[0]["component_factor_id"])
-        unrelated_parent_id = factor_combo_repository.find_unrelated_parent_factor(sub_factor_id, current_parent_id)
-        if unrelated_parent_id is None:
-            pytest.skip("测试数据库没有可用于父子不关联场景的其他母因子")
+        unrelated_parent_id = factor_combo_repository.ensure_unrelated_parent_factor_for_test(
+            worker_form.submitted.form_id,
+            sub_factor_id,
+            current_parent_id,
+        )
         components[0]["component_factor_id"] = unrelated_parent_id
 
         response = factor_combo_worker_service.create_initial_version_request(worker_form, components=components)

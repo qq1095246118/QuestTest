@@ -41,6 +41,21 @@ class TestFactorComboWorkOrderAPI:
         db_members = factor_combo_repository.get_pool_members(submitted.form_id)
         db_member_ids = [int(item["sub_factor_id"]) for item in db_members]
         assert api_member_ids == db_member_ids, {"api": body, "db": db_members}
+        form_row = factor_combo_repository.get_form(submitted.form_id)
+        pool_row = factor_combo_repository.get_pool(submitted.pool_id)
+        database_data_spec = factor_combo_repository.get_work_order_data_spec(submitted.form_id)
+        assert form_row is not None and pool_row is not None, {
+            "api": body,
+            "form": form_row,
+            "pool": pool_row,
+        }
+        factor_combo_service.validate_work_order_persistence(
+            data,
+            form_row,
+            pool_row,
+            db_members,
+            database_data_spec=database_data_spec,
+        )
         assert factor_combo_repository.count_versions_for_form(submitted.form_id) == versions_before, {
             "api": body,
             "before_count": versions_before,

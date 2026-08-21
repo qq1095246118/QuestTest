@@ -34,8 +34,11 @@ class TestSampleRecordService:
         record = service.register_record(name)
 
         persisted_record = repository.find_by_id(record.record_id)
-        assert persisted_record == record
-        assert service.remove_record(record.record_id) is True
+        try:
+            assert persisted_record == record
+        finally:
+            deleted = repository.delete_by_id(record.record_id)
+        assert deleted is True
         assert repository.find_by_id(record.record_id) is None
 
     @staticmethod

@@ -72,6 +72,14 @@ class TestSubmitFactorComboReportFeedbackAPI:
         assert form["pipeline_run_id"] is None, {"api": body, "db": form}
         assert form["factor_combo_id"] is None, {"api": body, "db": form}
         assert form["factor_combo_experiment_info_id"] is None, {"api": body, "db": form}
+        factor_combo_worker_service.validate_feedback_persistence(
+            data,
+            payload,
+            feedback,
+            form,
+            stored_experiment,
+            version,
+        )
 
     def test_identical_feedback_replay_returns_same_history_record(
         self,

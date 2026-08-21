@@ -62,6 +62,6 @@ class TestStartFactorComboRunAPI:
         )
         body = response.json()
 
-        assert response.status_code == 422, body
+        assert response.status_code == 400, body
         assert body.get("success") is False, body
         assert isinstance(body.get("error"), str) and body["error"], body

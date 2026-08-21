@@ -19,8 +19,8 @@ from service.factor_combo_service import (
     RealPipelineResult,
     RealRun,
     SubmittedForm,
-    TestResourceScope as ResourceScope,
 )
+from tests.resource_scope import TestResourceScope as ResourceScope
 
 
 class StubResponse:
@@ -68,21 +68,30 @@ class StubRepository:
         calculation_runs: list[dict[str, Any]] | None = None,
         calculation_metrics: list[dict[str, Any]] | None = None,
         refresh_validity_snapshots: list[dict[str, Any]] | None = None,
+        run_details: list[dict[str, Any]] | None = None,
     ) -> None:
         """保存登记资源及可选刷新计算证据；显式空列表表示数据库没有对应证据。"""
 
+        registration_values = dict(registration)
+        legacy_business_combo_id = registration_values.pop("combo_id", None)
+        self.registration_lookup_combo_id = int(
+            registration_values.pop("business_combo_id", legacy_business_combo_id or 701)
+        )
+        version_id = int(registration_values.get("version_id", 702))
+        persisted_combo_id = int(registration_values.pop("persisted_combo_id", version_id))
         self.registration = {
             "id": 901,
-            "combo_id": 701,
+            "combo_id": persisted_combo_id,
             "sub_factor_id": 801,
             "factor_id": None,
             "combo_version_hash": "a" * 64,
-            "version_id": 702,
-            **registration,
+            "version_id": version_id,
+            **registration_values,
         }
         default_form = {
             "id": 22,
             "session_id": 11,
+            "factor_combo_pool_id": 33,
             "factor_combo_id": self.registration.get("version_id", 702),
             "pipeline_run_id": "combo-22-abcdef0123456789",
             "status": "completed",
@@ -91,7 +100,7 @@ class StubRepository:
         self.form = default_form
         self.version = {
             "id": self.form.get("factor_combo_id"),
-            "combo_id": self.registration.get("combo_id"),
+            "combo_id": self.registration_lookup_combo_id,
             "combo_version_hash": self.registration.get("combo_version_hash"),
             "status": self.form.get("status", "completed"),
         }
@@ -112,6 +121,7 @@ class StubRepository:
             else list(calculation_runs)
         )
         self.calculation_metrics = None if calculation_metrics is None else list(calculation_metrics)
+        self.run_details = None if run_details is None else list(run_details)
         self.refresh_validity_snapshots = (
             [
                 {
@@ -146,10 +156,21 @@ class StubRepository:
             return None
         return dict(self.form)
 
-    def get_registration(self, combo_id: int) -> dict[str, Any] | None:
-        """返回预置登记记录；参数用于保持仓储接口语义。"""
+    def get_registration(
+        self,
+        combo_id: int,
+        version_id: int | None = None,
+        combo_version_hash: str | None = None,
+    ) -> dict[str, Any] | None:
+        """按业务组合及可选具体版本身份返回预置登记记录。"""
 
-        if int(combo_id) != int(self.registration["combo_id"]):
+        if int(combo_id) != self.registration_lookup_combo_id:
+            return None
+        if version_id is not None and int(version_id) != int(self.registration.get("version_id", 0)):
+            return None
+        if combo_version_hash is not None and str(combo_version_hash).strip().lower() != str(
+            self.registration.get("combo_version_hash", "")
+        ).strip().lower():
             return None
         return dict(self.registration)
 
@@ -206,6 +227,13 @@ class StubRepository:
                     }
                 )
         return rows
+
+    def get_factor_refresh_run_details(self, sub_factor_id: int) -> list[dict[str, Any]] | None:
+        """返回可选的完整 factor_ic_runs 主表替身；未配置时模拟旧离线仓储不提供该查询。"""
+
+        if self.run_details is None:
+            return None
+        return [dict(row) for row in self.run_details]
 
     def get_factor_refresh_validity_snapshots(
         self,
@@ -303,12 +331,14 @@ class StubRealFlowAPI:
         status_responses: list[StubResponse],
         result_responses: list[StubResponse],
         feedback_response: StubResponse | None = None,
+        repository: StubRepository | None = None,
     ) -> None:
-        """接收按 Run 顺序排列的状态、结果和可选反馈响应。"""
+        """接收按 Run 顺序排列的状态、结果和可选反馈响应及可选数据库替身。"""
 
         self.status_responses = list(status_responses)
         self.result_responses = list(result_responses)
         self.feedback_response = feedback_response
+        self.repository = repository
         self.start_calls: list[tuple[int, dict[str, Any]]] = []
         self.status_calls: list[tuple[int, str]] = []
         self.result_calls: list[tuple[int, str]] = []
@@ -319,11 +349,19 @@ class StubRealFlowAPI:
             "combo-22-3333333333333333",
         ]
 
+    def bind_repository(self, repository: StubRepository) -> None:
+        """绑定离线数据库替身，使启动接口成功后同步持久化当前 Run ID。"""
+
+        self.repository = repository
+
     def start_run(self, form_id: int, payload: dict[str, Any]) -> StubResponse:
         """记录启动参数并返回下一个合法 Run ID。"""
 
         self.start_calls.append((form_id, deepcopy(payload)))
         run_id = self._run_ids[len(self.start_calls) - 1]
+        if self.repository is not None:
+            self.repository.form["id"] = form_id
+            self.repository.form["pipeline_run_id"] = run_id
         return StubResponse(
             202,
             {
@@ -413,13 +451,20 @@ def _real_flow_service(
     max_rounds: int = 2,
     max_technical_retries: int = 1,
     poll_timeout_seconds: float = 1,
+    repository: StubRepository | None = None,
 ) -> FactorComboService:
     """构造注入 Agent 和真实流程替身的离线服务。"""
+
+    selected_repository = repository or StubRepository(
+        {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+        {"pipeline_run_id": None},
+    )
+    factor_api.bind_repository(selected_repository)
 
     return FactorComboService(
         chat_api=None,  # type: ignore[arg-type]
         factor_combo_api=factor_api,  # type: ignore[arg-type]
-        repository=StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801}),  # type: ignore[arg-type]
+        repository=selected_repository,  # type: ignore[arg-type]
         settings=replace(
             _settings(),
             max_research_rounds=max_rounds,
@@ -522,7 +567,7 @@ def _registration_response(
                 "factor_validity_status": {"id": 903, "factor_id": 801, "is_sub_factor_id": True},
                 "registration": {
                     "id": 901,
-                    "combo_id": 701,
+                    "combo_id": 702,
                     "combo_version_hash": "a" * 64,
                     "sub_factor_id": 801,
                 },
@@ -559,6 +604,25 @@ def _completed_refresh_response(task_id: str = "refresh-701") -> StubResponse:
             },
         },
     )
+
+
+def _refreshed_time_series_metric(**overrides: Any) -> dict[str, Any]:
+    """构造能唯一定位到新版 summary 行的子因子详情指标。
+
+    参数 ``overrides`` 是需要覆盖的指标字段，例如 ``ic`` 或 ``mean_ic``；返回包含 summary ID、Run、
+    IC 范围和窗口身份的指标对象。该辅助数据模拟真实接口返回的可对账身份，避免用一个只有数值的聚合对象
+    在多条 summary 行之间猜测匹配目标。
+    """
+
+    metric: dict[str, Any] = {
+        "summary_id": 1001,
+        "run_id": "ic-refresh-801",
+        "ic_scope": "time_series",
+        "window_scope": "rolling",
+        "mean_ic": 0.1,
+    }
+    metric.update(overrides)
+    return metric
 
 
 def _active_refresh_response(status: str = "running", task_id: str = "refresh-701") -> StubResponse:
@@ -632,7 +696,7 @@ class TestRealRegistrationRefreshFlow:
                     "data": {
                         "id": 801,
                         "sub_factor_name": "composite-test-factor",
-                        "factor_ic_summary_metrics": [{"window_scope": "rolling", "mean_ic": 0.1}],
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric()],
                     },
                 },
             )
@@ -667,7 +731,7 @@ class TestRealRegistrationRefreshFlow:
                     "data": {
                         "id": 801,
                         "sub_factor_name": "composite-test-factor",
-                        "factor_ic_summary_metrics": [{"mean_ic": 0.1}],
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric()],
                     },
                 },
             )
@@ -706,7 +770,7 @@ class TestRealRegistrationRefreshFlow:
                         "data": {
                             "id": 801,
                             "sub_factor_name": "composite-test-factor",
-                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                         },
                     },
                 )
@@ -752,7 +816,7 @@ class TestRealRegistrationRefreshFlow:
                         "data": {
                             "id": 801,
                             "sub_factor_name": "composite-test-factor",
-                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                         },
                     },
                 )
@@ -788,7 +852,7 @@ class TestRealRegistrationRefreshFlow:
                         "data": {
                             "id": 801,
                             "sub_factor_name": "composite-test-factor",
-                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                         },
                     },
                 )
@@ -840,7 +904,7 @@ class TestRealRegistrationRefreshFlow:
                         "data": {
                             "id": 801,
                             "sub_factor_name": "composite-test-factor",
-                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                         },
                     },
                 )
@@ -897,7 +961,7 @@ class TestRealRegistrationRefreshFlow:
                         "data": {
                             "id": 801,
                             "sub_factor_name": "composite-test-factor",
-                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                         },
                     },
                 )
@@ -1105,10 +1169,18 @@ class TestRealRegistrationRefreshFlow:
                 {
                     "success": True,
                     "data": {
-                        "id": 801,
-                        "sub_factor_name": "composite-test-factor",
-                        "factor_validity_status": {"time_series_is_valid": True},
-                    },
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_validity_status": {
+                                "id": 904,
+                                "factor_id": 801,
+                                "is_sub_factor_id": 1,
+                                "run_id": "ic-refresh-801",
+                                "time_series_summary_id": 1001,
+                                "cross_sectional_summary_id": 1002,
+                                "time_series_is_valid": True,
+                            },
+                        },
                 },
             )
         )
@@ -1195,7 +1267,7 @@ class TestRealRegistrationRefreshFlow:
                     "data": {
                         "id": 801,
                         "sub_factor_name": "composite-test-factor",
-                        "factor_ic_summary_metrics": [{"ic": 0.1}],
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                     },
                 },
             )
@@ -1349,7 +1421,7 @@ class TestRealRegistrationRefreshFlow:
                     "data": {
                         "id": 801,
                         "sub_factor_name": "composite-test-factor",
-                        "factor_ic_summary_metrics": [{"ic": 0.11}],
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
                     },
                 },
             )
@@ -1521,7 +1593,15 @@ class TestRealRegistrationRefreshFlow:
                 _run_result_response("combo-22-1111111111111111", valid=False, continue_exploration=False),
             ],
         )
-        service = _real_flow_service(api, max_rounds=1, max_technical_retries=2)
+        service = _real_flow_service(
+            api,
+            max_rounds=1,
+            max_technical_retries=2,
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": "combo-22-1111111111111111"},
+            ),
+        )
         run = RealRun(
             form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
             pipeline_run_id="combo-22-1111111111111111",
@@ -1547,7 +1627,15 @@ class TestRealRegistrationRefreshFlow:
             status_responses=[_run_status_response("combo-22-1111111111111111", "failed", "retry_run")],
             result_responses=[StubResponse(404, {"success": False, "error": "result not ready"})],
         )
-        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        service = _real_flow_service(
+            api,
+            max_rounds=1,
+            max_technical_retries=1,
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": "combo-22-1111111111111111"},
+            ),
+        )
         run = RealRun(
             form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
             pipeline_run_id="combo-22-1111111111111111",
@@ -1782,13 +1870,106 @@ class TestRefreshEvidenceReconciliation:
 
         assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
 
+    @pytest.mark.parametrize(
+        ("object_kind", "database_rows"),
+        [
+            (
+                "metric",
+                [{"summary_id": 1001, "factor_id": 999, "is_sub_factor_id": 1, "mean_ic": 0.1}],
+            ),
+            (
+                "metric",
+                [{"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 0, "mean_ic": 0.1}],
+            ),
+            (
+                "validity",
+                [{"id": 904, "factor_id": 999, "is_sub_factor_id": 1, "time_series_is_valid": True}],
+            ),
+            (
+                "validity",
+                [{"id": 904, "factor_id": 801, "is_sub_factor_id": 0, "time_series_is_valid": True}],
+            ),
+        ],
+    )
+    def test_database_refresh_identity_must_belong_to_target_sub_factor(
+        self,
+        object_kind: str,
+        database_rows: list[dict[str, Any]],
+    ) -> None:
+        """DB 命中行属于其他因子或母因子时，不能仅凭 summary/快照 ID 完成对账。"""
+
+        api_data: dict[str, Any]
+        if object_kind == "metric":
+            api_data = {
+                "factor_ic_summary_metrics": [
+                    {"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 1, "mean_ic": 0.1}
+                ]
+            }
+            metrics = database_rows
+            validity = []
+        else:
+            api_data = {
+                "factor_validity_status": {
+                    "id": 904,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "time_series_is_valid": True,
+                }
+            }
+            metrics = []
+            validity = database_rows
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                api_data,
+                metrics,
+                validity,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    @pytest.mark.parametrize(
+        ("object_kind", "database_rows"),
+        [
+            ("metric", [{"summary_id": 1001, "is_sub_factor_id": 1, "mean_ic": 0.1}]),
+            ("validity", [{"id": 904, "is_sub_factor_id": 1, "time_series_is_valid": True}]),
+        ],
+    )
+    def test_database_refresh_identity_fields_are_required(
+        self,
+        object_kind: str,
+        database_rows: list[dict[str, Any]],
+    ) -> None:
+        """DB 证据缺少 factor_id 时必须失败，不能依赖调用方查询条件代替行内身份。"""
+
+        api_data: dict[str, Any]
+        if object_kind == "metric":
+            api_data = {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": 0.1}]}
+            metrics = database_rows
+            validity = []
+        else:
+            api_data = {"factor_validity_status": {"id": 904, "time_series_is_valid": True}}
+            metrics = []
+            validity = database_rows
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                api_data,
+                metrics,
+                validity,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
     def test_explicit_null_metric_is_compared_with_database_null(self) -> None:
         """API 明确返回 null 且 DB 同字段为 null 时应记录为一次成功对账。"""
 
         matches = FactorComboService._compare_api_and_database_refresh_data(
             801,
             {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": None}]},
-            [{"summary_id": 1001, "mean_ic": None}],
+            [{"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 1, "mean_ic": None}],
             [],
         )
 
@@ -1801,7 +1982,7 @@ class TestRefreshEvidenceReconciliation:
             FactorComboService._compare_api_and_database_refresh_data(
                 801,
                 {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": None}]},
-                [{"summary_id": 1001}],
+                [{"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 1}],
                 [],
             )
 
@@ -1814,7 +1995,7 @@ class TestRefreshEvidenceReconciliation:
             801,
             {"factor_validity_status": {"id": 904, "time_series_is_valid": None}},
             [],
-            [{"id": 904, "time_series_is_valid": None}],
+            [{"id": 904, "factor_id": 801, "is_sub_factor_id": 1, "time_series_is_valid": None}],
         )
 
         assert matches[0]["fields"] == ("time_series_is_valid",), matches
@@ -1827,7 +2008,7 @@ class TestRefreshEvidenceReconciliation:
                 801,
                 {"factor_validity_status": {"id": 904, "time_series_is_valid": None}},
                 [],
-                [{"id": 904}],
+                [{"id": 904, "factor_id": 801, "is_sub_factor_id": 1}],
             )
 
         assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
@@ -1838,7 +2019,14 @@ class TestRefreshEvidenceReconciliation:
         matches = FactorComboService._compare_api_and_database_refresh_data(
             801,
             {"factor_ic_summary_metrics": [{"summary_id": 1001, "stratification": Decimal("0.75")}]},
-            [{"summary_id": 1001, "mean_stratification": Decimal("0.75")}],
+            [
+                {
+                    "summary_id": 1001,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "mean_stratification": Decimal("0.75"),
+                }
+            ],
             [],
         )
 
@@ -1851,7 +2039,14 @@ class TestRefreshEvidenceReconciliation:
             FactorComboService._compare_api_and_database_refresh_data(
                 801,
                 {"factor_ic_summary_metrics": [{"summary_id": 1001, "stratification": 0.75}]},
-                [{"summary_id": 1001, "mean_stratification": 0.5}],
+                [
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "mean_stratification": 0.5,
+                    }
+                ],
                 [],
             )
 
@@ -1875,6 +2070,8 @@ class TestRefreshEvidenceReconciliation:
             [
                 {
                     "summary_id": 1001,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
                     "period_start": datetime(2026, 8, 1, 0, 0, 0),
                     "period_end": datetime(2026, 8, 2, 0, 0, 0),
                     "mean_ic": 0.1,
@@ -1903,6 +2100,8 @@ class TestRefreshEvidenceReconciliation:
                 [
                     {
                         "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
                         "period_start": "2026-08-02 00:00:00",
                         "mean_ic": 0.1,
                     }
@@ -1938,6 +2137,8 @@ class TestRefreshEvidenceReconciliation:
                 [
                     {
                         "id": 904,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
                         "period_start": "2026-08-01 00:00:00",
                         "period_end": "2026-08-03 00:00:00",
                         "time_series_is_valid": True,
@@ -1954,10 +2155,26 @@ class TestRefreshEvidenceReconciliation:
             801,
             {
                 "factor_ic_summary_metrics": [
-                    {"summary_id": 1001, "period_start": None, "period_end": None, "mean_ic": 0.1}
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "period_start": None,
+                        "period_end": None,
+                        "mean_ic": 0.1,
+                    }
                 ]
             },
-            [{"summary_id": 1001, "period_start": None, "period_end": None, "mean_ic": 0.1}],
+            [
+                {
+                    "summary_id": 1001,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "period_start": None,
+                    "period_end": None,
+                    "mean_ic": 0.1,
+                }
+            ],
             [],
         )
 
@@ -1967,7 +2184,15 @@ class TestRefreshEvidenceReconciliation:
             FactorComboService._compare_api_and_database_refresh_data(
                 801,
                 {"factor_ic_summary_metrics": [{"summary_id": 1001, "period_start": None, "mean_ic": 0.1}]},
-                [{"summary_id": 1001, "period_start": "2026-08-01 00:00:00", "mean_ic": 0.1}],
+                [
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "period_start": "2026-08-01 00:00:00",
+                        "mean_ic": 0.1,
+                    }
+                ],
                 [],
             )
 
@@ -1994,6 +2219,30 @@ class TestRefreshEvidenceReconciliation:
         """普通数值零不能因为恰好是 0 而被强制走布尔比较。"""
 
         assert FactorComboService._same_scalar(0, Decimal("0.000000001")) is True
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "run_id",
+            "pipeline_run_id",
+            "next_pipeline_run_id",
+            "time_series_summary_run_id",
+            "cross_sectional_summary_run_id",
+        ],
+    )
+    def test_string_run_ids_are_not_compared_as_numeric_database_ids(self, field_name: str) -> None:
+        """Run 标识即使以 ``_id`` 结尾也应按字符串身份比较，而不是按正整数主键比较。"""
+
+        assert FactorComboService._same_persisted_value(
+            "ic-refresh-801",
+            "ic-refresh-801",
+            field_name=field_name,
+        ) is True
+        assert FactorComboService._same_persisted_value(
+            "ic-refresh-801",
+            "ic-refresh-802",
+            field_name=field_name,
+        ) is False
 
     @pytest.mark.parametrize(
         ("run_status", "expected_outcome"),
@@ -2048,6 +2297,43 @@ class TestRefreshEvidenceReconciliation:
             )
 
         assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_validity_summary_scope_must_match_time_or_cross_dimension(self) -> None:
+        """有效性快照的时序/截面外键不能互相指向错误 IC 范围。"""
+
+        metrics = self._metric_rows()
+        metrics[0]["ic_scope"] = "cross_sectional"
+        metrics[1]["ic_scope"] = "time_series"
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                metrics,
+                self._validity_rows(),
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "ic_scope" in str(error.value), str(error.value)
+
+    def test_validity_summary_window_dimension_must_match_linked_summary(self) -> None:
+        """有效性外键对应的评价窗口必须和实际 summary 行一致。"""
+
+        metrics = self._metric_rows()
+        metrics[0]["window_scope"] = "fixed"
+        validity_rows = self._validity_rows()
+        validity_rows[0]["time_series_summary_window_scope"] = "rolling"
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                metrics,
+                validity_rows,
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "window_scope" in str(error.value), str(error.value)
 
     def test_complete_summary_and_validity_identity_chain_passes(self) -> None:
         """summary、有效性快照和刷新 Run 全部一致时应返回完整数据库证据。"""
@@ -2187,6 +2473,228 @@ class TestRefreshEvidenceReconciliation:
         assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
 
 
+class TestWorkOrderReconciliation:
+    """验证工作单成员父级关系和快照来源不会被弱聚合结果掩盖。"""
+
+    @staticmethod
+    def _api_member() -> dict[str, Any]:
+        """构造一个可用于父级关系对账的工作单成员。"""
+
+        return {
+            "component_id": "1",
+            "factor_id": 10,
+            "sub_factor_id": 100,
+            "factor_code": "FACTOR-10",
+            "sub_factor_code": "SUB-100",
+            "name": "sub-factor-100",
+            "feature_column": "feature_100",
+            "factor_bar_interval": "1h",
+            "direction": 1,
+            "definition_snapshot": {"formula": "close"},
+            "metrics_snapshot": {"mean_ic": 0.1},
+            "validity_snapshot": {"overall_is_valid": True},
+        }
+
+    @staticmethod
+    def _database_member(**overrides: Any) -> dict[str, Any]:
+        """构造与工作单成员对应的数据库快照。"""
+
+        row: dict[str, Any] = {
+            "member_id": 1,
+            "sub_factor_id": 100,
+            "member_form_id": 22,
+            "member_pool_id": 33,
+            "factor_detail_record_id": 200,
+            "factor_detail_id": 200,
+            "factor_detail_factor_id": 100,
+            "factor_detail_is_sub_factor_id": 1,
+            "parent_factor_ids": [10, 11],
+            "parent_factor_names": ["factor-10", "factor-11"],
+            "parent_factor_serial_numbers": ["FACTOR-10", "FACTOR-11"],
+            "parent_factor_relation_count": 2,
+            "parent_factor_distinct_count": 2,
+            "sub_factor_name": "sub-factor-100",
+            "sub_factor_serial_number": "SUB-100",
+            "sub_factor_bar_interval": "1h",
+            "feature_column": "feature_100",
+            "direction": 1,
+            "definition_snapshot_json": {"formula": "close"},
+            "metrics_snapshot_json": {"mean_ic": 0.1},
+            "validity_snapshot_json": {"overall_is_valid": True},
+        }
+        row.update(overrides)
+        return row
+
+    def test_work_order_rejects_duplicate_parent_relation_sources(self) -> None:
+        """数据库父级关系存在重复行时不能由 DISTINCT 聚合后伪装成合法关系。"""
+
+        row = self._database_member(
+            parent_factor_ids=[10, 10],
+            parent_factor_names=["factor-10"],
+            parent_factor_serial_numbers=["FACTOR-10"],
+            parent_factor_relation_count=2,
+            parent_factor_distinct_count=1,
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_work_order_members(
+                [self._api_member()],
+                [row],
+                expected_form_id=22,
+                expected_pool_id=33,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "parent" in str(error.value), str(error.value)
+
+    def test_work_order_rejects_conflicting_snapshot_values(self) -> None:
+        """同一成员多个快照对 feature 或 direction 给出不同值时必须失败。"""
+
+        row = self._database_member(
+            feature_column=None,
+            direction=None,
+            definition_snapshot_json={"feature_column": "feature_100", "direction": 1},
+            metrics_snapshot_json={"feature_column": "feature_other", "direction": -1},
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_work_order_members(
+                [self._api_member()],
+                [row],
+                expected_form_id=22,
+                expected_pool_id=33,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "conflict" in str(error.value).lower(), str(error.value)
+
+
+class TestNextVersionReconciliation:
+    """验证下一版本不会静默复用上一版本的完整组件内容。"""
+
+    def test_next_version_rejects_reused_component_content(self) -> None:
+        """新版本哈希即使被伪造为不同值，也不能复用旧版本全部组件内容。"""
+
+        source_components = [
+            {
+                "id": 1,
+                "combo_id": 702,
+                "component_factor_id": 10,
+                "component_sub_factor_id": 100,
+                "direction": 1,
+                "transform_json": {"normalization": "zscore"},
+                "weight": 0.4,
+            },
+            {
+                "id": 2,
+                "combo_id": 702,
+                "component_factor_id": 11,
+                "component_sub_factor_id": 101,
+                "direction": -1,
+                "transform_json": {"normalization": "zscore"},
+                "weight": -0.2,
+            },
+        ]
+        request_payload = {
+            "combo_id": 701,
+            "generation_method": "ml",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "components": [
+                {
+                    "component_factor_id": 10,
+                    "component_sub_factor_id": 100,
+                    "direction": 1,
+                    "transform": {"normalization": "zscore"},
+                    "weight": 0.4,
+                },
+                {
+                    "component_factor_id": 11,
+                    "component_sub_factor_id": 101,
+                    "direction": -1,
+                    "transform": {"normalization": "zscore"},
+                    "weight": -0.2,
+                },
+            ],
+        }
+        response_data = {
+            "form_id": 22,
+            "form_status": "processing",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_version_id": 703,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "combo_version_hash": "b" * 64,
+            "combo_status": "candidate",
+            "component_count": 2,
+            "idempotent_replay": False,
+            "feedback_id": 900,
+            "feedback_round": 2,
+            "feedback_status": "processing",
+        }
+        form_row = {
+            "id": 22,
+            "status": "processing",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_id": 703,
+            "factor_combo_pool_id": 33,
+        }
+        version_row = {
+            "id": 703,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "generation_method": "ml",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "combo_version_hash": "b" * 64,
+            "status": "candidate",
+            "initial_form_id": 22,
+            "experiment_id": None,
+        }
+        source_version_row = {
+            "id": 702,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "combo_version_hash": "a" * 64,
+            "status": "rejected",
+            "initial_form_id": 22,
+            "experiment_id": 800,
+        }
+        feedback_row = {
+            "id": 900,
+            "form_id": 22,
+            "feedback_round": 2,
+            "status": "processing",
+            "source_factor_combo_version_id": 702,
+            "experiment_info_id": 800,
+            "next_factor_combo_version_id": 703,
+            "next_pipeline_run_id": "combo-22-newrun00000001",
+            "next_experiment_info_id": None,
+        }
+
+        new_components = [
+            {**row, "combo_id": 703}
+            for row in source_components
+        ]
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService.validate_combo_version_persistence(
+                FactorComboService.__new__(FactorComboService),
+                response_data,
+                request_payload,
+                form_row,
+                version_row,
+                new_components,
+                feedback_row=feedback_row,
+                source_version_row=source_version_row,
+                source_component_rows=source_components,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "component" in str(error.value).lower(), str(error.value)
+
+
 class TestRealResearchFlowBranches:
     """验证真实研究主流程的技术重试、反馈续轮和结果契约。"""
 
@@ -2228,6 +2736,81 @@ class TestRealResearchFlowBranches:
         assert 22 in scope.protected_form_ids, scope.protected_form_ids
         assert len(api.calls) == 1, api.calls
 
+    def test_terminal_form_can_be_released_for_fixture_cleanup(self) -> None:
+        """真实 Run 进入安全终态后，Scope 允许 Fixture 在结束时清理表单。"""
+
+        scope = ResourceScope()
+        scope.track_session(11)
+        scope.track_form(11, 22)
+        scope.protect_form(22)
+
+        scope.release_form(22)
+
+        assert scope.cleanable_form_ids() == {22}, scope.cleanable_form_ids()
+        assert scope.cleanable_session_ids() == {11}, scope.cleanable_session_ids()
+
+    def test_unowned_form_does_not_make_external_session_cleanable(self) -> None:
+        """未由当前 Scope 创建的会话和表单不能进入自动清理集合。"""
+
+        scope = ResourceScope()
+        scope.track_form(999, 888)
+
+        assert scope.cleanable_form_ids() == set(), scope.cleanable_form_ids()
+        assert scope.cleanable_session_ids() == set(), scope.cleanable_session_ids()
+
+    def test_definitive_start_client_error_releases_form_protection(self) -> None:
+        """真实 Run 启动明确返回客户端错误时，不应永久阻塞测试数据清理。"""
+
+        scope = ResourceScope()
+        scope.track_session(11)
+        scope.track_form(11, 22)
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubStartConflictAPI(StubResponse(403, {"success": False, "error": "forbidden"})),  # type: ignore[arg-type]
+            repository=StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801}),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=scope,
+        )
+
+        response = service.start_real_run_request(
+            SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted"),
+            agent_uid="agent-1",
+        )
+
+        assert response.status_code == 403, response
+        assert scope.protected_form_ids == set(), scope.protected_form_ids
+
+    def test_initial_form_replay_in_owned_session_is_marked_for_cleanup(self) -> None:
+        """当前测试会话中的幂等重放表单也必须纳入清理范围，避免 POST 重试造成数据泄漏。"""
+
+        scope = ResourceScope()
+        scope.track_session(11)
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI([]),  # type: ignore[arg-type]
+            repository=StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801}),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=scope,
+        )
+
+        service.require_submitted_form(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "form_id": 22,
+                        "form_no": "FCF-TEST-22",
+                        "factor_combo_pool_id": 33,
+                        "status": "submitted",
+                    },
+                },
+            ),
+            11,
+        )
+
+        assert scope.cleanable_form_ids() == {22}, scope.cleanable_form_ids()
+
     def test_missing_review_decision_is_a_contract_failure(self) -> None:
         """结果缺少评审决策字段时不得被误判为业务无效。"""
 
@@ -2249,6 +2832,92 @@ class TestRealResearchFlowBranches:
             service.require_real_pipeline_result(StubResponse(200, body), run)
 
         assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_run_status_rejects_database_form_run_mismatch(self) -> None:
+        """状态接口返回前，数据库表单必须属于同一个 pipeline run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result")
+            ],
+            result_responses=[],
+        )
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            {"pipeline_run_id": "combo-22-9999999999999999"},
+        )
+        service = _real_flow_service(api, repository=repository)
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-1111111111111111",
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.read_real_run_status(run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "pipeline_run_id" in str(error.value), str(error.value)
+        assert api.status_calls == [], api.status_calls
+
+    def test_run_result_rejects_database_form_run_mismatch(self) -> None:
+        """结果接口返回成功时，数据库表单仍必须指向同一个 pipeline run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[],
+            result_responses=[
+                _run_result_response(
+                    "combo-22-1111111111111111",
+                    valid=True,
+                    continue_exploration=False,
+                )
+            ],
+        )
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            {"pipeline_run_id": "combo-22-9999999999999999"},
+        )
+        service = _real_flow_service(api, repository=repository)
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-1111111111111111",
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(
+                api.result_responses[0],  # type: ignore[arg-type]
+                run,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "pipeline_run_id" in str(error.value), str(error.value)
+
+    def test_result_report_requires_non_empty_factor_name(self) -> None:
+        """结构化结果必须提供非空因子名，不能把缺名结果继续送入登记。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(
+            run.pipeline_run_id,
+            valid=True,
+            continue_exploration=False,
+        )
+        body = response.json()
+        body["data"]["result"]["factor_combo_report"]["factor_name"] = "   "
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "factor_name" in str(error.value), str(error.value)
 
     def test_technical_pipeline_failure_uses_fresh_run_before_business_decision(self) -> None:
         """首轮 Pipeline 技术失败时使用 force_fresh_pipeline_run 重试，再处理真实结果。"""
@@ -2341,7 +3010,19 @@ class TestRealResearchFlowBranches:
                 200,
                 {
                     "success": True,
-                    "data": {"feedback_id": 991, "feedback_round": 2, "feedback_status": "pending", "reply": 2},
+                    "data": {
+                        "feedback_recorded": True,
+                        "idempotent_replay": False,
+                        "feedback_id": 991,
+                        "feedback_round": 2,
+                        "feedback_status": "pending",
+                        "reply": 2,
+                        "form_id": 22,
+                        "form_status": "processing",
+                        "factor_combo_experiment_info_id": 1,
+                        "rejected_factor_combo_version_id": 702,
+                        "experiment_valid": False,
+                    },
                 },
             ),
         )

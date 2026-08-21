@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from copy import deepcopy
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from decimal import Decimal, InvalidOperation
-from typing import Any
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
+from typing import Any, Protocol
 from uuid import uuid4
 
 import requests
@@ -225,6 +226,14 @@ _API_TO_DB_METRIC_FIELDS: dict[str, tuple[str, ...]] = {
     "overall_score": ("overall_score",),
     "time_series_score": ("time_series_score",),
     "cross_sectional_score": ("cross_sectional_score",),
+    "slice_count": ("slice_count",),
+    "valid_slice_count": ("valid_slice_count",),
+    "is_period_start": ("is_period_start",),
+    "is_period_end": ("is_period_end",),
+    "oos_period_start": ("oos_period_start",),
+    "oos_period_end": ("oos_period_end",),
+    "is_slice_count": ("is_slice_count",),
+    "oos_slice_count": ("oos_slice_count",),
 }
 _API_TO_DB_VALIDITY_FIELDS = (
     "overall_score",
@@ -281,73 +290,215 @@ _VALIDITY_MATCH_IDENTITY_FIELDS = (
 )
 
 _DATETIME_IDENTITY_FIELDS = {"period_start", "period_end"}
+# Run 标识由 Agent/IC 刷新服务生成，虽然字段名以 ``_id`` 结尾，但不是数据库自增整数。
+_STRING_RUN_ID_FIELDS = {"run_id"}
+
+_FORM_STATUS_VALUES = {"submitted", "processing", "completed"}
+_COMBO_STATUS_VALUES = {"draft", "testing", "candidate", "rejected", "active", "deprecated"}
+_FEEDBACK_STATUS_VALUES = {"pending", "processing", "completed", "failed", "legacy_failed"}
+
+_WORK_ORDER_REQUIRED_FIELDS = (
+    "form_id",
+    "form_no",
+    "form_status",
+    "factor_combo_pool_id",
+    "pool_snapshot_hash",
+    "form_json",
+    "data_spec",
+    "pool_members",
+)
+_WORK_ORDER_SPEC_REQUIRED_FIELDS = (
+    "symbol",
+    "interval",
+    "combo_bar_interval",
+    "return_bar_interval",
+    "forward_return_bars",
+    "alignment_policy",
+    "source_availability_rule",
+)
+_WORK_ORDER_MEMBER_REQUIRED_FIELDS = (
+    "component_id",
+    "factor_id",
+    "sub_factor_id",
+    "factor_code",
+    "sub_factor_code",
+    "name",
+    "feature_column",
+    "factor_bar_interval",
+    "direction",
+)
+_VERSION_RESULT_REQUIRED_FIELDS = (
+    "form_id",
+    "form_status",
+    "pipeline_run_id",
+    "factor_combo_version_id",
+    "combo_id",
+    "combo_family_key",
+    "pool_id",
+    "combo_version_hash",
+    "combo_status",
+    "component_count",
+    "idempotent_replay",
+)
+_NEXT_VERSION_RESULT_REQUIRED_FIELDS = (
+    *_VERSION_RESULT_REQUIRED_FIELDS,
+    "feedback_id",
+    "feedback_round",
+    "feedback_status",
+)
+_EXPERIMENT_RESULT_REQUIRED_FIELDS = (
+    "experiment_info_id",
+    "experiment_id",
+    "form_id",
+    "factor_combo_version_id",
+    "combo_id",
+    "form_status",
+    "combo_status",
+    "idempotent_replay",
+    "experiment_valid",
+)
+_FEEDBACK_RESULT_REQUIRED_FIELDS = (
+    "feedback_recorded",
+    "idempotent_replay",
+    "feedback_id",
+    "feedback_round",
+    "feedback_status",
+    "reply",
+    "form_id",
+    "form_status",
+    "factor_combo_experiment_info_id",
+    "rejected_factor_combo_version_id",
+    "experiment_valid",
+)
+_REGISTRATION_RESULT_REQUIRED_FIELDS = (
+    "registered",
+    "idempotent_replay",
+    "factor_combo_version_id",
+    "combo_id",
+    "combo_version_hash",
+    "sub_factor_id",
+    "factor_detail_id",
+    "registration_id",
+    "factor_validity_status_id",
+    "sub_factor_type",
+    "refresh_status",
+    "sub_factor",
+    "factor_detail",
+    "factor_validity_status",
+    "registration",
+)
+
+# 登记接口返回的嵌套对象必须使用这些明确的数据库列。这里不把 API 字段名自动当作列名，避免新增字段
+# 恰好与另一张表的同名字段相等时把错误对账成成功。
+_REGISTRATION_SUB_FACTOR_FIELD_MAP: dict[str, str | Sequence[str]] = {
+    "id": "id",
+    "serial_number": "serial_number",
+    "serial_prefix": "serial_prefix",
+    "sub_factor_name": "sub_factor_name",
+    "cn_name": "cn_name",
+    "type": "type",
+    "window": "window",
+    "factor_bar_interval": "factor_bar_interval",
+    "formula_summary": "formula_summary",
+    "sub_factor_tags": "sub_factor_tags",
+    "level": "level",
+    "max_level": "max_level",
+    "child_factor_count": "child_factor_count",
+    "mining_method": "mining_method",
+    "data_source": "data_source",
+    "metadata": "metadata",
+    "created_by": "created_by",
+    "created_by_uid": "created_by_uid",
+    "operator_by": "operator_by",
+    "operator_by_uid": "operator_by_uid",
+    "created_at": "created_at",
+    "updated_at": "updated_at",
+}
+_REGISTRATION_FACTOR_DETAIL_FIELD_MAP: dict[str, str | Sequence[str]] = {
+    "id": "id",
+    "factor_id": "factor_id",
+    "is_sub_factor_id": ("is_sub_factor_id", "is_sub_factor"),
+    "serial_number": "serial_number",
+    "name": "name",
+    "description": "description",
+    "data_source": "data_source",
+    "calc_function": "calc_function",
+    "calc_logic": "calc_logic",
+    "params": "params",
+    "explanation": "explanation",
+    "update_interval": "update_interval",
+    "hit_count": "hit_count",
+    "strategy_status": "strategy_status",
+    "status": "status",
+    "created_at": "created_at",
+    "updated_at": "updated_at",
+}
+_REGISTRATION_VALIDITY_FIELD_MAP: dict[str, str | Sequence[str]] = {
+    "id": "id",
+    "run_id": "run_id",
+    "factor_id": "factor_id",
+    "is_sub_factor_id": "is_sub_factor_id",
+    "serial_number": "serial_number",
+    "universe_key": "universe_key",
+    "factor_bar_interval": "factor_bar_interval",
+    "factor_window_bars": "factor_window_bars",
+    "return_bar_interval": "return_bar_interval",
+    "forward_return_bars": "forward_return_bars",
+    "window_scope": "window_scope",
+    "period_start": "period_start",
+    "period_end": "period_end",
+    "time_series_scoring_version": "time_series_scoring_version",
+    "time_series_score": "time_series_score",
+    "time_series_status": "time_series_status",
+    "time_series_is_valid": "time_series_is_valid",
+    "cross_sectional_scoring_version": "cross_sectional_scoring_version",
+    "cross_sectional_score": "cross_sectional_score",
+    "cross_sectional_status": "cross_sectional_status",
+    "cross_sectional_is_valid": "cross_sectional_is_valid",
+    "overall_score": "overall_score",
+    "overall_status": "overall_status",
+    "overall_is_valid": "overall_is_valid",
+    "validity_threshold": "validity_threshold",
+    "status_reason_json": ("status_reason_json", "status_reason"),
+    "time_series_summary_id": "time_series_summary_id",
+    "cross_sectional_summary_id": "cross_sectional_summary_id",
+    "created_at": "created_at",
+    "updated_at": "updated_at",
+}
+_REGISTRATION_MAPPING_FIELD_MAP: dict[str, str | Sequence[str]] = {
+    "id": "id",
+    "combo_id": "combo_id",
+    "combo_version_hash": "combo_version_hash",
+    "factor_id": "factor_id",
+    "sub_factor_id": "sub_factor_id",
+    "registered_by": "registered_by",
+    "registered_at": "registered_at",
+    "created_by": "created_by",
+    "created_at": "created_at",
+    "updated_by": "updated_by",
+    "updated_at": "updated_at",
+}
 
 
-@dataclass
-class TestResourceScope:
-    """记录单个 pytest 用例创建的测试资源及不可自动删除的主链路资源。
+class ResourceScope(Protocol):
+    """描述 Service 需要的测试资源生命周期操作。
 
-    参数由 ``FactorComboService`` 在创建会话、表单和真实 Run 时填充。
-    返回值由 Fixture 创建并在测试结束时交给 Service 清理；所有 ID 都只指向当前测试生成的数据。
+    具体实现位于 ``tests`` 测试基础设施；Service 只负责在业务流程节点登记或解除保护，
+    不依赖 pytest Fixture 的具体实现，也不负责执行数据库清理。
     """
 
-    session_ids: set[int] = field(default_factory=set)
-    form_ids: set[int] = field(default_factory=set)
-    protected_form_ids: set[int] = field(default_factory=set)
-    session_forms: dict[int, set[int]] = field(default_factory=dict)
-
     def track_session(self, session_id: int) -> None:
-        """登记一个由当前测试创建的 Factor 会话。
-
-        参数 ``session_id`` 是创建接口返回的会话主键。
-        不返回值；会话会在启用测试数据清理时交给仓储删除。
-        """
-
-        self.session_ids.add(int(session_id))
-        self.session_forms.setdefault(int(session_id), set())
+        """登记本次业务流程创建的会话。"""
 
     def track_form(self, session_id: int, form_id: int) -> None:
-        """登记一个属于测试会话的组合表单。
-
-        参数 ``session_id`` 是表单所属会话主键，``form_id`` 是提交接口返回的表单主键。
-        不返回值；表单会在测试结束时按关联顺序清理。
-        """
-
-        normalized_session_id = int(session_id)
-        normalized_form_id = int(form_id)
-        self.form_ids.add(normalized_form_id)
-        self.session_forms.setdefault(normalized_session_id, set()).add(normalized_form_id)
+        """登记本次业务流程创建的表单。"""
 
     def protect_form(self, form_id: int) -> None:
-        """标记仍可能被真实 Pipeline 使用的表单，禁止自动清理。
+        """保护仍可能被异步流程使用的表单。"""
 
-        参数 ``form_id`` 是已启动真实 Run 的表单主键。
-        不返回值；该表单及其会话会保留，避免清理竞态破坏运行中的外部任务。
-        """
+    def release_form(self, form_id: int) -> None:
+        """解除已进入安全终态表单的保护。"""
 
-        self.protected_form_ids.add(int(form_id))
-
-    def cleanable_form_ids(self) -> set[int]:
-        """计算当前可以安全交给数据库仓储清理的表单集合。
-
-        不接收参数。
-        返回未被保护的表单主键集合；真实 Pipeline 表单永远不会出现在集合中。
-        """
-
-        return self.form_ids - self.protected_form_ids
-
-    def cleanable_session_ids(self) -> set[int]:
-        """计算没有被保护表单占用、可以删除的会话集合。
-
-        不接收参数。
-        返回会话主键集合；只要会话下存在受保护表单，就不会自动删除该会话。
-        """
-
-        return {
-            session_id
-            for session_id, form_ids in self.session_forms.items()
-            if not form_ids.intersection(self.protected_form_ids)
-        }
 
 
 @dataclass(frozen=True)
@@ -358,6 +509,7 @@ class SubmittedForm:
     form_id: int
     pool_id: int
     status: str
+    form_no: str = ""
 
 
 @dataclass(frozen=True)
@@ -385,6 +537,10 @@ class ComboVersion:
     combo_family_key: str
     pool_id: int
     combo_version_hash: str
+    form_status: str = ""
+    combo_status: str = ""
+    component_count: int = 0
+    idempotent_replay: bool = False
 
 
 @dataclass(frozen=True)
@@ -505,6 +661,7 @@ class DatabaseRefreshEvidence:
     matched_run_ids: tuple[str, ...]
     calculation_metrics: tuple[dict[str, Any], ...] = ()
     api_db_matches: tuple[dict[str, Any], ...] = ()
+    run_details: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -552,7 +709,7 @@ class FactorComboService:
         factor_combo_api: FactorComboAPI,
         repository: FactorComboRepository,
         settings: FactorComboSettings,
-        scope: TestResourceScope,
+        scope: ResourceScope,
         agent_api: AgentAPI | None = None,
         performance_api: PerformanceAPI | None = None,
         sub_factor_api: SubFactorAPI | None = None,
@@ -594,18 +751,23 @@ class FactorComboService:
         session_id: int,
         factor_names: list[str],
         *,
+        is_sub_factor: int = 1,
         method_groups: Any = _METHOD_GROUPS_UNSET,
         objectives: list[dict[str, Any]] | None = None,
         notes: str | None = None,
         configuration_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """构造不包含已废弃 ``research_type`` 的组合表单请求体。
+        """构造包含因子类型标识且不包含已废弃 ``research_type`` 的组合表单请求体。
 
         参数 ``session_id`` 是当前用户 Factor 会话主键，``factor_names`` 是真实母因子或子因子名称列表，
-        ``method_groups``、``objectives``、``notes`` 和 ``configuration_overrides`` 是可选接口配置。
+        ``is_sub_factor`` 是接口规定的因子类型标识（1 表示子因子，0 表示母因子），``method_groups``、``objectives``、
+        ``notes`` 和 ``configuration_overrides`` 是可选接口配置。
         ``method_groups`` 省略时使用默认规则方法；显式传入 ``None`` 时保留为 JSON ``null``，其他 JSON 值原样保留。
-        返回可直接传给表单提交接口的请求字典；不执行网络请求或数据库写入。
+        返回可直接传给表单提交接口的请求字典；因子类型不是 0 或 1 时抛出 ``ValueError``，不执行网络请求或数据库写入。
         """
+
+        if is_sub_factor not in (0, 1):
+            raise ValueError("is_sub_factor must be 0 (parent factor) or 1 (sub-factor)")
 
         configuration_parameters: dict[str, Any] = {
             "objectives": objectives
@@ -631,6 +793,7 @@ class FactorComboService:
         )
         return {
             "session_id": session_id,
+            "is_sub_factor": is_sub_factor,
             "factors_name": list(factor_names),
             "method_groups": stored_method_groups,
             "configuration_parameters": configuration_parameters,
@@ -757,10 +920,69 @@ class FactorComboService:
         """
 
         data = self._require_flow_data(response, {200}, "read factor combo work order")
-        if str(data.get("form_id")) != str(form.form_id):
+        self._require_response_fields(data, _WORK_ORDER_REQUIRED_FIELDS, "factor combo work order")
+        returned_form_id = self._required_response_int(data, "form_id", "factor combo work order")
+        if returned_form_id != form.form_id:
             raise FactorComboFlowError(
                 FlowOutcome.FAIL_CONTRACT,
                 "work order form_id does not match the submitted form",
+                data,
+            )
+        form_no = self._required_response_string(data, "form_no", "factor combo work order")
+        form_status = self._required_response_string(data, "form_status", "factor combo work order")
+        if form_status not in _FORM_STATUS_VALUES:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order form_status is outside the documented enum",
+                data,
+            )
+        if form.form_no and form_no != form.form_no:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order form_no does not match the submitted form",
+                data,
+            )
+        pool_id = self._required_response_int(data, "factor_combo_pool_id", "factor combo work order")
+        if pool_id != form.pool_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order factor_combo_pool_id does not match the submitted form",
+                data,
+            )
+        self._required_response_string(data, "pool_snapshot_hash", "factor combo work order")
+        form_json = data["form_json"]
+        if not isinstance(form_json, dict):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order form_json must be an object",
+                data,
+            )
+        data_spec = data["data_spec"]
+        if not isinstance(data_spec, dict):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order data_spec must be an object",
+                data,
+            )
+        self._require_response_fields(data_spec, _WORK_ORDER_SPEC_REQUIRED_FIELDS, "factor combo work order data_spec")
+        self._required_response_string(data_spec, "symbol", "factor combo work order data_spec")
+        self._required_response_string(data_spec, "interval", "factor combo work order data_spec")
+        for field_name in (
+            "combo_bar_interval",
+            "return_bar_interval",
+            "alignment_policy",
+            "source_availability_rule",
+        ):
+            self._required_response_string(data_spec, field_name, "factor combo work order data_spec")
+        forward_return_bars = self._required_response_int(
+            data_spec,
+            "forward_return_bars",
+            "factor combo work order data_spec",
+        )
+        if forward_return_bars < 1:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order data_spec.forward_return_bars must be positive",
                 data,
             )
         pool_members = data.get("pool_members")
@@ -770,6 +992,8 @@ class FactorComboService:
                 "work order must contain at least two pool members",
                 data,
             )
+        component_ids: set[str] = set()
+        sub_factor_ids: set[int] = set()
         for member in pool_members:
             if not isinstance(member, dict):
                 raise FactorComboFlowError(
@@ -777,18 +1001,42 @@ class FactorComboService:
                     "work order pool member must be an object",
                     data,
                 )
-            for field_name in ("factor_id", "sub_factor_id"):
-                self._positive_int_or_failure(
-                    member.get(field_name),
+            self._require_response_fields(member, _WORK_ORDER_MEMBER_REQUIRED_FIELDS, "factor combo work order member")
+            component_id = self._required_response_string(
+                member,
+                "component_id",
+                "factor combo work order member",
+            )
+            if component_id in component_ids:
+                raise FactorComboFlowError(
                     FlowOutcome.FAIL_CONTRACT,
-                    f"work order member is missing positive {field_name}",
+                    "work order pool_members contains duplicate component_id",
                     data,
                 )
-            for field_name in ("feature_column", "factor_bar_interval"):
-                if not isinstance(member.get(field_name), str) or not member[field_name].strip():
+            component_ids.add(component_id)
+            self._required_response_int(member, "factor_id", "factor combo work order member")
+            sub_factor_id = self._required_response_int(member, "sub_factor_id", "factor combo work order member")
+            if sub_factor_id in sub_factor_ids:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "work order pool_members contains duplicate sub_factor_id",
+                    data,
+                )
+            sub_factor_ids.add(sub_factor_id)
+            for field_name in ("factor_code", "sub_factor_code", "name", "feature_column", "factor_bar_interval"):
+                self._required_response_string(member, field_name, "factor combo work order member")
+            direction = self._required_response_int(member, "direction", "factor combo work order member")
+            if direction not in {-1, 1}:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "work order member direction must be -1 or 1",
+                    data,
+                )
+            for field_name in ("definition_snapshot", "metrics_snapshot", "validity_snapshot"):
+                if field_name in member and member[field_name] is not None and not isinstance(member[field_name], dict):
                     raise FactorComboFlowError(
                         FlowOutcome.FAIL_CONTRACT,
-                        f"work order member is missing non-empty {field_name}",
+                        f"work order member {field_name} must be an object or null",
                         data,
                     )
         return data
@@ -801,14 +1049,25 @@ class FactorComboService:
         """
 
         data = self._require_success_data(response, {200, 202}, "submit factor combo form")
-        form_id = self._required_int(data, "form_id", "submitted factor combo form")
-        pool_id = self._required_int(data, "factor_combo_pool_id", "submitted factor combo form")
+        self._require_response_fields(
+            data,
+            ("form_id", "form_no", "status", "factor_combo_pool_id"),
+            "submitted factor combo form",
+        )
+        form_id = self._required_response_int(data, "form_id", "submitted factor combo form")
+        pool_id = self._required_response_int(data, "factor_combo_pool_id", "submitted factor combo form")
+        form_no = self._required_response_string(data, "form_no", "submitted factor combo form")
+        status = self._required_response_string(data, "status", "submitted factor combo form")
+        if status not in _FORM_STATUS_VALUES:
+            raise RuntimeError(f"submitted factor combo form response has invalid status: {status!r}")
         submitted = SubmittedForm(
             session_id=int(session_id),
             form_id=form_id,
             pool_id=pool_id,
-            status=str(data.get("status", "")),
+            status=status,
+            form_no=form_no,
         )
+        # 200 可能是首次 POST 已落库但响应丢失后的幂等重放；Scope 只会接受归属于当前测试会话的表单。
         self.scope.track_form(submitted.session_id, submitted.form_id)
         return submitted
 
@@ -838,7 +1097,7 @@ class FactorComboService:
         if parent is None:
             raise RuntimeError("Test database has no parent factor with at least two sub-factors")
         session_id = self.create_session()
-        payload = self.build_form_payload(session_id, [parent.factor_name])
+        payload = self.build_form_payload(session_id, [parent.factor_name], is_sub_factor=0)
         submitted = self.require_submitted_form(self.submit_form(payload), session_id)
         return submitted, parent
 
@@ -940,29 +1199,134 @@ class FactorComboService:
         返回原始 HTTP 响应；响应由用例或 ``require_combo_version`` 处理。
         """
 
-        payload = {
+        payload = self.build_initial_version_payload(
+            worker_form,
+            components=components,
+            generation_method=generation_method,
+            combo_id=combo_id,
+            pipeline_run_id=pipeline_run_id,
+        )
+        return self._factor_combo_api.create_initial_version(worker_form.submitted.form_id, payload)
+
+    def build_initial_version_payload(
+        self,
+        worker_form: WorkerForm,
+        *,
+        components: list[dict[str, Any]] | None = None,
+        generation_method: str = "ml",
+        combo_id: int | None = None,
+        pipeline_run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """构造初始组合版本接口的完整请求体。
+
+        参数 ``worker_form`` 提供表单、组合和认领运行上下文，``components`` 是可选组件列表，``generation_method`` 是
+        生成方式，``combo_id`` 是可选业务组合 ID，``pipeline_run_id`` 可覆盖认领值。返回可直接发送给初始版本接口的
+        JSON 字典；该方法不发送网络请求，也不执行数据库写入。
+        """
+
+        return {
             "pipeline_run_id": pipeline_run_id or worker_form.pipeline_run_id,
             "combo_id": combo_id if combo_id is not None else worker_form.combo_id,
             "generation_method": generation_method,
             "components": components if components is not None else list(worker_form.components),
         }
-        return self._factor_combo_api.create_initial_version(worker_form.submitted.form_id, payload)
 
-    def require_combo_version(self, response: requests.Response, worker_form: WorkerForm) -> ComboVersion:
+    def require_combo_version(
+        self,
+        response: requests.Response,
+        worker_form: WorkerForm,
+        *,
+        expected_components: Sequence[Mapping[str, Any]] | None = None,
+    ) -> ComboVersion:
         """把版本接口成功响应转换为组合版本对象。
 
-        参数 ``response`` 是初始版本或下一轮版本接口响应，``worker_form`` 是对应独立表单上下文。
-        返回 ``ComboVersion``；响应非成功或缺少版本字段时抛出 ``RuntimeError``。
+        参数 ``response`` 是初始版本接口响应，``worker_form`` 是对应独立表单上下文，``expected_components`` 是
+        本次请求实际提交的组件集合；未传入时兼容使用认领表单中的组件集合。返回 ``ComboVersion``；响应非成功或
+        缺少版本字段时抛出 ``RuntimeError``。调用方传入自定义组件时必须传入该集合，不能让解析器回退到旧组件。
         """
 
         data = self._require_success_data(response, {200, 201}, "create factor combo version")
+        self._require_response_fields(data, _VERSION_RESULT_REQUIRED_FIELDS, "factor combo version")
+        form_id = self._required_response_int(data, "form_id", "factor combo version")
+        if form_id != worker_form.submitted.form_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version form_id does not match the claimed form",
+                data,
+            )
+        form_status = self._required_response_string(data, "form_status", "factor combo version")
+        if form_status not in {"processing", "completed"}:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version form_status is outside the documented enum",
+                data,
+            )
+        pipeline_run_id = self._required_response_string(data, "pipeline_run_id", "factor combo version")
+        if pipeline_run_id != worker_form.pipeline_run_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version pipeline_run_id does not match the claimed run",
+                data,
+            )
+        combo_id = self._required_response_int(data, "combo_id", "factor combo version")
+        if combo_id != worker_form.combo_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version combo_id does not match the claimed combination",
+                data,
+            )
+        combo_family_key = self._required_response_string(data, "combo_family_key", "factor combo version")
+        pool_id = self._required_response_int(data, "pool_id", "factor combo version")
+        if pool_id != worker_form.submitted.pool_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version pool_id does not match the claimed pool",
+                data,
+            )
+        combo_version_hash = self._required_sha256_or_failure(
+            data.get("combo_version_hash"),
+            FlowOutcome.FAIL_CONTRACT,
+            "factor combo version combo_version_hash is missing or invalid",
+            data,
+        )
+        combo_status = self._required_response_string(data, "combo_status", "factor combo version")
+        if combo_status not in _COMBO_STATUS_VALUES:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version combo_status is outside the documented enum",
+                data,
+            )
+        component_count = self._required_response_int(data, "component_count", "factor combo version")
+        component_source = worker_form.components if expected_components is None else expected_components
+        if component_count != len(component_source):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version component_count does not match the claimed component set",
+                {
+                    "component_count": component_count,
+                    "expected_component_count": len(component_source),
+                    "data": data,
+                },
+            )
+        idempotent_replay = self._required_response_bool(data, "idempotent_replay", "factor combo version")
+        expected_replay = response.status_code == 200
+        if idempotent_replay is not expected_replay:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version HTTP status and idempotent_replay are inconsistent",
+                data,
+            )
         return ComboVersion(
             worker_form=worker_form,
-            version_id=self._required_int(data, "factor_combo_version_id", "factor combo version"),
-            combo_id=self._required_int(data, "combo_id", "factor combo version"),
-            combo_family_key=str(data.get("combo_family_key", "")),
-            pool_id=self._required_int(data, "pool_id", "factor combo version"),
-            combo_version_hash=self._required_string(data, "combo_version_hash", "factor combo version"),
+            version_id=self._required_response_int(data, "factor_combo_version_id", "factor combo version"),
+            combo_id=combo_id,
+            combo_family_key=combo_family_key,
+            pool_id=pool_id,
+            combo_version_hash=combo_version_hash,
+            form_status=form_status,
+            combo_status=combo_status,
+            component_count=component_count,
+            idempotent_replay=idempotent_replay,
         )
 
     def create_worker_version(self, worker_form: WorkerForm) -> ComboVersion:
@@ -973,7 +1337,7 @@ class FactorComboService:
         """
 
         response = self.create_initial_version_request(worker_form)
-        return self.require_combo_version(response, worker_form)
+        return self.require_combo_version(response, worker_form, expected_components=worker_form.components)
 
     def build_experiment_payload(
         self,
@@ -1044,6 +1408,8 @@ class FactorComboService:
         response: requests.Response,
         version: ComboVersion,
         experiment_id: str,
+        *,
+        expected_valid: bool | None = None,
     ) -> CompletedExperiment:
         """把有效实验写入成功响应转换为反馈或登记前置对象。
 
@@ -1052,14 +1418,83 @@ class FactorComboService:
         """
 
         data = self._require_success_data(response, {200, 201}, "write factor combo experiment")
-        experiment_info_id = self._required_int(data, "experiment_info_id", "factor combo experiment")
-        returned_experiment_id = str(data.get("experiment_id", experiment_id))
+        self._require_response_fields(data, _EXPERIMENT_RESULT_REQUIRED_FIELDS, "factor combo experiment")
+        experiment_info_id = self._required_response_int(data, "experiment_info_id", "factor combo experiment")
+        returned_experiment_id = self._required_response_string(data, "experiment_id", "factor combo experiment")
+        if returned_experiment_id != str(experiment_id).strip():
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response experiment_id does not match the path id",
+                data,
+            )
+        returned_form_id = self._required_response_int(data, "form_id", "factor combo experiment")
+        if returned_form_id != version.worker_form.submitted.form_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response form_id does not match the claimed form",
+                data,
+            )
+        returned_version_id = self._required_response_int(
+            data,
+            "factor_combo_version_id",
+            "factor combo experiment",
+        )
+        if returned_version_id != version.version_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response version does not match the created version",
+                data,
+            )
+        returned_combo_id = self._required_response_int(data, "combo_id", "factor combo experiment")
+        if returned_combo_id != version.combo_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response combo_id does not match the created version",
+                data,
+            )
+        form_status = self._required_response_string(data, "form_status", "factor combo experiment")
+        if form_status != "completed":
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response form_status must be completed",
+                data,
+            )
+        combo_status = self._required_response_string(data, "combo_status", "factor combo experiment")
+        if combo_status not in _COMBO_STATUS_VALUES:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response combo_status is outside the documented enum",
+                data,
+            )
+        idempotent_replay = self._required_response_bool(data, "idempotent_replay", "factor combo experiment")
+        if idempotent_replay is not (response.status_code == 200):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment HTTP status and idempotent_replay are inconsistent",
+                data,
+            )
+        if "experiment_valid" in data:
+            valid = self._required_response_bool(data, "experiment_valid", "factor combo experiment")
+            if expected_valid is not None and valid is not expected_valid:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo experiment response validity differs from the submitted request",
+                    data,
+                )
+        elif expected_valid is not None:
+            valid = expected_valid
+        else:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response does not expose validity and no request expectation was supplied",
+                data,
+            )
         return CompletedExperiment(
             version=version,
             experiment_id=returned_experiment_id,
             experiment_info_id=experiment_info_id,
-            form_status=str(data.get("form_status", "")),
-            valid=bool(data.get("experiment_valid", True)),
+            form_status=form_status,
+            valid=valid,
         )
 
     def create_completed_experiment(
@@ -1082,7 +1517,12 @@ class FactorComboService:
             failure_reason=failure_reason or ("autotest calculation failed" if not valid else None),
         )
         response = self.write_experiment_request(worker_form.experiment_id, payload)
-        completed = self.require_completed_experiment(response, version, worker_form.experiment_id)
+        completed = self.require_completed_experiment(
+            response,
+            version,
+            worker_form.experiment_id,
+            expected_valid=valid,
+        )
         return CompletedExperiment(
             version=completed.version,
             experiment_id=completed.experiment_id,
@@ -1122,8 +1562,2916 @@ class FactorComboService:
         返回 ``feedback_id``；响应非 200 或缺少 ID 时抛出 ``RuntimeError``。
         """
 
+        data = self.require_feedback_response(response)
+        return self._required_response_int(data, "feedback_id", "factor combo feedback")
+
+    def require_feedback_response(
+        self,
+        response: requests.Response,
+        *,
+        expected_form_id: int | None = None,
+        expected_experiment_info_id: int | None = None,
+        expected_status: str | None = None,
+    ) -> dict[str, Any]:
+        """严格解析反馈成功响应并核对反馈、表单和实验身份。
+
+        参数 ``response`` 是反馈接口原始响应；``expected_form_id`` 和 ``expected_experiment_info_id`` 是可选的当前链路
+        身份；``expected_status`` 用于要求本次流程返回指定反馈状态。返回完整的 ``data`` 字典；缺失必填字段、类型
+        不严格、状态码或业务身份不一致时抛出 ``FactorComboFlowError(FAIL_CONTRACT)``。
+        """
+
         data = self._require_success_data(response, {200}, "submit factor combo feedback")
-        return self._required_int(data, "feedback_id", "factor combo feedback")
+        self._require_response_fields(data, _FEEDBACK_RESULT_REQUIRED_FIELDS, "factor combo feedback")
+        if self._required_response_bool(data, "feedback_recorded", "factor combo feedback") is not True:
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, "feedback_recorded must be true", data)
+        self._required_response_bool(data, "idempotent_replay", "factor combo feedback")
+        feedback_status = self._required_response_string(data, "feedback_status", "factor combo feedback")
+        if feedback_status not in _FEEDBACK_STATUS_VALUES:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback_status is outside the documented enum",
+                data,
+            )
+        if expected_status is not None and feedback_status != expected_status:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback_status does not match the expected flow state",
+                data,
+            )
+        reply = self._required_response_int(data, "reply", "factor combo feedback")
+        if reply != 2:
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, "feedback reply must be 2", data)
+        form_id = self._required_response_int(data, "form_id", "factor combo feedback")
+        if expected_form_id is not None and form_id != int(expected_form_id):
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, "feedback form_id does not match the flow", data)
+        experiment_info_id = self._required_response_int(
+            data,
+            "factor_combo_experiment_info_id",
+            "factor combo feedback",
+        )
+        if expected_experiment_info_id is not None and experiment_info_id != int(expected_experiment_info_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback experiment_info_id does not match the flow",
+                data,
+            )
+        form_status = self._required_response_string(data, "form_status", "factor combo feedback")
+        if form_status not in {"processing", "completed", "failed"}:
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, "feedback form_status is invalid", data)
+        if self._required_response_bool(data, "experiment_valid", "factor combo feedback") is not False:
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, "feedback experiment_valid must be false", data)
+        self._required_response_int(data, "feedback_id", "factor combo feedback")
+        self._required_response_int(data, "feedback_round", "factor combo feedback")
+        self._required_response_int(data, "rejected_factor_combo_version_id", "factor combo feedback")
+        return data
+
+    def validate_submitted_form_persistence(
+        self,
+        response_data: Mapping[str, Any],
+        request_payload: Mapping[str, Any],
+        submitted: SubmittedForm,
+        form_row: Mapping[str, Any],
+        pool_row: Mapping[str, Any],
+        member_rows: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """深度核对表单提交响应、请求参数和三组数据库实体。
+
+        参数 ``response_data`` 是提交接口的 data，``request_payload`` 是原始请求体，``submitted`` 是已解析的表单上下文，
+        ``form_row``、``pool_row`` 和 ``member_rows`` 分别是表单、因子池及池成员的完整数据库记录。返回比较诊断；
+        缺少实体、请求 JSON 未持久化、ID/状态/会话/成员归属不一致时抛出 ``FactorComboFlowError(FAIL_CONTRACT)``。
+
+        该方法不对接口未返回的成员详情臆造值，但会验证数据库已经保存的完整请求 JSON、池归属和成员身份，避免只用
+        ``form_id`` 或成员数量判断提交成功。
+        """
+
+        response_fields = self._compare_explicit_fields(
+            response_data,
+            form_row,
+            {
+                "form_id": "id",
+                "form_no": "form_no",
+                "status": "status",
+                "factor_combo_pool_id": "factor_combo_pool_id",
+            },
+            "factor combo form response/database",
+            required_fields=("form_id", "form_no", "status", "factor_combo_pool_id"),
+            reject_unmapped_api_fields=True,
+        )
+        if not isinstance(request_payload, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form request payload must be an object",
+                request_payload,
+            )
+        request_session_id = self._required_response_int(
+            request_payload,
+            "session_id",
+            "factor combo form request",
+        )
+        form_identity = self._compare_explicit_fields(
+            {"session_id": request_session_id, "form_json": dict(request_payload)},
+            form_row,
+            {"session_id": "session_id", "form_json": "form_json"},
+            "factor combo form request/database",
+            required_fields=("session_id", "form_json"),
+        )
+        if request_session_id != submitted.session_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "submitted form session_id does not match the request context",
+                {"request": request_payload, "submitted": submitted, "db": dict(form_row)},
+            )
+        pool_fields = self._compare_explicit_fields(
+            {
+                "factor_combo_pool_id": response_data.get("factor_combo_pool_id"),
+                "form_id": response_data.get("form_id"),
+            },
+            pool_row,
+            {
+                "factor_combo_pool_id": "pool_id",
+                "form_id": "factor_combo_form_id",
+            },
+            "factor combo pool response/database",
+            required_fields=("factor_combo_pool_id", "form_id"),
+        )
+        if not isinstance(member_rows, Sequence) or isinstance(member_rows, (str, bytes)):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool members database result must be a sequence",
+                member_rows,
+            )
+        if "factor_combo_pool_id" not in form_row or form_row.get("factor_combo_pool_id") is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form database row is missing factor_combo_pool_id",
+                dict(form_row),
+            )
+        if not self._same_identity_scalar(
+            "factor_combo_pool_id",
+            form_row.get("factor_combo_pool_id"),
+            pool_row.get("pool_id"),
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form and pool point to different pool IDs",
+                {"form": dict(form_row), "pool": dict(pool_row)},
+            )
+        if len(member_rows) < 2:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form persisted fewer than two pool members",
+                {"form_id": submitted.form_id, "members": list(member_rows)},
+            )
+        member_ids: list[int] = []
+        sort_orders: list[int] = []
+        for row in member_rows:
+            member_form_id = self._positive_int_or_failure(
+                row.get("factor_combo_form_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool member is missing factor_combo_form_id",
+                row,
+            )
+            if member_form_id != submitted.form_id:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool member belongs to another form",
+                    {"expected_form_id": submitted.form_id, "member": dict(row)},
+                )
+            member_id = self._positive_int_or_failure(
+                row.get("sub_factor_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool member is missing sub_factor_id",
+                row,
+            )
+            if member_id in member_ids:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool contains duplicate sub_factor_id",
+                    {"sub_factor_id": member_id, "members": list(member_rows)},
+                )
+            member_ids.append(member_id)
+            member_pool_id = self._positive_int_or_failure(
+                row.get("pool_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool member is missing pool_id",
+                row,
+            )
+            if member_pool_id != submitted.pool_id:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool member belongs to another pool",
+                    {"expected_pool_id": submitted.pool_id, "member": dict(row)},
+                )
+            detail_id = self._positive_int_or_failure(
+                row.get("factor_detail_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool member is missing factor_detail_id",
+                row,
+            )
+            if "factor_detail_record_id" in row and not self._same_identity_scalar(
+                "factor_detail_id", detail_id, row.get("factor_detail_record_id")
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool member detail aliases conflict",
+                    {"member": dict(row)},
+                )
+            if "factor_detail_factor_id" in row and not self._same_identity_scalar(
+                "factor_id", member_id, row.get("factor_detail_factor_id")
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool member detail points to another sub-factor",
+                    {"member": dict(row)},
+                )
+            if "sort_order" not in row or row.get("sort_order") is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool member is missing sort_order",
+                    {"member": dict(row)},
+                )
+            sort_order = self._positive_int_or_failure(
+                row.get("sort_order"),
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool member sort_order must be positive",
+                row,
+            )
+            if sort_order in sort_orders:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo pool contains duplicate sort_order",
+                    {"members": list(member_rows)},
+                )
+            sort_orders.append(sort_order)
+            for snapshot_field in (
+                "definition_snapshot_json",
+                "metrics_snapshot_json",
+                "validity_snapshot_json",
+            ):
+                if snapshot_field in row:
+                    self._parse_json_value(row[snapshot_field], f"factor combo pool member.{snapshot_field}")
+
+        filter_field = next(
+            (field_name for field_name in ("filter_json", "filter", "factor_filter_json") if field_name in pool_row),
+            None,
+        )
+        if filter_field is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool has no persisted filter JSON source",
+                {"pool": dict(pool_row), "member_sub_factor_ids": member_ids},
+            )
+        persisted_filter = self._parse_json_value(pool_row[filter_field], f"factor combo pool.{filter_field}")
+        filter_ids = self._extract_sub_factor_ids_from_filter(persisted_filter)
+        if filter_ids != member_ids:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool filter does not preserve the persisted member identity/order",
+                {
+                    "filter_field": filter_field,
+                    "filter_sub_factor_ids": filter_ids,
+                    "member_sub_factor_ids": member_ids,
+                    "pool": dict(pool_row),
+                },
+            )
+
+        request_factor_names = request_payload.get("factors_name")
+        if not isinstance(request_factor_names, list) or not request_factor_names:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form request factors_name must be a non-empty array",
+                dict(request_payload),
+            )
+        request_is_sub_factor = request_payload.get("is_sub_factor")
+        if request_is_sub_factor not in (0, 1):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form request is_sub_factor must be 0 or 1",
+                dict(request_payload),
+            )
+        if request_is_sub_factor == 1:
+            persisted_names = [str(row.get("sub_factor_name", "")).strip() for row in member_rows]
+            if persisted_names != [str(value).strip() for value in request_factor_names]:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "direct sub-factor request names differ from persisted pool members",
+                    {"request_names": request_factor_names, "database_names": persisted_names},
+                )
+        return {
+            "response_fields": tuple(response_fields),
+            "form_fields": tuple(form_identity),
+            "pool_fields": tuple(pool_fields),
+            "member_count": len(member_rows),
+            "member_sub_factor_ids": tuple(member_ids),
+            "member_sort_orders": tuple(sort_orders),
+            "pool_filter_sub_factor_ids": tuple(filter_ids),
+        }
+
+    def validate_work_order_persistence(
+        self,
+        response_data: Mapping[str, Any],
+        form_row: Mapping[str, Any],
+        pool_row: Mapping[str, Any],
+        member_rows: Sequence[Mapping[str, Any]],
+        *,
+        database_data_spec: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """深度核对 Work Order 的完整返回结构和数据库快照。
+
+        参数 ``response_data`` 是工作单 data，``form_row``、``pool_row`` 和 ``member_rows`` 是对应完整数据库记录；
+        ``database_data_spec`` 是数据库或 Repository 明确保存的 data_spec 快照，未提供时方法会尝试从表单记录的
+        ``data_spec``/``data_spec_json`` 读取。返回比较诊断；顶层身份、form_json、data_spec、成员字段无法逐项对齐时
+        抛出 ``FAIL_CONTRACT``，不会因为能匹配几个子因子 ID 就通过。
+        """
+
+        self._require_response_fields(response_data, _WORK_ORDER_REQUIRED_FIELDS, "factor combo work order")
+        form_fields = self._compare_explicit_fields(
+            response_data,
+            form_row,
+            {
+                "form_id": "id",
+                "form_no": "form_no",
+                "form_status": "status",
+                "factor_combo_pool_id": "factor_combo_pool_id",
+                "form_json": "form_json",
+            },
+            "factor combo work order/form",
+            required_fields=("form_id", "form_no", "form_status", "factor_combo_pool_id", "form_json"),
+            reject_unmapped_api_fields=True,
+            allowed_unmapped_api_fields=(
+                "pool_snapshot_hash",
+                "data_spec",
+                "pool_members",
+                "pool_status",
+                "pool_member_count",
+                "created_at",
+                "updated_at",
+            ),
+        )
+        pool_fields = self._compare_explicit_fields(
+            {"factor_combo_pool_id": response_data["factor_combo_pool_id"]},
+            pool_row,
+            {"factor_combo_pool_id": "pool_id"},
+            "factor combo work order/pool",
+            required_fields=("factor_combo_pool_id",),
+        )
+        snapshot_hash = response_data["pool_snapshot_hash"]
+        pool_hash_fields = self._compare_explicit_fields(
+            {"pool_snapshot_hash": snapshot_hash},
+            pool_row,
+            {"pool_snapshot_hash": ("pool_snapshot_hash", "snapshot_hash", "pool_hash")},
+            "factor combo work order pool snapshot",
+            required_fields=("pool_snapshot_hash",),
+        )
+        data_spec = response_data["data_spec"]
+        if not isinstance(data_spec, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo work order data_spec must be an object",
+                response_data,
+            )
+        stored_data_spec: Any = database_data_spec
+        if stored_data_spec is None:
+            for field_name in ("data_spec", "data_spec_json", "work_order_json"):
+                if field_name in form_row:
+                    stored_data_spec = form_row[field_name]
+                    break
+        if stored_data_spec is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "work order data_spec is returned by API but no persisted DB data_spec source was supplied",
+                {"api": dict(data_spec), "form": dict(form_row)},
+            )
+        parsed_data_spec = self._parse_json_value(stored_data_spec, "factor combo work order data_spec/database")
+        if not isinstance(parsed_data_spec, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "persisted factor combo work order data_spec must be an object",
+                {"api": dict(data_spec), "database": stored_data_spec},
+            )
+        data_spec_fields = self._compare_explicit_fields(
+            data_spec,
+            parsed_data_spec,
+            {field_name: field_name for field_name in data_spec},
+            "factor combo work order data_spec/database",
+            required_fields=tuple(data_spec.keys()),
+        )
+        api_members = response_data["pool_members"]
+        if not isinstance(api_members, list):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo work order pool_members must be a list",
+                response_data,
+            )
+        member_fields = self._compare_work_order_members(
+            api_members,
+            member_rows,
+            expected_form_id=self._required_response_int(response_data, "form_id", "factor combo work order"),
+            expected_pool_id=self._required_response_int(
+                response_data,
+                "factor_combo_pool_id",
+                "factor combo work order",
+            ),
+        )
+        return {
+            "form_fields": tuple(form_fields),
+            "pool_fields": tuple(pool_fields),
+            "pool_snapshot_fields": tuple(pool_hash_fields),
+            "data_spec_fields": tuple(data_spec_fields),
+            "member_fields": tuple(member_fields),
+        }
+
+    def validate_combo_version_persistence(
+        self,
+        response_data: Mapping[str, Any],
+        request_payload: Mapping[str, Any],
+        form_row: Mapping[str, Any],
+        version_row: Mapping[str, Any],
+        component_rows: Sequence[Mapping[str, Any]],
+        *,
+        feedback_row: Mapping[str, Any] | None = None,
+        source_version_row: Mapping[str, Any] | None = None,
+        source_component_rows: Sequence[Mapping[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """深度核对组合版本响应、请求、版本主表、成分和关联指针。
+
+        参数 ``response_data`` 是初始或下一版本接口 data，``request_payload`` 是原始版本请求体，``form_row``、
+        ``version_row`` 和 ``component_rows`` 是完整数据库实体；``feedback_row`` 是下一版本场景的反馈记录，
+        ``source_version_row`` 是该反馈对应的上一版本记录，``source_component_rows`` 是上一版本的完整成分记录。
+        返回比较诊断；版本字段、表单指针、Feedback 全部下一轮指针、成分身份或 transform/weight 任一明确字段不一致
+        时抛出契约异常。下一版本调用必须同时提供来源版本和来源成分，才能证明新旧版本确实属于同一组合且没有复用
+        上一版本的完整成分内容。
+        """
+
+        is_next_version = feedback_row is not None
+        if is_next_version and source_version_row is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo persistence validation requires the source version row",
+                {"api": dict(response_data), "feedback": dict(feedback_row or {})},
+            )
+        if is_next_version and source_component_rows is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo persistence validation requires source component rows",
+                {"api": dict(response_data), "feedback": dict(feedback_row or {})},
+            )
+        required_response_fields = _NEXT_VERSION_RESULT_REQUIRED_FIELDS if is_next_version else _VERSION_RESULT_REQUIRED_FIELDS
+        self._require_response_fields(response_data, required_response_fields, "factor combo version")
+        allowed_unmapped_api_fields = (
+            "form_id",
+            "form_status",
+            "pipeline_run_id",
+            "component_count",
+            "idempotent_replay",
+        )
+        if is_next_version:
+            allowed_unmapped_api_fields += ("feedback_id", "feedback_round", "feedback_status")
+        response_fields = self._compare_explicit_fields(
+            response_data,
+            version_row,
+            {
+                "factor_combo_version_id": "id",
+                "combo_id": "combo_id",
+                "combo_family_key": "combo_family_key",
+                "pool_id": "pool_id",
+                "combo_version_hash": "combo_version_hash",
+                "combo_status": "status",
+            },
+            "factor combo version/database",
+            required_fields=(
+                "factor_combo_version_id",
+                "combo_id",
+                "combo_family_key",
+                "pool_id",
+                "combo_version_hash",
+                "combo_status",
+            ),
+            reject_unmapped_api_fields=True,
+            allowed_unmapped_api_fields=allowed_unmapped_api_fields,
+        )
+        form_fields = self._compare_explicit_fields(
+            response_data,
+            form_row,
+            {"form_id": "id", "form_status": "status", "pipeline_run_id": "pipeline_run_id"},
+            "factor combo version/form pointer",
+            required_fields=("form_id", "form_status", "pipeline_run_id"),
+        )
+        request_fields = self._compare_explicit_fields(
+            request_payload,
+            version_row,
+            {
+                "combo_id": "combo_id",
+                "generation_method": "generation_method",
+                "pipeline_run_id": "pipeline_run_id",
+            },
+            "factor combo version request/database",
+            required_fields=("combo_id", "pipeline_run_id", "generation_method"),
+        )
+        version_id = self._required_response_int(
+            response_data,
+            "factor_combo_version_id",
+            "factor combo version",
+        )
+        form_id = self._required_response_int(response_data, "form_id", "factor combo version")
+        if not self._same_identity_scalar("initial_form_id", version_row.get("initial_form_id"), form_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version initial_form_id does not point to the response form",
+                {"api": dict(response_data), "version": dict(version_row), "form": dict(form_row)},
+            )
+        if "factor_combo_id" not in form_row:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form is missing its concrete version pointer",
+                {"api": dict(response_data), "form": dict(form_row)},
+            )
+        if not self._same_identity_scalar("factor_combo_version_id", form_row.get("factor_combo_id"), version_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form factor_combo_id does not point to the response version",
+                {"api": dict(response_data), "version": dict(version_row), "form": dict(form_row)},
+            )
+        if not self._same_identity_scalar("pool_id", form_row.get("factor_combo_pool_id"), version_row.get("pool_id")):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version and form point to different pools",
+                {"api": dict(response_data), "version": dict(version_row), "form": dict(form_row)},
+            )
+        component_fields = self._compare_component_collections(
+            request_payload.get("components"),
+            component_rows,
+            "factor combo version components",
+            expected_combo_id=self._required_response_int(
+                response_data,
+                "factor_combo_version_id",
+                "factor combo version",
+            ),
+        )
+        component_count = self._required_response_int(response_data, "component_count", "factor combo version")
+        request_components = request_payload.get("components")
+        if not isinstance(request_components, Sequence) or isinstance(request_components, (str, bytes)):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version request components must be an array",
+                dict(request_payload),
+            )
+        if component_count != len(component_rows) or component_count != len(request_components):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version component_count differs from database component count",
+                {
+                    "api": dict(response_data),
+                    "db_component_count": len(component_rows),
+                    "request_component_count": len(request_components),
+                },
+            )
+        source_component_fields: tuple[str, ...] = ()
+        if is_next_version:
+            source_component_fields = self._validate_next_version_component_lineage(
+                source_version_row or {},
+                source_component_rows or (),
+                component_rows,
+            )
+        if "experiment_id" in version_row and version_row.get("experiment_id") is not None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "new factor combo version unexpectedly points to an experiment",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        feedback_fields: list[str] = []
+        if feedback_row is not None:
+            feedback_fields = self._compare_explicit_fields(
+                {
+                    key: response_data[key]
+                    for key in ("feedback_id", "feedback_round", "feedback_status")
+                },
+                feedback_row,
+                {
+                    "feedback_id": "id",
+                    "feedback_round": "feedback_round",
+                    "feedback_status": "status",
+                },
+                "factor combo next version/feedback pointer",
+                required_fields=("feedback_id", "feedback_round", "feedback_status"),
+            )
+            self._validate_next_version_feedback_links(
+                response_data,
+                feedback_row,
+                version_row,
+                source_version_row,
+                form_row,
+            )
+        return {
+            "response_fields": tuple(response_fields),
+            "form_fields": tuple(form_fields),
+            "request_fields": tuple(request_fields),
+            "component_fields": tuple(component_fields),
+            "source_component_fields": source_component_fields,
+            "feedback_fields": tuple(feedback_fields),
+        }
+
+    @classmethod
+    def _validate_next_version_component_lineage(
+        cls,
+        source_version_row: Mapping[str, Any],
+        source_component_rows: Sequence[Mapping[str, Any]],
+        new_component_rows: Sequence[Mapping[str, Any]],
+    ) -> tuple[str, ...]:
+        """核对下一版本的成分内容确实不同于被拒绝的来源版本。
+
+        参数 ``source_version_row`` 是被拒绝版本记录，``source_component_rows`` 和 ``new_component_rows`` 分别是
+        来源版本与新版本的完整数据库成分。返回参与比较的字段名；来源版本 ID 缺失、成分不属于对应版本、成分集合
+        为空或两版本的完整成分内容完全相同时抛出 ``FAIL_CONTRACT``。仅改变成分顺序不算内容变化，权重、方向或
+        transform 的合法变化会形成不同签名。
+        """
+
+        source_version_id = cls._required_persisted_int(
+            source_version_row,
+            ("id",),
+            "next factor combo source version",
+        )
+        # 来源版本的 ID 由来源主表提供；新版本组件归属已由调用方的完整组件对账校验。
+        source_signature = cls._component_content_signatures(
+            source_component_rows,
+            expected_combo_id=source_version_id,
+            resource_name="next factor combo source components",
+        )
+        new_signature = cls._component_content_signatures(
+            new_component_rows,
+            expected_combo_id=None,
+            resource_name="next factor combo new components",
+        )
+        if source_signature == new_signature:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version reuses the complete source component content",
+                {
+                    "source_version_id": source_version_id,
+                    "source_components": source_signature,
+                    "new_components": new_signature,
+                },
+            )
+        return (
+            "source_component_factor_id",
+            "source_component_sub_factor_id",
+            "source_component_direction",
+            "source_component_transform",
+            "source_component_weight",
+        )
+
+    @classmethod
+    def _component_content_signatures(
+        cls,
+        component_rows: Sequence[Mapping[str, Any]],
+        *,
+        expected_combo_id: int | None,
+        resource_name: str,
+    ) -> frozenset[tuple[Any, ...]]:
+        """把数据库成分规范化为可比较的内容签名集合。
+
+        参数 ``component_rows`` 是一个具体组合版本的成分记录，``expected_combo_id`` 是可选的版本主键，
+        ``resource_name`` 用于异常定位。返回不依赖数据库行顺序的签名集合；缺失身份、重复子因子、非法方向、
+        transform 或权重时抛出 ``FAIL_CONTRACT``。
+        """
+
+        if not isinstance(component_rows, Sequence) or isinstance(component_rows, (str, bytes)):
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, f"{resource_name} must be an array", component_rows)
+        signatures: set[tuple[Any, ...]] = set()
+        seen_sub_factor_ids: set[int] = set()
+        for row in component_rows:
+            if not isinstance(row, Mapping):
+                raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, f"{resource_name} row must be an object", row)
+            if expected_combo_id is not None:
+                combo_id = cls._required_persisted_int(
+                    row,
+                    ("combo_id",),
+                    f"{resource_name} combo pointer",
+                )
+                if combo_id != expected_combo_id:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{resource_name} points to another version",
+                        {"expected_combo_id": expected_combo_id, "row": dict(row)},
+                    )
+            factor_id = cls._required_persisted_int(
+                row,
+                ("component_factor_id",),
+                f"{resource_name} factor identity",
+            )
+            sub_factor_id = cls._required_persisted_int(
+                row,
+                ("component_sub_factor_id",),
+                f"{resource_name} sub-factor identity",
+            )
+            if sub_factor_id in seen_sub_factor_ids:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} contains duplicate component_sub_factor_id",
+                    component_rows,
+                )
+            seen_sub_factor_ids.add(sub_factor_id)
+            direction = cls._required_persisted_int(row, ("direction",), f"{resource_name} direction")
+            if direction not in {-1, 1}:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} direction must be -1 or 1",
+                    row,
+                )
+            transform_value = row.get("transform_json", row.get("transform"))
+            if transform_value is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} is missing transform",
+                    row,
+                )
+            transform = cls._parse_json_value(transform_value, f"{resource_name}.transform")
+            weight_value = row.get("weight")
+            if weight_value is not None and (
+                isinstance(weight_value, bool) or cls._coerce_decimal(weight_value) is None
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} weight is not numeric",
+                    row,
+                )
+            normalized_weight = None if weight_value is None else str(cls._coerce_decimal(weight_value))
+            normalized_transform = json.dumps(transform, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+            signatures.add((factor_id, sub_factor_id, direction, normalized_transform, normalized_weight))
+        if not signatures:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} must contain at least one component",
+                component_rows,
+            )
+        return frozenset(signatures)
+
+    def _validate_next_version_feedback_links(
+        self,
+        response_data: Mapping[str, Any],
+        feedback_row: Mapping[str, Any],
+        version_row: Mapping[str, Any],
+        source_version_row: Mapping[str, Any],
+        form_row: Mapping[str, Any],
+    ) -> None:
+        """核对下一版本与来源版本、Feedback 和表单之间的完整指针图。
+
+        参数 ``response_data`` 是下一版本接口返回的 data，``feedback_row`` 是数据库中的反馈记录，``version_row``
+        是新版本记录，``source_version_row`` 是被拒绝的旧版本记录，``form_row`` 是当前表单记录。不返回值；任一
+        来源身份、反馈轮次、下一轮指针、表单运行 ID 或新旧版本关系不一致时抛出 ``FAIL_CONTRACT``。
+        该校验不根据时间或“最新记录”推断来源，所有关系都必须由明确外键/业务字段证明。
+        """
+
+        version_id = self._required_response_int(response_data, "factor_combo_version_id", "next factor combo version")
+        source_version_id = self._required_persisted_int(
+            source_version_row,
+            ("id",),
+            "next factor combo source version",
+        )
+        if version_id == source_version_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version reuses the source version ID",
+                {"api": dict(response_data), "source_version": dict(source_version_row)},
+            )
+        source_hash = self._required_sha256_or_failure(
+            source_version_row.get("combo_version_hash"),
+            FlowOutcome.FAIL_CONTRACT,
+            "next factor combo source version has no valid hash",
+            source_version_row,
+        )
+        new_hash = self._required_sha256_or_failure(
+            response_data.get("combo_version_hash"),
+            FlowOutcome.FAIL_CONTRACT,
+            "next factor combo response has no valid hash",
+            response_data,
+        )
+        if source_hash == new_hash:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version reuses the source content hash",
+                {"api": dict(response_data), "source_version": dict(source_version_row)},
+            )
+
+        for field_name in ("combo_id", "combo_family_key", "pool_id"):
+            if field_name not in source_version_row:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"next factor combo source version is missing {field_name}",
+                    source_version_row,
+                )
+            if not self._same_identity_scalar(
+                field_name,
+                response_data.get(field_name),
+                source_version_row.get(field_name),
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"next factor combo {field_name} differs from source version",
+                    {
+                        "api": dict(response_data),
+                        "source_version": dict(source_version_row),
+                        "field": field_name,
+                    },
+                )
+
+        source_status = str(source_version_row.get("status", "")).strip().lower()
+        if source_status != "rejected":
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo source version must be rejected before a next version is created",
+                source_version_row,
+            )
+        if "initial_form_id" in source_version_row and "initial_form_id" in version_row:
+            if not self._same_identity_scalar(
+                "initial_form_id",
+                source_version_row.get("initial_form_id"),
+                version_row.get("initial_form_id"),
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "next factor combo version does not belong to the source form lineage",
+                    {"source_version": dict(source_version_row), "version": dict(version_row)},
+                )
+
+        required_feedback_fields = (
+            "id",
+            "form_id",
+            "feedback_round",
+            "status",
+            "source_factor_combo_version_id",
+            "experiment_info_id",
+            "next_factor_combo_version_id",
+            "next_pipeline_run_id",
+            "next_experiment_info_id",
+        )
+        missing_feedback_fields = [field for field in required_feedback_fields if field not in feedback_row]
+        if missing_feedback_fields:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback row is missing fields required for next-version reconciliation",
+                {"missing_fields": missing_feedback_fields, "feedback": dict(feedback_row)},
+            )
+
+        expected_feedback_id = self._required_response_int(
+            response_data,
+            "feedback_id",
+            "next factor combo version",
+        )
+        actual_feedback_id = self._required_persisted_int(
+            feedback_row,
+            ("id",),
+            "next factor combo feedback",
+        )
+        if expected_feedback_id != actual_feedback_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo response feedback_id does not match the feedback row",
+                {"api": dict(response_data), "feedback": dict(feedback_row)},
+            )
+        if not self._same_identity_scalar(
+            "factor_combo_version_id",
+            feedback_row.get("source_factor_combo_version_id"),
+            source_version_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback source_factor_combo_version_id does not point to the rejected source version",
+                {"feedback": dict(feedback_row), "source_version": dict(source_version_row)},
+            )
+        if not self._same_identity_scalar(
+            "factor_combo_experiment_info_id",
+            feedback_row.get("experiment_info_id"),
+            source_version_row.get("experiment_id"),
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback experiment_info_id does not point to the source version experiment",
+                {"feedback": dict(feedback_row), "source_version": dict(source_version_row)},
+            )
+        response_form_id = self._required_response_int(response_data, "form_id", "next factor combo version")
+        if not self._same_identity_scalar("form_id", feedback_row.get("form_id"), response_form_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback form_id does not match the next-version response form",
+                {"api": dict(response_data), "feedback": dict(feedback_row)},
+            )
+        if not self._same_identity_scalar(
+            "factor_combo_version_id",
+            feedback_row.get("next_factor_combo_version_id"),
+            version_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback next_factor_combo_version_id does not point to the created version",
+                {"feedback": dict(feedback_row), "version_id": version_id},
+            )
+        response_run_id = self._required_response_string(
+            response_data,
+            "pipeline_run_id",
+            "next factor combo version",
+        )
+        persisted_next_run_id = feedback_row.get("next_pipeline_run_id")
+        if not isinstance(persisted_next_run_id, str) or not persisted_next_run_id.strip():
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback next_pipeline_run_id is missing",
+                dict(feedback_row),
+            )
+        if persisted_next_run_id.strip() != response_run_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback next_pipeline_run_id does not match the next-version response",
+                {"api": dict(response_data), "feedback": dict(feedback_row)},
+            )
+        if feedback_row.get("next_experiment_info_id") is not None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback next_experiment_info_id must remain NULL until the next experiment is written",
+                dict(feedback_row),
+            )
+        if "factor_combo_id" not in form_row or not self._same_identity_scalar(
+            "factor_combo_version_id",
+            form_row.get("factor_combo_id"),
+            version_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "form factor_combo_id does not point to the next version",
+                {"api": dict(response_data), "form": dict(form_row)},
+            )
+
+    def validate_experiment_persistence(
+        self,
+        response_data: Mapping[str, Any],
+        request_payload: Mapping[str, Any],
+        experiment_row: Mapping[str, Any],
+        form_row: Mapping[str, Any],
+        version_row: Mapping[str, Any],
+        *,
+        expected_experiment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """深度核对实验响应、请求字段和实验/表单/版本数据库记录。
+
+        参数 ``response_data`` 是实验写入响应 data，``request_payload`` 是完整实验请求，``experiment_row`` 是
+        ``factor_combo_experiment_info`` 完整记录，``form_row`` 和 ``version_row`` 是其两个关联实体，
+        ``expected_experiment_id`` 是请求路径中的外部实验 ID。返回比较诊断；所有请求到普通列、JSON 列和 Artifact
+        列的映射都会被核对，实验、版本和表单三方指针缺失或部分写入会抛出契约异常。SHA256 只按内容值对账，不作为
+        唯一性条件。
+        """
+
+        self._require_response_fields(response_data, _EXPERIMENT_RESULT_REQUIRED_FIELDS, "factor combo experiment")
+        response_experiment_id = self._required_response_string(
+            response_data,
+            "experiment_id",
+            "factor combo experiment",
+        )
+        if expected_experiment_id is not None and response_experiment_id != str(expected_experiment_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response experiment_id does not match the request path",
+                {"expected_experiment_id": expected_experiment_id, "api": dict(response_data)},
+            )
+        response_version_id = self._required_response_int(
+            response_data,
+            "factor_combo_version_id",
+            "factor combo experiment",
+        )
+        response_combo_id = self._required_response_int(response_data, "combo_id", "factor combo experiment")
+        response_form_id = self._required_response_int(response_data, "form_id", "factor combo experiment")
+        response_valid = self._required_response_bool(
+            response_data,
+            "experiment_valid",
+            "factor combo experiment",
+        )
+        response_fields = self._compare_explicit_fields(
+            response_data,
+            experiment_row,
+            {
+                "experiment_info_id": "id",
+                "experiment_id": "experiment_id",
+                "form_id": "form_id",
+            },
+            "factor combo experiment response/database",
+            required_fields=("experiment_info_id", "experiment_id", "form_id"),
+            reject_unmapped_api_fields=True,
+            allowed_unmapped_api_fields=(
+                "factor_combo_version_id",
+                "combo_id",
+                "form_status",
+                "combo_status",
+                "idempotent_replay",
+            ),
+        )
+        database_version_id = self._required_persisted_int(
+            experiment_row,
+            ("combo_id",),
+            "factor combo experiment database version pointer",
+        )
+        persisted_version_id = self._required_persisted_int(
+            version_row,
+            ("id",),
+            "factor combo version primary key",
+        )
+        if database_version_id != persisted_version_id or database_version_id != response_version_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment version pointer differs from API response",
+                {
+                    "api": dict(response_data),
+                    "experiment": dict(experiment_row),
+                    "version": dict(version_row),
+                },
+            )
+        version_business_id = self._required_persisted_int(
+            version_row,
+            ("combo_id",),
+            "factor combo version business id",
+        )
+        if response_combo_id != version_business_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment business combo_id differs from version database record",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        form_fields = self._compare_explicit_fields(
+            response_data,
+            form_row,
+            {"form_id": "id", "form_status": "status"},
+            "factor combo experiment/form pointer",
+            required_fields=("form_id", "form_status"),
+        )
+        if self._required_response_string(response_data, "form_status", "factor combo experiment") != "completed":
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response form_status must be completed",
+                dict(response_data),
+            )
+        version_fields = self._compare_explicit_fields(
+            {"factor_combo_version_id": response_version_id, "combo_id": response_combo_id},
+            version_row,
+            {"factor_combo_version_id": "id", "combo_id": "combo_id"},
+            "factor combo experiment/version pointer",
+            required_fields=("factor_combo_version_id", "combo_id"),
+        )
+        experiment_info_id = self._required_response_int(
+            response_data,
+            "experiment_info_id",
+            "factor combo experiment",
+        )
+        if "form_id" not in experiment_row or not self._same_identity_scalar(
+            "form_id", experiment_row.get("form_id"), response_form_id
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment form_id does not match the response form",
+                {"api": dict(response_data), "experiment": dict(experiment_row)},
+            )
+        if not self._same_identity_scalar("id", version_row.get("experiment_id"), experiment_info_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo version experiment_id does not point to the persisted experiment",
+                {"api": dict(response_data), "version": dict(version_row), "experiment": dict(experiment_row)},
+            )
+        if not self._same_identity_scalar(
+            "factor_combo_experiment_info_id",
+            form_row.get("factor_combo_experiment_info_id"),
+            experiment_info_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form experiment pointer does not match the persisted experiment",
+                {"api": dict(response_data), "form": dict(form_row), "experiment": dict(experiment_row)},
+            )
+        if not self._same_identity_scalar("factor_combo_version_id", form_row.get("factor_combo_id"), persisted_version_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo form version pointer does not match the persisted version",
+                {"api": dict(response_data), "form": dict(form_row), "version": dict(version_row)},
+            )
+        if not self._same_identity_scalar(
+            "pipeline_run_id",
+            experiment_row.get("pipeline_run_id"),
+            form_row.get("pipeline_run_id"),
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment pipeline_run_id does not match the form run",
+                {"api": dict(response_data), "experiment": dict(experiment_row), "form": dict(form_row)},
+            )
+        if "valid" not in experiment_row:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment database row is missing valid",
+                {"api": dict(response_data), "experiment": dict(experiment_row)},
+            )
+        if not self._same_persisted_value(response_valid, experiment_row.get("valid"), field_name="valid"):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response experiment_valid differs from database valid",
+                {"api": dict(response_data), "experiment": dict(experiment_row)},
+            )
+        request_valid = request_payload.get("valid")
+        if type(request_valid) is not bool:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment request valid must be a JSON boolean",
+                dict(request_payload),
+            )
+        if request_valid is not response_valid:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment response experiment_valid differs from request valid",
+                {"api": dict(response_data), "request": dict(request_payload)},
+            )
+        failure_reason = request_payload.get("failure_reason")
+        if request_valid is False and (not isinstance(failure_reason, str) or not failure_reason.strip()):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "invalid factor combo experiment must include a non-empty failure_reason",
+                dict(request_payload),
+            )
+        if request_valid is True and failure_reason not in (None, ""):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "valid factor combo experiment must not include failure_reason",
+                dict(request_payload),
+            )
+        response_combo_status = self._required_response_string(response_data, "combo_status", "factor combo experiment")
+        if not self._same_scalar(response_combo_status, version_row.get("status")):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment combo_status differs from the version status",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        request_fields = self._compare_experiment_request_to_database(request_payload, experiment_row)
+        return {
+            "response_fields": tuple(response_fields),
+            "form_fields": tuple(form_fields),
+            "version_fields": tuple(version_fields),
+            "request_fields": tuple(request_fields),
+        }
+
+    def validate_feedback_persistence(
+        self,
+        response_data: Mapping[str, Any],
+        request_payload: Mapping[str, Any],
+        feedback_row: Mapping[str, Any],
+        form_row: Mapping[str, Any],
+        experiment_row: Mapping[str, Any],
+        version_row: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """深度核对反馈响应、反馈请求及反馈后状态指针。
+
+        参数 ``response_data`` 是反馈接口 data，``request_payload`` 是原始反馈请求，``feedback_row`` 是反馈历史记录，
+        ``form_row``、``experiment_row`` 和 ``version_row`` 是反馈后关联实体。返回比较诊断；反馈正文、reply、实验失效、
+        版本拒绝、表单清空和反馈指针任一不一致时抛出契约异常。
+        """
+
+        self._require_response_fields(response_data, _FEEDBACK_RESULT_REQUIRED_FIELDS, "factor combo feedback")
+        response_fields = self._compare_explicit_fields(
+            response_data,
+            feedback_row,
+            {
+                "feedback_id": "id",
+                "feedback_round": "feedback_round",
+                "feedback_status": "status",
+                "reply": "reply",
+                "form_id": "form_id",
+                "factor_combo_experiment_info_id": "experiment_info_id",
+                "rejected_factor_combo_version_id": ("source_factor_combo_version_id", "factor_combo_version_id"),
+            },
+            "factor combo feedback response/database",
+            required_fields=(
+                "feedback_id",
+                "feedback_round",
+                "feedback_status",
+                "reply",
+                "form_id",
+                "factor_combo_experiment_info_id",
+                "rejected_factor_combo_version_id",
+            ),
+            reject_unmapped_api_fields=True,
+            allowed_unmapped_api_fields=(
+                "feedback_recorded",
+                "idempotent_replay",
+                "experiment_valid",
+                "session_id",
+                "pipeline_run_id",
+                "feedback",
+                "failure_reason",
+                "source_factor_combo_version_id",
+                "next_factor_combo_version_id",
+                "next_pipeline_run_id",
+                "next_experiment_info_id",
+            ),
+        )
+        request_fields = self._compare_explicit_fields(
+            request_payload,
+            feedback_row,
+            {
+                "session_id": "session_id",
+                "form_id": "form_id",
+                "pipeline_run_id": "pipeline_run_id",
+                "reply": "reply",
+                "feedback": "feedback",
+            },
+            "factor combo feedback request/database",
+            required_fields=("session_id", "form_id", "pipeline_run_id", "reply", "feedback"),
+        )
+        response_optional_fields = {
+            field_name: response_data[field_name]
+            for field_name in (
+                "session_id",
+                "pipeline_run_id",
+                "feedback",
+                "failure_reason",
+                "source_factor_combo_version_id",
+                "next_factor_combo_version_id",
+                "next_pipeline_run_id",
+                "next_experiment_info_id",
+            )
+            if field_name in response_data
+        }
+        response_optional_map: dict[str, str | Sequence[str]] = {
+            "session_id": "session_id",
+            "pipeline_run_id": "pipeline_run_id",
+            "feedback": "feedback",
+            "failure_reason": "failure_reason",
+            "source_factor_combo_version_id": "source_factor_combo_version_id",
+            "next_factor_combo_version_id": "next_factor_combo_version_id",
+            "next_pipeline_run_id": "next_pipeline_run_id",
+            "next_experiment_info_id": "next_experiment_info_id",
+        }
+        response_optional_fields_result = self._compare_explicit_fields(
+            response_optional_fields,
+            feedback_row,
+            response_optional_map,
+            "factor combo feedback response/extended pointers",
+        )
+        form_fields = self._compare_explicit_fields(
+            response_data,
+            form_row,
+            {"form_id": "id", "form_status": "status"},
+            "factor combo feedback/form pointer",
+            required_fields=("form_id", "form_status"),
+        )
+        experiment_fields = self._compare_explicit_fields(
+            {"factor_combo_experiment_info_id": response_data["factor_combo_experiment_info_id"]},
+            experiment_row,
+            {"factor_combo_experiment_info_id": "id"},
+            "factor combo feedback/experiment pointer",
+            required_fields=("factor_combo_experiment_info_id",),
+        )
+        experiment_valid = self._required_response_bool(response_data, "experiment_valid", "factor combo feedback")
+        if experiment_valid is not False:
+            raise FactorComboFlowError(FlowOutcome.FAIL_CONTRACT, "feedback must invalidate the experiment", response_data)
+        invalid_fields = self._compare_explicit_fields(
+            {"valid": False},
+            experiment_row,
+            {"valid": "valid"},
+            "factor combo feedback/experiment invalidation",
+            required_fields=("valid",),
+        )
+        version_fields = self._compare_explicit_fields(
+            {"status": "rejected"},
+            version_row,
+            {"status": "status"},
+            "factor combo feedback/rejected version",
+            required_fields=("status",),
+        )
+        version_id = self._required_persisted_int(
+            version_row,
+            ("id",),
+            "factor combo feedback source version",
+        )
+        rejected_version_id = self._required_response_int(
+            response_data,
+            "rejected_factor_combo_version_id",
+            "factor combo feedback",
+        )
+        if rejected_version_id != version_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback rejected_factor_combo_version_id does not match the source version",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        source_experiment_id = self._required_persisted_int(
+            version_row,
+            ("experiment_id",),
+            "factor combo feedback source experiment pointer",
+        )
+        if not self._same_identity_scalar(
+            "factor_combo_experiment_info_id",
+            feedback_row.get("experiment_info_id"),
+            source_experiment_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback row experiment_info_id does not point to the source version experiment",
+                {"feedback": dict(feedback_row), "version": dict(version_row)},
+            )
+        if not self._same_identity_scalar(
+            "form_id",
+            feedback_row.get("form_id"),
+            form_row.get("id"),
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback row form_id does not match the persisted form",
+                {"feedback": dict(feedback_row), "form": dict(form_row)},
+            )
+        required_next_pointer_fields = (
+            "next_factor_combo_version_id",
+            "next_pipeline_run_id",
+            "next_experiment_info_id",
+        )
+        missing_next_pointer_fields = [field for field in required_next_pointer_fields if field not in feedback_row]
+        if missing_next_pointer_fields:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback row is missing next-round pointer fields",
+                {"missing_fields": missing_next_pointer_fields, "feedback": dict(feedback_row)},
+            )
+        for field_name in required_next_pointer_fields:
+            if feedback_row.get(field_name) is not None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"feedback {field_name} must be NULL before the next version is created",
+                    {"feedback": dict(feedback_row), "api": dict(response_data)},
+                )
+        if "source_factor_combo_version_id" in feedback_row and not self._same_identity_scalar(
+            "factor_combo_version_id", feedback_row.get("source_factor_combo_version_id"), version_id
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback source version pointer does not match the rejected version",
+                {"feedback": dict(feedback_row), "version": dict(version_row)},
+            )
+        request_feedback = request_payload.get("feedback")
+        if not isinstance(request_feedback, str) or not request_feedback.strip():
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback request text must be a non-empty string",
+                dict(request_payload),
+            )
+        if not self._same_persisted_value(
+            request_feedback,
+            experiment_row.get("failure_reason"),
+            field_name="failure_reason",
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback text was not persisted as experiment failure_reason",
+                {
+                    "request_feedback": request_feedback,
+                    "experiment_failure_reason": experiment_row.get("failure_reason"),
+                },
+            )
+        for pointer_name in ("pipeline_run_id", "factor_combo_id", "factor_combo_experiment_info_id"):
+            if pointer_name not in form_row or form_row.get(pointer_name) is not None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo feedback must clear form.{pointer_name}",
+                    {"form": dict(form_row), "api": dict(response_data)},
+                )
+        if "session_id" not in form_row or not self._same_identity_scalar(
+            "session_id",
+            feedback_row.get("session_id"),
+            form_row.get("session_id"),
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "feedback row session_id does not match the form session",
+                {"feedback": dict(feedback_row), "form": dict(form_row)},
+            )
+        return {
+            "response_fields": tuple(response_fields),
+            "request_fields": tuple(request_fields),
+            "response_optional_fields": tuple(response_optional_fields_result),
+            "form_fields": tuple(form_fields),
+            "experiment_fields": tuple(experiment_fields),
+            "invalid_fields": tuple(invalid_fields),
+            "version_fields": tuple(version_fields),
+        }
+
+    def validate_registration_persistence(
+        self,
+        response_data: Mapping[str, Any],
+        request_payload: Mapping[str, Any],
+        version_row: Mapping[str, Any],
+        sub_factor_row: Mapping[str, Any],
+        factor_detail_row: Mapping[str, Any],
+        validity_row: Mapping[str, Any],
+        registration_row: Mapping[str, Any],
+        *,
+        form_row: Mapping[str, Any] | None = None,
+        experiment_row: Mapping[str, Any] | None = None,
+        parent_relation_count: int | None = None,
+    ) -> dict[str, Any]:
+        """深度核对登记响应、请求内容和四个完整落库实体。
+
+        参数 ``response_data`` 是登记接口 data，``request_payload`` 是登记请求，``version_row`` 是具体组合版本，后四个
+        参数依次是完整的子因子、因子详情、有效性快照和登记映射记录；``form_row`` 和 ``experiment_row`` 是同一登记
+        链路的表单、实验记录，``parent_relation_count`` 是可选的谱系关系数量快照。返回逐实体比较诊断；响应嵌套对象
+        中的每个明确字段都必须能在对应 DB 记录中找到并保持一致，且必须证明表单、实验、版本、登记四者指向同一具体
+        版本。未提供表单或实验行时无法完成深层对账，直接抛出契约异常，而不是退化成只校验四个登记资源。
+        """
+
+        if form_row is None or experiment_row is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration persistence validation requires form and experiment rows",
+                {
+                    "form_row_provided": form_row is not None,
+                    "experiment_row_provided": experiment_row is not None,
+                    "api": dict(response_data),
+                },
+            )
+        if parent_relation_count is not None:
+            if isinstance(parent_relation_count, bool) or int(parent_relation_count) < 0:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo registration parent relation count must be non-negative",
+                    parent_relation_count,
+                )
+        self._require_response_fields(response_data, _REGISTRATION_RESULT_REQUIRED_FIELDS, "factor combo registration")
+        registered = self._required_response_bool(response_data, "registered", "factor combo registration")
+        if registered is not True:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration response registered must be true",
+                dict(response_data),
+            )
+        self._required_response_bool(response_data, "idempotent_replay", "factor combo registration")
+        sub_factor_type = self._required_response_int(response_data, "sub_factor_type", "factor combo registration")
+        if sub_factor_type != 1:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration sub_factor_type must be 1",
+                dict(response_data),
+            )
+        refresh_status = self._required_response_string(response_data, "refresh_status", "factor combo registration")
+        normalized_refresh_status = refresh_status.casefold()
+        allowed_refresh_statuses = _REFRESH_RESPONSE_STATUSES | {"not_configured", "submit_failed"}
+        if normalized_refresh_status not in allowed_refresh_statuses:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration refresh_status is outside the documented enum",
+                dict(response_data),
+            )
+        if response_data.get("refresh_submit_error") is not None and not isinstance(
+            response_data.get("refresh_submit_error"), str
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration refresh_submit_error must be a string or null",
+                dict(response_data),
+            )
+        refresh_task_id = response_data.get("refresh_task_id")
+        if normalized_refresh_status not in {"not_configured", "submit_failed"} and refresh_task_id is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration is missing refresh_task_id for a configured refresh",
+                dict(response_data),
+            )
+        if refresh_task_id is not None:
+            self._required_identifier_string_or_failure(
+                refresh_task_id,
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration refresh_task_id is invalid",
+                response_data,
+            )
+        top_fields = self._compare_explicit_fields(
+            response_data,
+            version_row,
+            {
+                "factor_combo_version_id": "id",
+                "combo_id": "combo_id",
+                "combo_version_hash": "combo_version_hash",
+            },
+            "factor combo registration/version identity",
+            required_fields=("factor_combo_version_id", "combo_id", "combo_version_hash"),
+            reject_unmapped_api_fields=True,
+            allowed_unmapped_api_fields=(
+                "registered",
+                "idempotent_replay",
+                "sub_factor_id",
+                "factor_detail_id",
+                "registration_id",
+                "factor_validity_status_id",
+                "sub_factor_type",
+                "refresh_task_id",
+                "refresh_status",
+                "refresh_submit_error",
+                "sub_factor",
+                "factor_detail",
+                "factor_validity_status",
+                "registration",
+            ),
+        )
+        registration_identity_fields = self._compare_explicit_fields(
+            response_data,
+            registration_row,
+            {
+                "registration_id": "id",
+                "combo_version_hash": "combo_version_hash",
+                "sub_factor_id": "sub_factor_id",
+            },
+            "factor combo registration/database",
+            required_fields=("registration_id", "combo_version_hash", "sub_factor_id"),
+        )
+        factor_detail_id = self._required_response_int(
+            response_data,
+            "factor_detail_id",
+            "factor combo registration",
+        )
+        validity_status_id = self._required_response_int(
+            response_data,
+            "factor_validity_status_id",
+            "factor combo registration",
+        )
+        sub_factor_id = self._required_response_int(
+            response_data,
+            "sub_factor_id",
+            "factor combo registration",
+        )
+        registration_id = self._required_response_int(
+            response_data,
+            "registration_id",
+            "factor combo registration",
+        )
+        response_combo_id = self._required_response_int(
+            response_data,
+            "combo_id",
+            "factor combo registration",
+        )
+        response_version_id = self._required_response_int(
+            response_data,
+            "factor_combo_version_id",
+            "factor combo registration",
+        )
+        if not self._same_identity_scalar("id", factor_detail_row.get("id"), factor_detail_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration factor_detail_id does not match the factor detail row",
+                {"api": dict(response_data), "factor_detail": dict(factor_detail_row)},
+            )
+        if not self._same_identity_scalar("id", validity_row.get("id"), validity_status_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration factor_validity_status_id does not match the validity row",
+                {"api": dict(response_data), "validity": dict(validity_row)},
+            )
+        if not self._same_identity_scalar("id", sub_factor_row.get("id"), sub_factor_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration sub_factor_id does not match the sub-factor row",
+                {"api": dict(response_data), "sub_factor": dict(sub_factor_row)},
+            )
+        if "type" not in sub_factor_row or not self._same_identity_scalar("type", sub_factor_row.get("type"), 1):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered composite sub-factor database type must be 1",
+                {"api": dict(response_data), "sub_factor": dict(sub_factor_row)},
+            )
+        if "is_sub_factor_id" not in factor_detail_row or not self._same_scalar(
+            factor_detail_row.get("is_sub_factor_id"), True
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered factor detail must be marked as a sub-factor",
+                {"api": dict(response_data), "factor_detail": dict(factor_detail_row)},
+            )
+        if "status" not in factor_detail_row or not self._same_identity_scalar(
+            "status", factor_detail_row.get("status"), 1
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered factor detail must have status=1",
+                {"api": dict(response_data), "factor_detail": dict(factor_detail_row)},
+            )
+        if "is_sub_factor_id" not in validity_row or not self._same_scalar(
+            validity_row.get("is_sub_factor_id"), True
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered validity status must be marked as a sub-factor",
+                {"api": dict(response_data), "validity": dict(validity_row)},
+            )
+        if not self._same_identity_scalar("combo_id", registration_row.get("combo_id"), response_version_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration mapping combo_id must point to the concrete factor_combo version ID",
+                {"api": dict(response_data), "registration": dict(registration_row), "version": dict(version_row)},
+            )
+        if parent_relation_count is not None and int(parent_relation_count) != 0:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered composite sub-factor unexpectedly has parent relations",
+                {"api": dict(response_data), "parent_relation_count": parent_relation_count},
+            )
+        if "status" in version_row and str(version_row.get("status", "")).strip().lower() != "active":
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered factor combo version must be active",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        self._validate_registration_cross_entity_pointers(
+            response_data,
+            request_payload,
+            version_row,
+            form_row,
+            experiment_row,
+            sub_factor_id=sub_factor_id,
+            registration_id=registration_id,
+            response_combo_id=response_combo_id,
+        )
+        for summary_field in ("time_series_summary_id", "cross_sectional_summary_id"):
+            if summary_field in validity_row and validity_row.get(summary_field) is not None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"initial registration validity snapshot {summary_field} must be NULL before refresh",
+                    {"api": dict(response_data), "validity": dict(validity_row)},
+                )
+        version_fields = self._compare_explicit_fields(
+            {
+                "factor_combo_version_id": response_data["factor_combo_version_id"],
+                "combo_id": response_data["combo_id"],
+                "combo_version_hash": response_data["combo_version_hash"],
+            },
+            version_row,
+            {
+                "factor_combo_version_id": "id",
+                "combo_id": "combo_id",
+                "combo_version_hash": "combo_version_hash",
+            },
+            "factor combo registration/version",
+            required_fields=("factor_combo_version_id", "combo_id", "combo_version_hash"),
+        )
+        nested_fields: dict[str, tuple[Mapping[str, Any], Mapping[str, Any]]] = {
+            "sub_factor": (response_data["sub_factor"], sub_factor_row),
+            "factor_detail": (response_data["factor_detail"], factor_detail_row),
+            "factor_validity_status": (response_data["factor_validity_status"], validity_row),
+            "registration": (response_data["registration"], registration_row),
+        }
+        nested_results: dict[str, tuple[str, ...]] = {}
+        for entity_name, (api_entity, db_entity) in nested_fields.items():
+            if not isinstance(api_entity, Mapping) or not api_entity:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"registration response {entity_name} must be a non-empty object",
+                    response_data,
+                )
+            if not isinstance(db_entity, Mapping) or not db_entity:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"registration database {entity_name} must be a non-empty object",
+                    db_entity,
+                )
+            aliases_by_entity: dict[str, Mapping[str, str | Sequence[str]]] = {
+                "sub_factor": _REGISTRATION_SUB_FACTOR_FIELD_MAP,
+                "factor_detail": _REGISTRATION_FACTOR_DETAIL_FIELD_MAP,
+                "factor_validity_status": _REGISTRATION_VALIDITY_FIELD_MAP,
+                "registration": _REGISTRATION_MAPPING_FIELD_MAP,
+            }
+            aliases = aliases_by_entity[entity_name]
+            nested_results[entity_name] = tuple(
+                self._compare_explicit_fields(
+                    api_entity,
+                    db_entity,
+                    aliases,
+                    f"factor combo registration/{entity_name}",
+                    allow_database_json_extra=entity_name in {"sub_factor", "factor_detail", "factor_validity_status"},
+                    reject_unmapped_api_fields=True,
+                )
+            )
+        request_results = self._compare_registration_request_to_database(
+            request_payload,
+            sub_factor_row,
+            factor_detail_row,
+            validity_row,
+            registration_row,
+        )
+        # factor_id 是无父级复合子因子的可选空值；如果 DB 明确返回非空，则必须和 API/业务允许值一致，不能强制
+        # 要求存在 factor_sub_factor_relations。
+        return {
+            "top_fields": tuple(top_fields),
+            "registration_identity_fields": tuple(registration_identity_fields),
+            "version_fields": tuple(version_fields),
+            "nested_fields": nested_results,
+            "request_fields": tuple(request_results),
+        }
+
+    def _validate_registration_cross_entity_pointers(
+        self,
+        response_data: Mapping[str, Any],
+        request_payload: Mapping[str, Any],
+        version_row: Mapping[str, Any],
+        form_row: Mapping[str, Any],
+        experiment_row: Mapping[str, Any],
+        *,
+        sub_factor_id: int,
+        registration_id: int,
+        response_combo_id: int,
+    ) -> None:
+        """核对登记生成资源与表单、实验和具体版本的跨表关系。
+
+        参数 ``response_data`` 和 ``request_payload`` 是登记接口响应及请求，``version_row``、``form_row``、
+        ``experiment_row`` 是同一链路的组合版本、表单和实验记录，后三个关键字参数是登记响应中的规范化身份。
+        不返回值；会话、表单、Pipeline Run、版本、实验和登记映射任一指针缺失或不一致时抛出 ``FAIL_CONTRACT``。
+        此方法只比较明确持久化关系，不根据时间或其他记录猜测来源。
+        """
+
+        form_id = self._required_response_int(response_data, "form_id", "factor combo registration")
+        pipeline_run_id = self._required_response_string(
+            request_payload,
+            "pipeline_run_id",
+            "factor combo registration request",
+        )
+        session_id = self._required_response_int(
+            request_payload,
+            "session_id",
+            "factor combo registration request",
+        )
+        if not self._same_identity_scalar("id", form_row.get("id"), form_id):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration response form_id does not match the database form",
+                {"api": dict(response_data), "form": dict(form_row)},
+            )
+        for field_name, expected in (
+            ("session_id", session_id),
+            ("pipeline_run_id", pipeline_run_id),
+        ):
+            if field_name not in form_row or not self._same_identity_scalar(field_name, form_row.get(field_name), expected):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"registration form {field_name} does not match the request",
+                    {"api": dict(response_data), "request": dict(request_payload), "form": dict(form_row)},
+                )
+        if "factor_combo_id" not in form_row or not self._same_identity_scalar(
+            "factor_combo_version_id",
+            form_row.get("factor_combo_id"),
+            version_row.get("id"),
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration form factor_combo_id does not point to the registered version",
+                {"api": dict(response_data), "form": dict(form_row), "version": dict(version_row)},
+            )
+
+        version_id = self._required_persisted_int(version_row, ("id",), "registered factor combo version")
+        version_combo_id = self._required_persisted_int(
+            version_row,
+            ("combo_id",),
+            "registered factor combo business id",
+        )
+        if response_combo_id != version_combo_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration response combo_id does not match the version business ID",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        if not self._same_identity_scalar(
+            "factor_combo_version_id",
+            response_data.get("factor_combo_version_id"),
+            version_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration response version ID does not match the version row",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+        version_hash = self._required_sha256_or_failure(
+            version_row.get("combo_version_hash"),
+            FlowOutcome.FAIL_CONTRACT,
+            "registered factor combo version has no valid hash",
+            version_row,
+        )
+        response_hash = self._required_sha256_or_failure(
+            response_data.get("combo_version_hash"),
+            FlowOutcome.FAIL_CONTRACT,
+            "registration response has no valid hash",
+            response_data,
+        )
+        if version_hash != response_hash:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration response hash does not match the version row",
+                {"api": dict(response_data), "version": dict(version_row)},
+            )
+
+        experiment_id = self._required_persisted_int(
+            experiment_row,
+            ("id",),
+            "registered factor combo experiment",
+        )
+        experiment_version_id = self._required_persisted_int(
+            experiment_row,
+            ("combo_id",),
+            "registered factor combo experiment version pointer",
+        )
+        if experiment_version_id != version_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered experiment combo_id does not point to the registered version",
+                {"experiment": dict(experiment_row), "version": dict(version_row)},
+            )
+        for field_name, expected in (("form_id", form_id), ("pipeline_run_id", pipeline_run_id)):
+            if field_name not in experiment_row or not self._same_identity_scalar(
+                field_name,
+                experiment_row.get(field_name),
+                expected,
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"registered experiment {field_name} does not match the registration form",
+                    {"experiment": dict(experiment_row), "form": dict(form_row)},
+                )
+        if "experiment_id" in version_row and not self._same_identity_scalar(
+            "factor_combo_experiment_info_id",
+            version_row.get("experiment_id"),
+            experiment_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered version experiment_id does not point to the experiment row",
+                {"experiment": dict(experiment_row), "version": dict(version_row)},
+            )
+        if "factor_combo_experiment_info_id" not in form_row or not self._same_identity_scalar(
+            "factor_combo_experiment_info_id",
+            form_row.get("factor_combo_experiment_info_id"),
+            experiment_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration form experiment pointer does not point to the experiment row",
+                {"experiment": dict(experiment_row), "form": dict(form_row)},
+            )
+        if "valid" not in experiment_row or not self._same_scalar(experiment_row.get("valid"), True):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered experiment must be valid",
+                {"experiment": dict(experiment_row), "api": dict(response_data)},
+            )
+        if "sub_factor_id" in response_data and not self._same_identity_scalar(
+            "sub_factor_id",
+            response_data.get("sub_factor_id"),
+            sub_factor_id,
+        ):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registration sub_factor_id is inconsistent with the persisted identity",
+                {"api": dict(response_data), "sub_factor_id": sub_factor_id},
+            )
+        nested_registration = response_data.get("registration")
+        if isinstance(nested_registration, Mapping) and "id" in nested_registration:
+            if not self._same_identity_scalar("registration_id", nested_registration.get("id"), registration_id):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "registration nested ID does not match registration_id",
+                    dict(response_data),
+                )
+
+    @classmethod
+    def _required_persisted_int(
+        cls,
+        database_row: Mapping[str, Any],
+        candidate_fields: Sequence[str],
+        resource_name: str,
+    ) -> int:
+        """从数据库记录中读取必须存在且唯一的正整数身份字段。
+
+        参数 ``database_row`` 是 Repository 返回的一行实体数据，``candidate_fields`` 是同一业务字段在不同
+        数据库版本中的候选列名，``resource_name`` 用于错误定位。返回正整数；候选列缺失、值非法或多个非空
+        候选值不一致时抛出 ``FactorComboFlowError(FAIL_CONTRACT)``，不会静默选择一个可能错误的 ID。
+        """
+
+        if not isinstance(database_row, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} database row must be an object",
+                database_row,
+            )
+        values: list[tuple[str, int]] = []
+        for field_name in candidate_fields:
+            if field_name not in database_row or database_row[field_name] is None:
+                continue
+            raw_value = database_row[field_name]
+            if isinstance(raw_value, bool):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} field {field_name} must be a positive integer",
+                    database_row,
+                )
+            if isinstance(raw_value, Decimal) and raw_value != raw_value.to_integral_value():
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} field {field_name} must be an integer",
+                    database_row,
+                )
+            if isinstance(raw_value, float) and not raw_value.is_integer():
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} field {field_name} must be an integer",
+                    database_row,
+                )
+            if isinstance(raw_value, str) and not re.fullmatch(r"[+]?[0-9]+", raw_value.strip()):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} field {field_name} must be an integer",
+                    database_row,
+                )
+            try:
+                normalized = int(raw_value)
+            except (TypeError, ValueError, OverflowError) as error:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} field {field_name} must be an integer",
+                    database_row,
+                ) from error
+            if normalized <= 0:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} field {field_name} must be positive",
+                    database_row,
+                )
+            values.append((field_name, normalized))
+        if not values:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} is missing a positive database identity field",
+                {"candidate_fields": tuple(candidate_fields), "database_row": dict(database_row)},
+            )
+        distinct_values = {value for _, value in values}
+        if len(distinct_values) != 1:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} has conflicting database identity fields",
+                {"values": values, "database_row": dict(database_row)},
+            )
+        return values[0][1]
+
+    @classmethod
+    def _compare_explicit_fields(
+        cls,
+        api_data: Mapping[str, Any],
+        database_row: Mapping[str, Any],
+        field_map: Mapping[str, str | Sequence[str]],
+        resource_name: str,
+        *,
+        required_fields: Iterable[str] = (),
+        allow_database_json_extra: bool = False,
+        reject_unmapped_api_fields: bool = False,
+        allowed_unmapped_api_fields: Iterable[str] = (),
+    ) -> list[str]:
+        """逐字段比较接口明确返回值和数据库持久化值。
+
+        参数 ``api_data`` 是接口返回或请求中的对象，``database_row`` 是对应数据库实体，``field_map`` 将 API 字段
+        映射到一个或多个明确的数据库列，``resource_name`` 用于错误定位；``required_fields`` 指定接口侧必须出现
+        的字段，``allow_database_json_extra`` 仅允许数据库 JSON 在接口对象之外追加后端审计字段，
+        ``reject_unmapped_api_fields`` 表示是否拒绝接口返回但没有数据库映射的字段，``allowed_unmapped_api_fields`` 是
+        已由其他专用逻辑核对或明确不落库的字段白名单。返回实际比较的字段名称列表；接口字段缺失、未知字段、数据库
+        列缺失、显式 ``null`` 不一致、JSON 非法或值不一致时抛出 ``FactorComboFlowError(FAIL_CONTRACT)``。
+        """
+
+        if not isinstance(api_data, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} API value must be an object",
+                api_data,
+            )
+        if not isinstance(database_row, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} database value must be an object",
+                database_row,
+            )
+        required = tuple(required_fields)
+        missing_api_fields = [field_name for field_name in required if field_name not in api_data]
+        if missing_api_fields:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} API response is missing required fields",
+                {"missing_fields": missing_api_fields, "api": dict(api_data)},
+            )
+        if reject_unmapped_api_fields:
+            allowed_fields = set(allowed_unmapped_api_fields)
+            unmapped_fields = sorted(set(api_data).difference(field_map).difference(allowed_fields))
+            if unmapped_fields:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} API contains unmapped fields",
+                    {
+                        "unmapped_fields": unmapped_fields,
+                        "mapped_fields": sorted(field_map),
+                        "allowed_unmapped_fields": sorted(allowed_fields),
+                        "api": dict(api_data),
+                    },
+                )
+
+        compared: list[str] = []
+        for api_field, mapped_fields in field_map.items():
+            if api_field not in api_data:
+                continue
+            candidates = (mapped_fields,) if isinstance(mapped_fields, str) else tuple(mapped_fields)
+            if not candidates:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} has no database mapping for {api_field}",
+                    {"api_field": api_field, "api": dict(api_data)},
+                )
+            present_candidates = [field_name for field_name in candidates if field_name in database_row]
+            if not present_candidates:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} database is missing field for API field {api_field}",
+                    {
+                        "api_field": api_field,
+                        "database_candidates": candidates,
+                        "database_row": dict(database_row),
+                    },
+                )
+
+            api_value = api_data[api_field]
+            for database_field in present_candidates:
+                database_value = database_row[database_field]
+                json_field = (
+                    isinstance(api_value, (Mapping, list, tuple))
+                    or isinstance(database_value, (Mapping, list, tuple))
+                    or api_field.endswith("_json")
+                    or database_field.endswith("_json")
+                    or api_field
+                    in {
+                        "form_json",
+                        "transform",
+                        "definition_snapshot",
+                        "metrics_snapshot",
+                        "validity_snapshot",
+                        "params",
+                        "status_reason_json",
+                    }
+                )
+                left_value = cls._parse_json_value(api_value, f"{resource_name}.{api_field}") if json_field else api_value
+                right_value = (
+                    cls._parse_json_value(database_value, f"{resource_name}.{database_field}")
+                    if json_field
+                    else database_value
+                )
+                if not cls._same_persisted_value(
+                    left_value,
+                    right_value,
+                    field_name=api_field,
+                    allow_database_extra=allow_database_json_extra and json_field,
+                ):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{resource_name} differs at {api_field}",
+                        {
+                            "field": api_field,
+                            "database_field": database_field,
+                            "api": api_value,
+                            "database": database_value,
+                        },
+                    )
+            compared.append(api_field)
+        return compared
+
+    @staticmethod
+    def _parse_json_value(value: Any, field_name: str) -> Any:
+        """解析明确属于 JSON 的数据库字段或接口对象。
+
+        参数 ``value`` 是接口或数据库中的 JSON 值，``field_name`` 用于错误定位。返回 Python 字典、列表或标量；
+        已经是结构化对象的值原样返回，字符串和字节串必须是合法 JSON，非法 JSON 抛出
+        ``FactorComboFlowError(FAIL_CONTRACT)``。
+        """
+
+        if isinstance(value, (Mapping, list, tuple)) or value is None:
+            return value
+        if isinstance(value, bytes):
+            try:
+                value = value.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{field_name} database JSON is not UTF-8",
+                    {"field": field_name},
+                ) from error
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError as error:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{field_name} is not valid JSON",
+                    {"field": field_name, "value": value},
+                ) from error
+        return value
+
+    @classmethod
+    def _extract_sub_factor_ids_from_filter(cls, value: Any) -> list[int]:
+        """从因子池持久化过滤器中提取按顺序保存的子因子 ID。
+
+        参数 ``value`` 是数据库中的 ``filter_json`` 已解析对象。返回过滤器明确包含的正整数子因子 ID 列表；只
+        读取名称中明确包含 ``sub_factor_id`` 的键，不根据因子名称或数组位置猜测 ID。遇到非法 ID 时抛出契约异常，
+        这样过滤器损坏不会被成员数量断言掩盖。
+        """
+
+        found: list[int] = []
+
+        def visit(current: Any) -> None:
+            """递归读取过滤器中的显式子因子 ID 字段。"""
+
+            if isinstance(current, Mapping):
+                for key, child in current.items():
+                    normalized_key = str(key).strip().lower()
+                    if "sub_factor_id" in normalized_key:
+                        values = child if isinstance(child, (list, tuple)) else [child]
+                        for item in values:
+                            normalized = cls._required_persisted_int(
+                                {"value": item},
+                                ("value",),
+                                "factor combo pool filter sub_factor_id",
+                            )
+                            found.append(normalized)
+                    elif isinstance(child, (Mapping, list, tuple)):
+                        visit(child)
+            elif isinstance(current, (list, tuple)):
+                for child in current:
+                    visit(child)
+
+        visit(value)
+        if len(found) != len(set(found)):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo pool filter contains duplicate sub_factor_id",
+                value,
+            )
+        return found
+
+    @classmethod
+    def _same_persisted_value(
+        cls,
+        left: Any,
+        right: Any,
+        *,
+        field_name: str = "",
+        allow_database_extra: bool = False,
+    ) -> bool:
+        """按持久化业务语义递归比较两个值。
+
+        参数 ``left`` 和 ``right`` 是接口与数据库的值，``field_name`` 用于选择 ID、哈希、时间、布尔或数值规则，
+        ``allow_database_extra`` 表示右侧 JSON 可以包含后端追加字段。返回值表示两者是否一致；映射键、数组顺序和
+        数组长度默认严格一致，``None`` 只与 ``None`` 相等，数值允许明确的小数容差，交易成本按持久化前五位小数
+        截断规则比较。
+        """
+
+        if left is None or right is None:
+            return left is None and right is None
+        if isinstance(left, Mapping) or isinstance(right, Mapping):
+            if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+                return False
+            if allow_database_extra:
+                if not set(left).issubset(set(right)):
+                    return False
+                keys = left.keys()
+            else:
+                if set(left) != set(right):
+                    return False
+                keys = left.keys()
+            return all(
+                cls._same_persisted_value(
+                    left[key],
+                    right[key],
+                    field_name=f"{field_name}.{key}" if field_name else str(key),
+                    allow_database_extra=allow_database_extra,
+                )
+                for key in keys
+            )
+        if isinstance(left, (list, tuple)) or isinstance(right, (list, tuple)):
+            if not isinstance(left, (list, tuple)) or not isinstance(right, (list, tuple)):
+                return False
+            if len(left) != len(right):
+                return False
+            return all(
+                cls._same_persisted_value(
+                    left[index],
+                    right[index],
+                    field_name=f"{field_name}[{index}]",
+                    allow_database_extra=allow_database_extra,
+                )
+                for index in range(len(left))
+            )
+
+        normalized_field = field_name.rsplit(".", 1)[-1].lower()
+        if isinstance(left, bool) or isinstance(right, bool) or normalized_field in {
+            "valid",
+            "registered",
+            "idempotent_replay",
+            "is_sub_factor_id",
+            "is_sub_factor",
+            "overall_is_valid",
+            "time_series_is_valid",
+            "cross_sectional_is_valid",
+        }:
+            left_boolean = cls._coerce_boolean(left)
+            right_boolean = cls._coerce_boolean(right)
+            if left_boolean is None or right_boolean is None:
+                return False
+            return left_boolean == right_boolean
+
+        if normalized_field in _DATETIME_IDENTITY_FIELDS or normalized_field.endswith("_at"):
+            return cls._same_datetime_identity(left, right)
+
+        if normalized_field == "transaction_cost":
+            left_decimal = cls._coerce_decimal(left)
+            right_decimal = cls._coerce_decimal(right)
+            if left_decimal is None or right_decimal is None:
+                return False
+            quantizer = Decimal("0.00001")
+            return left_decimal.quantize(quantizer, rounding=ROUND_DOWN) == right_decimal.quantize(
+                quantizer,
+                rounding=ROUND_DOWN,
+            )
+
+        if (
+            (normalized_field == "id" or normalized_field.endswith("_id"))
+            and normalized_field not in {"experiment_id", "agent_session_id", *_STRING_RUN_ID_FIELDS}
+            and not normalized_field.endswith("_run_id")
+        ):
+            try:
+                return cls._required_persisted_int(
+                    {"value": left},
+                    ("value",),
+                    f"{field_name or 'identity'} API value",
+                ) == cls._required_persisted_int(
+                    {"value": right},
+                    ("value",),
+                    f"{field_name or 'identity'} database value",
+                )
+            except FactorComboFlowError:
+                return False
+
+        if "hash" in normalized_field or normalized_field in {"sha256", "sha"}:
+            return str(left).strip().casefold() == str(right).strip().casefold()
+
+        numeric_field = (
+            normalized_field in {
+                "weight",
+                "direction",
+                "forward_return_bars",
+                "factor_window_bars",
+                "update_interval",
+                "hit_count",
+                "strategy_status",
+                "type",
+                "level",
+                "max_level",
+                "child_factor_count",
+                "validity_threshold",
+                "composite_factor_score",
+            }
+            or normalized_field.endswith("_score")
+            or normalized_field.endswith("_count")
+            or normalized_field.endswith("_bars")
+            or normalized_field.endswith("_return")
+            or normalized_field.endswith("_rate")
+            or normalized_field.endswith("_ratio")
+            or normalized_field.endswith("_cost")
+        )
+        if numeric_field or not isinstance(left, str) or not isinstance(right, str):
+            left_decimal = cls._coerce_decimal(left)
+            right_decimal = cls._coerce_decimal(right)
+            if left_decimal is not None and right_decimal is not None:
+                return abs(left_decimal - right_decimal) <= Decimal("0.00000001")
+        if isinstance(left, bytes):
+            try:
+                left = left.decode("utf-8")
+            except UnicodeDecodeError:
+                return False
+        if isinstance(right, bytes):
+            try:
+                right = right.decode("utf-8")
+            except UnicodeDecodeError:
+                return False
+        return left == right
+
+    @classmethod
+    def _compare_component_collections(
+        cls,
+        request_components: Any,
+        database_rows: Sequence[Mapping[str, Any]],
+        resource_name: str,
+        *,
+        expected_combo_id: int | None = None,
+    ) -> list[str]:
+        """按子因子身份严格比较版本请求组件和数据库组件集合。
+
+        参数 ``request_components`` 是版本请求中的 ``components`` 数组，``database_rows`` 是同一具体版本的组件记录，
+        ``resource_name`` 用于错误定位，``expected_combo_id`` 是具体 ``factor_combo.id``；返回实际比较的字段清单。
+        两侧数量、子因子唯一性、组件归属、方向、转换和权重任一不一致时抛出 ``FAIL_CONTRACT``，不按列表位置猜测组件。
+        """
+
+        if not isinstance(request_components, Sequence) or isinstance(request_components, (str, bytes)):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} request components must be an array",
+                request_components,
+            )
+        if not isinstance(database_rows, Sequence) or isinstance(database_rows, (str, bytes)):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} database components must be an array",
+                database_rows,
+            )
+        if len(request_components) != len(database_rows):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} component count differs",
+                {"request_count": len(request_components), "database_count": len(database_rows)},
+            )
+
+        request_by_sub_factor: dict[int, Mapping[str, Any]] = {}
+        for component in request_components:
+            if not isinstance(component, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} request component must be an object",
+                    request_components,
+                )
+            sub_factor_id = cls._required_persisted_int(
+                component,
+                ("component_sub_factor_id",),
+                f"{resource_name} request component",
+            )
+            if sub_factor_id in request_by_sub_factor:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} request contains duplicate component_sub_factor_id",
+                    request_components,
+                )
+            request_by_sub_factor[sub_factor_id] = component
+
+        database_by_sub_factor: dict[int, Mapping[str, Any]] = {}
+        for row in database_rows:
+            if not isinstance(row, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} database component must be an object",
+                    database_rows,
+                )
+            sub_factor_id = cls._required_persisted_int(
+                row,
+                ("component_sub_factor_id",),
+                f"{resource_name} database component",
+            )
+            if sub_factor_id in database_by_sub_factor:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{resource_name} database contains duplicate component_sub_factor_id",
+                    database_rows,
+                )
+            if expected_combo_id is not None:
+                stored_combo_id = cls._required_persisted_int(
+                    row,
+                    ("combo_id",),
+                    f"{resource_name} database component combo pointer",
+                )
+                if stored_combo_id != int(expected_combo_id):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{resource_name} database component points to another version",
+                        {"expected_combo_id": expected_combo_id, "row": dict(row)},
+                    )
+            database_by_sub_factor[sub_factor_id] = row
+
+        if set(request_by_sub_factor) != set(database_by_sub_factor):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} request and database component identities differ",
+                {
+                    "request_sub_factor_ids": sorted(request_by_sub_factor),
+                    "database_sub_factor_ids": sorted(database_by_sub_factor),
+                },
+            )
+
+        compared: list[str] = []
+        field_map: dict[str, str | Sequence[str]] = {
+            "component_factor_id": "component_factor_id",
+            "component_sub_factor_id": "component_sub_factor_id",
+            "direction": "direction",
+            "transform": "transform_json",
+            "weight": "weight",
+        }
+        for sub_factor_id, request_component in request_by_sub_factor.items():
+            database_component = database_by_sub_factor[sub_factor_id]
+            normalized_request = dict(request_component)
+            # OpenAPI 将 weight 定义为可选 nullable；后端若未传入必须持久化为 NULL，不能把缺失字段当成无需核对。
+            normalized_request.setdefault("weight", None)
+            compared.extend(
+                f"{sub_factor_id}.{field_name}"
+                for field_name in cls._compare_explicit_fields(
+                    normalized_request,
+                    database_component,
+                    field_map,
+                    f"{resource_name} component {sub_factor_id}",
+                    required_fields=(
+                        "component_factor_id",
+                        "component_sub_factor_id",
+                        "direction",
+                        "transform",
+                        "weight",
+                    ),
+                )
+            )
+        return compared
+
+    @classmethod
+    def _compare_work_order_members(
+        cls,
+        api_members: Sequence[Mapping[str, Any]],
+        database_rows: Sequence[Mapping[str, Any]],
+        *,
+        expected_form_id: int | None = None,
+        expected_pool_id: int | None = None,
+    ) -> list[str]:
+        """按 ``sub_factor_id`` 严格比较 Work Order 成员及数据库快照。
+
+        参数 ``api_members`` 是 Work Order 返回的成员数组，``database_rows`` 是因子池成员查询结果；返回实际比较的
+        成员字段清单。``expected_form_id`` 和 ``expected_pool_id`` 是工作单顶层归属，可选但在真实接口对账时应提供。
+        成员数量、重复 ID、组件 ID、父级集合、母因子/子因子编码、特征列、K 线级别、方向和三个快照字段无法从
+        数据库明确对齐时抛出 ``FAIL_CONTRACT``，不通过成员数量或单个 ID 的弱校验。
+        """
+
+        if len(api_members) != len(database_rows):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo work order member count differs from database",
+                {"api_count": len(api_members), "database_count": len(database_rows)},
+            )
+
+        api_by_sub_factor: dict[int, Mapping[str, Any]] = {}
+        for member in api_members:
+            if not isinstance(member, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order API member must be an object",
+                    api_members,
+                )
+            sub_factor_id = cls._required_persisted_int(
+                member,
+                ("sub_factor_id",),
+                "factor combo work order API member",
+            )
+            if sub_factor_id in api_by_sub_factor:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order API contains duplicate sub_factor_id",
+                    api_members,
+                )
+            api_by_sub_factor[sub_factor_id] = member
+
+        db_by_sub_factor: dict[int, Mapping[str, Any]] = {}
+        for row in database_rows:
+            if not isinstance(row, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order database member must be an object",
+                    database_rows,
+                )
+            sub_factor_id = cls._required_persisted_int(
+                row,
+                ("sub_factor_id",),
+                "factor combo work order database member",
+            )
+            if sub_factor_id in db_by_sub_factor:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order database contains duplicate sub_factor_id",
+                    database_rows,
+                )
+            member_form_id = cls._required_persisted_int(
+                row,
+                ("member_form_id", "factor_combo_form_id"),
+                "factor combo work order database member form pointer",
+            )
+            member_pool_id = cls._required_persisted_int(
+                row,
+                ("member_pool_id", "pool_id"),
+                "factor combo work order database member pool pointer",
+            )
+            if expected_form_id is not None and member_form_id != int(expected_form_id):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order database member belongs to another form",
+                    {"expected_form_id": expected_form_id, "row": dict(row)},
+                )
+            if expected_pool_id is not None and member_pool_id != int(expected_pool_id):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order database member belongs to another pool",
+                    {"expected_pool_id": expected_pool_id, "row": dict(row)},
+                )
+            detail_id = cls._required_persisted_int(
+                row,
+                ("factor_detail_record_id", "factor_detail_id"),
+                "factor combo work order database member detail pointer",
+            )
+            stored_detail_id = cls._required_persisted_int(
+                row,
+                ("factor_detail_id",),
+                "factor combo work order database member factor_detail_id",
+            )
+            if detail_id != stored_detail_id:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order member detail aliases conflict",
+                    {"row": dict(row)},
+                )
+            detail_factor_id = cls._required_persisted_int(
+                row,
+                ("factor_detail_factor_id",),
+                "factor combo work order database detail factor pointer",
+            )
+            if detail_factor_id != sub_factor_id:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order member detail points to another sub-factor",
+                    {"sub_factor_id": sub_factor_id, "row": dict(row)},
+                )
+            if "factor_detail_is_sub_factor_id" in row and not cls._same_scalar(
+                row.get("factor_detail_is_sub_factor_id"), True
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor combo work order member detail is not marked as a sub-factor",
+                    {"sub_factor_id": sub_factor_id, "row": dict(row)},
+                )
+            db_by_sub_factor[sub_factor_id] = row
+        if set(api_by_sub_factor) != set(db_by_sub_factor):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo work order member identities differ from database",
+                {
+                    "api_sub_factor_ids": sorted(api_by_sub_factor),
+                    "database_sub_factor_ids": sorted(db_by_sub_factor),
+                },
+            )
+
+        member_field_map: dict[str, str | Sequence[str]] = {
+            "component_id": ("member_id", "id"),
+            "sub_factor_id": "sub_factor_id",
+            "factor_code": "_api_parent_factor_serial_number",
+            "sub_factor_code": "sub_factor_serial_number",
+            "name": "sub_factor_name",
+            "feature_column": ("feature_column", "feature_column_name"),
+            "factor_bar_interval": "sub_factor_bar_interval",
+            "direction": "direction",
+            "definition_snapshot": ("definition_snapshot", "definition_snapshot_json"),
+            "metrics_snapshot": ("metrics_snapshot", "metrics_snapshot_json"),
+            "validity_snapshot": ("validity_snapshot", "validity_snapshot_json"),
+        }
+        compared: list[str] = []
+        for sub_factor_id, api_member in api_by_sub_factor.items():
+            database_member = dict(db_by_sub_factor[sub_factor_id])
+            api_factor_id = cls._required_persisted_int(
+                api_member,
+                ("factor_id",),
+                f"factor combo work order member {sub_factor_id} parent factor",
+            )
+            parent_ids = database_member.get("parent_factor_ids")
+            if not isinstance(parent_ids, Sequence) or isinstance(parent_ids, (str, bytes)):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} has no complete parent factor set in database",
+                    {"api": dict(api_member), "database": database_member},
+                )
+            normalized_parent_ids = [
+                cls._required_persisted_int(
+                    {"value": value},
+                    ("value",),
+                    f"factor combo work order member {sub_factor_id} parent factor set",
+                )
+                for value in parent_ids
+            ]
+            if len(set(normalized_parent_ids)) != len(normalized_parent_ids):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} has duplicate parent factor IDs",
+                    {"parent_factor_ids": normalized_parent_ids, "database": database_member},
+                )
+            relation_count = database_member.get("parent_factor_relation_count")
+            distinct_relation_count = database_member.get("parent_factor_distinct_count")
+            if relation_count is None or distinct_relation_count is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} has no parent relation counts",
+                    {"database": database_member},
+                )
+            normalized_relation_count = cls._non_negative_int_or_failure(
+                relation_count,
+                FlowOutcome.FAIL_CONTRACT,
+                f"factor combo work order member {sub_factor_id} parent relation count is invalid",
+                database_member,
+            )
+            normalized_distinct_relation_count = cls._non_negative_int_or_failure(
+                distinct_relation_count,
+                FlowOutcome.FAIL_CONTRACT,
+                f"factor combo work order member {sub_factor_id} distinct parent relation count is invalid",
+                database_member,
+            )
+            if (
+                normalized_relation_count != normalized_distinct_relation_count
+                or normalized_relation_count != len(normalized_parent_ids)
+            ):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} parent relation aggregation is inconsistent",
+                    {
+                        "relation_count": normalized_relation_count,
+                        "distinct_relation_count": normalized_distinct_relation_count,
+                        "parent_factor_ids": normalized_parent_ids,
+                        "database": database_member,
+                    },
+                )
+            if api_factor_id not in normalized_parent_ids:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} factor_id is not one of its database parents",
+                    {
+                        "api_factor_id": api_factor_id,
+                        "database_parent_factor_ids": normalized_parent_ids,
+                        "api": dict(api_member),
+                    },
+                )
+            parent_serials = database_member.get("parent_factor_serial_numbers")
+            if not isinstance(parent_serials, Sequence) or isinstance(parent_serials, (str, bytes)):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} has no parent factor code source in database",
+                    {"api": dict(api_member), "database": database_member},
+                )
+            if len(parent_serials) != len(normalized_parent_ids):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} parent IDs and codes cannot be aligned",
+                    {"parent_ids": normalized_parent_ids, "parent_serials": list(parent_serials)},
+                )
+            parent_names = database_member.get("parent_factor_names")
+            if not isinstance(parent_names, Sequence) or isinstance(parent_names, (str, bytes)):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} has no parent factor name source in database",
+                    {"api": dict(api_member), "database": database_member},
+                )
+            if len(parent_names) != len(normalized_parent_ids):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor combo work order member {sub_factor_id} parent IDs and names cannot be aligned",
+                    {"parent_ids": normalized_parent_ids, "parent_names": list(parent_names)},
+                )
+            parent_index = normalized_parent_ids.index(api_factor_id)
+            database_member["_api_parent_factor_serial_number"] = parent_serials[parent_index]
+
+            # Work Order 的 feature_column、direction 只有在成员快照中明确保存时才能对账；不根据名称拼接或默认值推断。
+            for api_field, snapshot_names in (
+                ("feature_column", ("feature_column", "feature_column_name")),
+                ("direction", ("direction",)),
+            ):
+                snapshot_values: list[tuple[str, Any]] = []
+                for snapshot_field in ("definition_snapshot_json", "metrics_snapshot_json", "validity_snapshot_json"):
+                    snapshot = database_member.get(snapshot_field)
+                    if not isinstance(snapshot, Mapping):
+                        continue
+                    for key in snapshot_names:
+                        if key in snapshot:
+                            snapshot_values.append((f"{snapshot_field}.{key}", snapshot[key]))
+                if len(snapshot_values) > 1:
+                    first_value = snapshot_values[0][1]
+                    conflicting_values = [
+                        item for item in snapshot_values[1:] if not cls._same_scalar(first_value, item[1])
+                    ]
+                    if conflicting_values:
+                        raise FactorComboFlowError(
+                            FlowOutcome.FAIL_CONTRACT,
+                            f"factor combo work order member {sub_factor_id} has conflicting {api_field} snapshots",
+                            {
+                                "field": api_field,
+                                "values": snapshot_values,
+                                "database": database_member,
+                            },
+                        )
+                if api_field not in database_member and snapshot_values:
+                    database_member[api_field] = snapshot_values[0][1]
+
+            # 只映射 API 明确出现的字段；必填成员字段由 required_fields 强制存在。
+            compared.extend(
+                f"{sub_factor_id}.{field_name}"
+                for field_name in cls._compare_explicit_fields(
+                    api_member,
+                    database_member,
+                    member_field_map,
+                    f"factor combo work order member {sub_factor_id}",
+                    required_fields=_WORK_ORDER_MEMBER_REQUIRED_FIELDS,
+                    allow_database_json_extra=True,
+                )
+            )
+        return compared
+
+    @classmethod
+    def _compare_experiment_request_to_database(
+        cls,
+        request_payload: Mapping[str, Any],
+        experiment_row: Mapping[str, Any],
+    ) -> list[str]:
+        """比较实验写入请求的全部持久化字段和实验主表。
+
+        参数 ``request_payload`` 是实验接口完整请求体，``experiment_row`` 是 ``factor_combo_experiment_info`` 记录。
+        返回实际比较字段清单；普通列、JSON 配置、Artifact、显式空值和外部表单/Run 身份缺失或不一致时抛出
+        ``FAIL_CONTRACT``。Artifact SHA256 只按内容值比较，不把它误当成唯一键。
+        """
+
+        if not isinstance(request_payload, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment request must be an object",
+                request_payload,
+            )
+        artifact = request_payload.get("artifact")
+        if not isinstance(artifact, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo experiment artifact must be an object",
+                request_payload,
+            )
+        normalized = dict(request_payload)
+        normalized.pop("artifact", None)
+        fields: list[str] = list(
+            cls._compare_explicit_fields(
+                normalized,
+                experiment_row,
+                {
+                    "form_id": "form_id",
+                    "pipeline_run_id": "pipeline_run_id",
+                    "data_version": "data_version",
+                    "data_directory": "data_directory",
+                    "evaluation_config": "evaluation_config_json",
+                    "metrics": "metrics_json",
+                    "experiment_config": "experiment_config_json",
+                    "experiment_description": "experiment_description",
+                    "implementation_method": "implementation_method",
+                    "experiment_conclusion": "experiment_conclusion",
+                    "composite_factor_score": "composite_factor_score",
+                    "valid": "valid",
+                    "remark": "remark",
+                    "train_config": "train_config_json",
+                    "failure_reason": "failure_reason",
+                },
+                "factor combo experiment request/database",
+                required_fields=(
+                    "form_id",
+                    "pipeline_run_id",
+                    "data_version",
+                    "evaluation_config",
+                    "metrics",
+                    "valid",
+                    "train_config",
+                ),
+                allow_database_json_extra=False,
+            )
+        )
+        fields.extend(
+            cls._compare_explicit_fields(
+                artifact,
+                experiment_row,
+                {
+                    "type": "artifact_type",
+                    "uri": "artifact_uri",
+                    "sha256": "artifact_hash",
+                },
+                "factor combo experiment artifact/database",
+                required_fields=("type", "uri", "sha256"),
+            )
+        )
+        return fields
+
+    @classmethod
+    def _compare_registration_request_to_database(
+        cls,
+        request_payload: Mapping[str, Any],
+        sub_factor_row: Mapping[str, Any],
+        factor_detail_row: Mapping[str, Any],
+        validity_row: Mapping[str, Any],
+        registration_row: Mapping[str, Any],
+    ) -> list[str]:
+        """比较登记请求报告、有效性输入和四张登记实体中的完整持久化内容。
+
+        参数 ``request_payload`` 是登记请求，后四个参数依次是子因子、因子详情、有效性快照和登记映射数据库记录。
+        返回实际比较字段清单；报告与 ``factors_details.params``、有效性普通列/原因 JSON、登记身份和显式空值无法
+        对齐时抛出 ``FAIL_CONTRACT``。数据库允许追加审计字段，但不得覆盖请求字段而不被发现。
+        """
+
+        if not isinstance(request_payload, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration request must be an object",
+                request_payload,
+            )
+        report = request_payload.get("report")
+        validity = request_payload.get("factor_validity_status")
+        if not isinstance(report, Mapping) or not isinstance(validity, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor combo registration request report and validity must be objects",
+                request_payload,
+            )
+        fields: list[str] = []
+        fields.extend(
+            f"report.{field_name}"
+            for field_name in cls._compare_explicit_fields(
+                {"report": report},
+                {"params": factor_detail_row.get("params")},
+                {"report": "params"},
+                "factor combo registration report/database",
+                required_fields=("report",),
+                allow_database_json_extra=True,
+            )
+        )
+        metadata_value = sub_factor_row.get("metadata")
+        if metadata_value is not None:
+            parsed_metadata = cls._parse_json_value(
+                metadata_value,
+                "factor combo registration sub_factor.metadata",
+            )
+            if not isinstance(parsed_metadata, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "registered sub-factor metadata must be a JSON object",
+                    {"metadata": metadata_value, "sub_factor": dict(sub_factor_row)},
+                )
+            if "report" in parsed_metadata:
+                fields.extend(
+                    f"metadata.report.{field_name}"
+                    for field_name in cls._compare_explicit_fields(
+                        {"report": report},
+                        {"report": parsed_metadata["report"]},
+                        {"report": "report"},
+                        "factor combo registration sub-factor metadata/report",
+                        required_fields=("report",),
+                        allow_database_json_extra=True,
+                    )
+                )
+
+        validity_field_map: dict[str, str | Sequence[str]] = {
+            "universe_key": "universe_key",
+            "factor_bar_interval": "factor_bar_interval",
+            "factor_window_bars": "factor_window_bars",
+            "return_bar_interval": "return_bar_interval",
+            "forward_return_bars": "forward_return_bars",
+            "window_scope": "window_scope",
+            "period_start": "period_start",
+            "period_end": "period_end",
+            "time_series_scoring_version": "time_series_scoring_version",
+            "time_series_score": "time_series_score",
+            "time_series_status": "time_series_status",
+            "time_series_is_valid": "time_series_is_valid",
+            "cross_sectional_scoring_version": "cross_sectional_scoring_version",
+            "cross_sectional_score": "cross_sectional_score",
+            "cross_sectional_status": "cross_sectional_status",
+            "cross_sectional_is_valid": "cross_sectional_is_valid",
+            "overall_score": "overall_score",
+            "overall_status": "overall_status",
+            "overall_is_valid": "overall_is_valid",
+            "validity_threshold": "validity_threshold",
+            "status_reason_json": ("status_reason_json", "status_reason"),
+        }
+        normalized_validity = dict(validity)
+        fields.extend(
+            f"validity.{field_name}"
+            for field_name in cls._compare_explicit_fields(
+                normalized_validity,
+                validity_row,
+                validity_field_map,
+                "factor combo registration validity/database",
+                required_fields=tuple(normalized_validity.keys()),
+                allow_database_json_extra=True,
+            )
+        )
+        fields.extend(
+            f"registration.{field_name}"
+            for field_name in cls._compare_explicit_fields(
+                {
+                    "sub_factor_id": registration_row.get("sub_factor_id"),
+                    "combo_version_hash": registration_row.get("combo_version_hash"),
+                },
+                registration_row,
+                {"sub_factor_id": "sub_factor_id", "combo_version_hash": "combo_version_hash"},
+                "factor combo registration identity/database",
+                required_fields=("sub_factor_id", "combo_version_hash"),
+            )
+        )
+        return fields
 
     def claim_feedback_for_worker(
         self,
@@ -1178,7 +4526,13 @@ class FactorComboService:
             failure_reason="autotest source experiment failed" if not valid_experiment else None,
         )
         response = self.submit_feedback_request(self.build_feedback_payload(experiment, feedback_text))
-        feedback_id = self.require_feedback_id(response)
+        feedback_data = self.require_feedback_response(
+            response,
+            expected_form_id=experiment.version.worker_form.submitted.form_id,
+            expected_experiment_info_id=experiment.experiment_info_id,
+            expected_status="pending",
+        )
+        feedback_id = self._required_response_int(feedback_data, "feedback_id", "factor combo feedback")
         return PendingFeedback(experiment=experiment, feedback_id=feedback_id)
 
     def create_next_version_request(
@@ -1196,28 +4550,168 @@ class FactorComboService:
         返回原始 HTTP 响应；状态由用例断言。
         """
 
-        payload = {
+        payload = self.build_next_version_payload(
+            feedback,
+            components=components,
+            generation_method=generation_method,
+            pipeline_run_id=pipeline_run_id,
+        )
+        return self._factor_combo_api.create_next_version(feedback.feedback_id, payload)
+
+    def build_next_version_payload(
+        self,
+        feedback: ClaimedFeedback,
+        *,
+        components: list[dict[str, Any]] | None = None,
+        generation_method: str = "ml",
+        pipeline_run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """构造下一轮组合版本接口的完整请求体。
+
+        参数 ``feedback`` 提供反馈、表单和认领运行上下文，``components`` 是可选的新组件列表，``generation_method`` 是
+        生成方式，``pipeline_run_id`` 可覆盖认领值。返回可直接发送给下一版本接口的 JSON 字典；该方法不发送网络请求，
+        也不执行数据库写入。
+        """
+
+        return {
             "pipeline_run_id": pipeline_run_id or feedback.worker_form.pipeline_run_id,
             "generation_method": generation_method,
             "components": components if components is not None else list(feedback.worker_form.components),
         }
-        return self._factor_combo_api.create_next_version(feedback.feedback_id, payload)
 
-    def require_next_version(self, response: requests.Response, feedback: ClaimedFeedback) -> ComboVersion:
+    def require_next_version(
+        self,
+        response: requests.Response,
+        feedback: ClaimedFeedback,
+        *,
+        expected_components: Sequence[Mapping[str, Any]] | None = None,
+    ) -> ComboVersion:
         """把下一轮版本接口成功响应转换为组合版本对象。
 
-        参数 ``response`` 是下一轮版本接口响应，``feedback`` 是对应的反馈上下文。
-        返回新 ``ComboVersion``；响应非成功或字段不完整时抛出 ``RuntimeError``。
+        参数 ``response`` 是下一轮版本接口响应，``feedback`` 是对应的反馈上下文，``expected_components`` 是本次
+        请求实际提交的新组件集合；未传入时兼容使用认领结果中的组件集合。返回新 ``ComboVersion``；响应非成功或
+        字段不完整时抛出 ``RuntimeError``。自定义组件请求必须传入本次集合，不能按上一轮组件数量判断响应。
         """
 
         data = self._require_success_data(response, {200, 201}, "create next factor combo version")
+        self._require_response_fields(data, _NEXT_VERSION_RESULT_REQUIRED_FIELDS, "next factor combo version")
+        form_id = self._required_response_int(data, "form_id", "next factor combo version")
+        if form_id != feedback.worker_form.submitted.form_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version form_id does not match the feedback form",
+                data,
+            )
+        form_status = self._required_response_string(data, "form_status", "next factor combo version")
+        if form_status not in {"processing", "completed"}:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version form_status is outside the documented enum",
+                data,
+            )
+        pipeline_run_id = self._required_response_string(data, "pipeline_run_id", "next factor combo version")
+        if pipeline_run_id != feedback.worker_form.pipeline_run_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version pipeline_run_id does not match the claimed feedback run",
+                data,
+            )
+        returned_feedback_id = self._required_response_int(data, "feedback_id", "next factor combo version")
+        if returned_feedback_id != feedback.feedback_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version feedback_id does not match the claimed feedback",
+                data,
+            )
+        feedback_round = self._required_response_int(data, "feedback_round", "next factor combo version")
+        if feedback.worker_form.feedback_round is not None and feedback_round != feedback.worker_form.feedback_round:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version feedback_round does not match the claimed feedback",
+                {
+                    "expected_feedback_round": feedback.worker_form.feedback_round,
+                    "actual_feedback_round": feedback_round,
+                    "data": data,
+                },
+            )
+        feedback_status = self._required_response_string(data, "feedback_status", "next factor combo version")
+        if feedback_status not in _FEEDBACK_STATUS_VALUES:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version feedback_status is invalid",
+                data,
+            )
+        combo_id = self._required_response_int(data, "combo_id", "next factor combo version")
+        if combo_id != feedback.experiment.version.combo_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version combo_id does not match the source version",
+                data,
+            )
+        combo_family_key = self._required_response_string(data, "combo_family_key", "next factor combo version")
+        pool_id = self._required_response_int(data, "pool_id", "next factor combo version")
+        if pool_id != feedback.experiment.version.pool_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version pool_id does not match the source version",
+                data,
+            )
+        combo_version_hash = self._required_sha256_or_failure(
+            data.get("combo_version_hash"),
+            FlowOutcome.FAIL_CONTRACT,
+            "next factor combo version combo_version_hash is missing or invalid",
+            data,
+        )
+        source_version = feedback.experiment.version
+        if self._required_response_int(data, "factor_combo_version_id", "next factor combo version") == source_version.version_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version must have a new concrete version ID",
+                data,
+            )
+        if combo_version_hash == source_version.combo_version_hash:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version must have a new content hash",
+                data,
+            )
+        combo_status = self._required_response_string(data, "combo_status", "next factor combo version")
+        if combo_status not in _COMBO_STATUS_VALUES:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version combo_status is outside the documented enum",
+                data,
+            )
+        component_count = self._required_response_int(data, "component_count", "next factor combo version")
+        component_source = feedback.worker_form.components if expected_components is None else expected_components
+        if component_count != len(component_source):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version component_count does not match the claimed component set",
+                {
+                    "component_count": component_count,
+                    "expected_component_count": len(component_source),
+                    "data": data,
+                },
+            )
+        idempotent_replay = self._required_response_bool(data, "idempotent_replay", "next factor combo version")
+        if idempotent_replay is not (response.status_code == 200):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "next factor combo version HTTP status and idempotent_replay are inconsistent",
+                data,
+            )
         return ComboVersion(
             worker_form=feedback.worker_form,
-            version_id=self._required_int(data, "factor_combo_version_id", "next factor combo version"),
-            combo_id=self._required_int(data, "combo_id", "next factor combo version"),
-            combo_family_key=str(data.get("combo_family_key", "")),
-            pool_id=self._required_int(data, "pool_id", "next factor combo version"),
-            combo_version_hash=self._required_string(data, "combo_version_hash", "next factor combo version"),
+            version_id=self._required_response_int(data, "factor_combo_version_id", "next factor combo version"),
+            combo_id=combo_id,
+            combo_family_key=combo_family_key,
+            pool_id=pool_id,
+            combo_version_hash=combo_version_hash,
+            form_status=form_status,
+            combo_status=combo_status,
+            component_count=component_count,
+            idempotent_replay=idempotent_replay,
         )
 
     def build_register_payload(
@@ -1225,12 +4719,12 @@ class FactorComboService:
         experiment: CompletedExperiment,
         *,
         metrics_available: bool = True,
-        validity_state: str = "valid",
+        validity_state: str = "unknown",
     ) -> dict[str, Any]:
         """构造组合报告登记接口请求体。
 
         参数 ``experiment`` 是实验完成的组合链路，``metrics_available`` 决定绩效字段使用数值还是全部为空，
-        ``validity_state`` 只能是 ``valid``、``invalid`` 或 ``unknown``，用于 Worker 合约测试明确构造有效性快照。
+        ``validity_state`` 只能是 ``invalid`` 或 ``unknown``；登记接口的初始快照不允许提交 valid 状态。
         返回包含报告、组件、绩效和时序/截面有效性字段的完整登记请求；真实 Agent 流程不得调用此模拟构造方法。
         """
 
@@ -1288,11 +4782,12 @@ class FactorComboService:
             "factor_validity_status": self.build_validity_payload(validity_state),
         }
 
-    def build_validity_payload(self, state: str = "valid") -> dict[str, Any]:
+    def build_validity_payload(self, state: str = "unknown") -> dict[str, Any]:
         """构造 Worker 合约测试使用的明确有效性快照。
 
         参数 ``state`` 必须是 ``valid``、``invalid`` 或 ``unknown``。返回不包含后端生成身份和审计字段的请求对象；
-        ``valid`` 至少让时序维度严格为 ``true``，``invalid`` 明确为 ``false``，``unknown`` 的分数和标志均为 ``null``。
+        ``valid`` 仅保留给其他 Worker 兼容场景，登记接口默认使用允许的 ``unknown``，``invalid`` 明确为 ``false``，
+        ``unknown`` 的分数和标志均为 ``null``。
         这些数据只用于兼容 Worker 合约，不能替代真实 Pipeline 结果。
         """
 
@@ -1394,10 +4889,15 @@ class FactorComboService:
         if feedback_id is not None:
             payload["feedback_id"] = int(feedback_id)
         self.scope.protect_form(form.form_id)
-        return self._call_flow_request(
+        response = self._call_flow_request(
             "start real factor combo run",
             lambda: self._factor_combo_api.start_run(form.form_id, payload),
         )
+        status_code = getattr(response, "status_code", None)
+        if isinstance(status_code, int) and 400 <= status_code < 500 and status_code != 409:
+            # 明确的参数、鉴权或资源错误表示请求未被接受；网络错误、5xx 和 409 仍保留保护，避免误删未知状态资源。
+            self.scope.release_form(form.form_id)
+        return response
 
     def start_real_run(
         self,
@@ -1679,6 +5179,93 @@ class FactorComboService:
             )
         return run
 
+    def _validate_run_database_identity(self, run: RealRun, operation: str) -> dict[str, Any]:
+        """确认数据库表单属于当前真实 Pipeline Run。
+
+        参数 ``run`` 是启动接口返回的表单与 Run 上下文，``operation`` 是用于错误定位的操作名称。返回数据库中
+        与该 Run 对应的表单快照；数据库查询异常分类为 ``FAIL_TECHNICAL``，表单不存在、表单 ID、会话 ID、Run ID
+        或已持久化的因子池 ID 不一致时分类为 ``FAIL_CONTRACT``。方法不使用时间、状态或“最新一条记录”推断归属。
+        """
+
+        try:
+            database_form = self._repository.get_form(run.form.form_id)
+        except Exception as error:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_TECHNICAL,
+                f"{operation} database form identity query failed",
+                {
+                    "form_id": run.form.form_id,
+                    "pipeline_run_id": run.pipeline_run_id,
+                    "exception_type": type(error).__name__,
+                },
+            ) from error
+
+        if not isinstance(database_form, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{operation} database form does not exist",
+                {
+                    "form_id": run.form.form_id,
+                    "pipeline_run_id": run.pipeline_run_id,
+                    "database_form": database_form,
+                },
+            )
+        database_form_dict = dict(database_form)
+        database_form_id = self._positive_int_or_failure(
+            database_form_dict.get("id"),
+            FlowOutcome.FAIL_CONTRACT,
+            f"{operation} database form is missing a positive id",
+            database_form_dict,
+        )
+        if database_form_id != run.form.form_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{operation} database form id does not match the started form",
+                {"run": run, "database_form": database_form_dict},
+            )
+        database_session_id = self._positive_int_or_failure(
+            database_form_dict.get("session_id"),
+            FlowOutcome.FAIL_CONTRACT,
+            f"{operation} database form is missing a positive session_id",
+            database_form_dict,
+        )
+        if database_session_id != run.form.session_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{operation} database form session_id does not match the started form",
+                {"run": run, "database_form": database_form_dict},
+            )
+        database_pipeline_run_id = self._required_non_empty_string_or_failure(
+            database_form_dict.get("pipeline_run_id"),
+            FlowOutcome.FAIL_CONTRACT,
+            f"{operation} database form is missing pipeline_run_id",
+            database_form_dict,
+        )
+        if database_pipeline_run_id != run.pipeline_run_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{operation} database form pipeline_run_id does not match the started Run",
+                {
+                    "run_pipeline_run_id": run.pipeline_run_id,
+                    "database_pipeline_run_id": database_pipeline_run_id,
+                    "database_form": database_form_dict,
+                },
+            )
+        if "factor_combo_pool_id" in database_form_dict:
+            database_pool_id = self._positive_int_or_failure(
+                database_form_dict.get("factor_combo_pool_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                f"{operation} database form is missing a positive factor_combo_pool_id",
+                database_form_dict,
+            )
+            if database_pool_id != run.form.pool_id:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{operation} database form factor_combo_pool_id does not match the started form",
+                    {"run": run, "database_form": database_form_dict},
+                )
+        return database_form_dict
+
     def read_real_run_status(self, run: RealRun) -> dict[str, Any]:
         """读取并校验一次真实 Run 状态快照。
 
@@ -1687,6 +5274,7 @@ class FactorComboService:
         ``FactorComboFlowError``，网络错误归类为 ``FAIL_TECHNICAL``。
         """
 
+        self._validate_run_database_identity(run, "read factor combo run status")
         response = self._call_flow_request(
             "read factor combo run status",
             lambda: self._factor_combo_api.get_run_status(run.form.form_id, run.pipeline_run_id),
@@ -1910,7 +5498,10 @@ class FactorComboService:
                     )
                 self._sleep_for_poll_retry()
                 continue
-            return self.require_real_pipeline_result(response, run)
+            result = self.require_real_pipeline_result(response, run)
+            # 只有结构化结果已成功解析，才允许 Fixture 在结束时考虑清理该表单。
+            self.scope.release_form(run.form.form_id)
+            return result
 
         raise FactorComboFlowError(
             FlowOutcome.FAIL_TECHNICAL,
@@ -1935,6 +5526,7 @@ class FactorComboService:
         ``FactorComboFlowError(FAIL_CONTRACT)``，不会构造任何替代指标。
         """
 
+        self._validate_run_database_identity(run, "read real factor combo result")
         data = self._require_flow_data(response, {200}, "read real factor combo result")
         returned_form_id = self._positive_int_or_failure(
             data.get("form_id"),
@@ -1982,6 +5574,7 @@ class FactorComboService:
                 "real result must contain factor_combo_report, factor_combo_review and factor_validity_status objects",
                 data,
             )
+        self._validate_real_report(report, data)
         self._validate_real_review(review, data)
         self._validate_real_validity(validity, data)
         return RealPipelineResult(
@@ -2030,34 +5623,19 @@ class FactorComboService:
                 }
             ),
         )
-        data = self._require_flow_data(response, {200}, "submit real factor combo feedback")
-        if data.get("feedback_status") != "pending":
-            raise FactorComboFlowError(
-                FlowOutcome.FAIL_CONTRACT,
-                "feedback response must remain pending for the next research round",
-                data,
-            )
-        if "reply" in data and data["reply"] != 2:
-            raise FactorComboFlowError(
-                FlowOutcome.FAIL_CONTRACT,
-                "feedback response reply must be 2",
-                data,
-            )
-        feedback_id = self._positive_int_or_failure(
-            data.get("feedback_id"),
-            FlowOutcome.FAIL_CONTRACT,
-            "feedback response is missing a positive feedback_id",
-            data,
+        data = self.require_feedback_response(
+            response,
+            expected_form_id=result.run.form.form_id,
+            expected_experiment_info_id=result.raw_data.get("experiment_info_id")
+            if isinstance(result.raw_data.get("experiment_info_id"), int)
+            else None,
+            expected_status="pending",
         )
+        feedback_id = self._required_response_int(data, "feedback_id", "feedback response")
         feedback_round = data.get("feedback_round")
         normalized_round: int | None = None
         if feedback_round is not None:
-            normalized_round = self._positive_int_or_failure(
-                feedback_round,
-                FlowOutcome.FAIL_CONTRACT,
-                "feedback_round must be a positive integer when present",
-                data,
-            )
+            normalized_round = self._required_response_int(data, "feedback_round", "feedback response")
         return RealFeedback(feedback_id=feedback_id, feedback_round=normalized_round, response_data=data)
 
     def register_real_result_and_refresh(self, result: RealPipelineResult) -> RegisteredFlowResult:
@@ -2234,7 +5812,11 @@ class FactorComboService:
                 "registration response and combination version are inconsistent",
                 {"api": first_data, "db": database_version},
             )
-        registration = self._repository.get_registration(combo_id)
+        registration = self._repository.get_registration(
+            combo_id,
+            version_id=first_identity["factor_combo_version_id"],
+            combo_version_hash=first_identity["combo_version_hash"],
+        )
         if registration is None:
             raise FactorComboFlowError(
                 FlowOutcome.FAIL_CONTRACT,
@@ -2260,7 +5842,7 @@ class FactorComboService:
             {"api": first_data, "db": registration},
         )
         if (
-            database_registration_combo_id != combo_id
+            database_registration_combo_id != first_identity["factor_combo_version_id"]
             or database_registration_hash != first_identity["combo_version_hash"]
             or database_sub_factor_id != sub_factor_id
             or registration.get("factor_id") is not None
@@ -2563,7 +6145,11 @@ class FactorComboService:
                     except (TypeError, ValueError):
                         combo_id = None
                     if combo_id is not None and combo_id > 0:
-                        registration = self._repository.get_registration(combo_id)
+                        registration = self._repository.get_registration(
+                            combo_id,
+                            version_id=version_id,
+                            combo_version_hash=str(version.get("combo_version_hash") or "").strip().lower(),
+                        )
         return {
             "form": form,
             "version_id": version_id,
@@ -2746,6 +6332,12 @@ class FactorComboService:
                 else:
                     # 兼容尚未升级的离线替身；真实 Repository 一定使用带明细的新版查询。
                     calculation_rows = self._repository.get_factor_refresh_calculation_runs(normalized_sub_factor_id)
+                run_details_reader = getattr(self._repository, "get_factor_refresh_run_details", None)
+                run_details = (
+                    run_details_reader(normalized_sub_factor_id)
+                    if callable(run_details_reader)
+                    else None
+                )
             except Exception as error:
                 raise FactorComboFlowError(
                     FlowOutcome.FAIL_TECHNICAL,
@@ -2763,6 +6355,7 @@ class FactorComboService:
                     validity_snapshots,
                     refresh_data,
                     api_sub_factor=api_sub_factor,
+                    run_details=run_details,
                 )
             except FactorComboFlowError as error:
                 if error.outcome == FlowOutcome.FAIL_CONTRACT:
@@ -2789,13 +6382,15 @@ class FactorComboService:
         refresh_data: dict[str, Any],
         *,
         api_sub_factor: dict[str, Any] | None = None,
+        run_details: Any | None = None,
     ) -> DatabaseRefreshEvidence:
         """按刷新后有效性快照选择本次计算结果，并校验 API/DB 关联一致性。
 
         参数 ``sub_factor_id`` 是目标复合子因子 ID，``calculation_rows`` 是新版汇总明细或兼容聚合结果，
         ``validity_snapshots`` 是有效性快照查询结果，``refresh_data`` 是刷新任务响应，``api_sub_factor`` 是可选的
-        API 详情。返回严格关联的数据库证据；数据缺失、指标为空或任务 Run 未落库时抛出 ``FAIL_REFRESH``，身份、
-        外键或 API/DB 指标不一致时抛出 ``FAIL_CONTRACT``。
+        API 详情，``run_details`` 是真实 Repository 从 ``factor_ic_runs`` 主表读取的完整 Run 记录；未提供 Run 明细时
+        仅保留离线替身兼容路径。返回严格关联的数据库证据；数据缺失、指标为空或任务 Run 未落库时抛出
+        ``FAIL_REFRESH``，身份、外键或 API/DB 指标不一致时抛出 ``FAIL_CONTRACT``。
         """
 
         if not isinstance(calculation_rows, list):
@@ -2812,6 +6407,7 @@ class FactorComboService:
             )
 
         refresh_run_ids = cls._extract_refresh_run_ids(refresh_data)
+        refresh_run_contexts = cls._extract_refresh_run_contexts(refresh_data)
         candidate_validity = cls._normalize_refresh_validity_rows(sub_factor_id, validity_snapshots)
         if not candidate_validity:
             raise FactorComboFlowError(
@@ -2891,12 +6487,25 @@ class FactorComboService:
                 },
             )
 
+        normalized_run_details = cls._validate_refresh_run_details(
+            sub_factor_id,
+            expected_run_ids,
+            run_details,
+            normalized_metrics,
+            refresh_run_contexts,
+        )
+
         cls._validate_summary_links(
             selected_validity,
             linked_summary_ids,
             normalized_metrics,
             summary_ids,
             expected_run_ids,
+            allow_aggregate_compatibility=bool(
+                not normalized_metrics
+                and calculation_rows
+                and all("summary_row_count" in row for row in calculation_rows if isinstance(row, dict))
+            ),
         )
 
         normalized_validity: list[dict[str, Any]] = []
@@ -2928,6 +6537,7 @@ class FactorComboService:
             matched_run_ids=matched_run_ids,
             calculation_metrics=tuple(normalized_metrics),
             api_db_matches=tuple(api_db_matches),
+            run_details=tuple(normalized_run_details),
         )
 
     @classmethod
@@ -2938,18 +6548,28 @@ class FactorComboService:
         calculation_metrics: list[dict[str, Any]],
         database_summary_ids: set[int],
         expected_run_ids: tuple[str, ...],
+        *,
+        allow_aggregate_compatibility: bool = False,
     ) -> None:
         """校验有效性快照引用的 summary ID、因子和计算 Run 完整一致。
 
         参数 ``validity_rows`` 是本次刷新选出的有效性快照，``linked_summary_ids`` 是其中的 summary 外键集合，
         ``calculation_metrics`` 是新版 summary 明细，``database_summary_ids`` 是明细实际返回的 ID 集合，
         ``expected_run_ids`` 是刷新响应或有效性快照确定的计算 Run。新版明细模式下不返回值；外键缺失、Run 不一致、
-        因子归属不一致时抛出 ``FAIL_CONTRACT``。仅有旧版离线聚合替身时保留兼容行为，因为该替身没有 summary 明细可供
-        外键逐行核对。
+        因子归属不一致时抛出 ``FAIL_CONTRACT``。仅在调用方明确标记旧版离线聚合替身时允许没有明细；真实 Repository
+        必须返回 summary 明细，否则即使汇总计数存在也判定为契约缺口。
         """
 
-        if not linked_summary_ids or not calculation_metrics:
+        if not linked_summary_ids:
             return
+        if not calculation_metrics:
+            if allow_aggregate_compatibility:
+                return
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor_validity_status summary links cannot be verified without summary detail rows",
+                {"linked_summary_ids": sorted(linked_summary_ids), "expected_run_ids": expected_run_ids},
+            )
         if not linked_summary_ids.issubset(database_summary_ids):
             raise FactorComboFlowError(
                 FlowOutcome.FAIL_CONTRACT,
@@ -3020,6 +6640,30 @@ class FactorComboService:
                         f"refresh validity {prefix} summary is not a sub-factor result",
                         {"validity": validity, "summary": metric},
                     )
+                expected_scope = prefix
+                actual_scope = metric.get("ic_scope")
+                if not isinstance(actual_scope, str) or actual_scope.strip().lower() != expected_scope:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"refresh validity {prefix} summary has wrong ic_scope",
+                        {
+                            "expected_ic_scope": expected_scope,
+                            "actual_ic_scope": actual_scope,
+                            "validity": validity,
+                            "summary": metric,
+                        },
+                    )
+                summary_scope_alias_field = f"{prefix}_summary_ic_scope"
+                summary_scope_alias = validity.get(summary_scope_alias_field)
+                if summary_scope_alias_field in validity and (
+                    not isinstance(summary_scope_alias, str)
+                    or summary_scope_alias.strip().lower() != expected_scope
+                ):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"refresh validity {prefix} summary scope alias is inconsistent",
+                        {"validity": validity, "summary": metric, "expected_ic_scope": expected_scope},
+                    )
                 expected_summary_run_id = cls._required_non_empty_string_or_failure(
                     validity.get(f"{prefix}_summary_run_id"),
                     FlowOutcome.FAIL_CONTRACT,
@@ -3043,6 +6687,51 @@ class FactorComboService:
                             "actual_run_id": actual_summary_run_id,
                         },
                     )
+
+                # 有效性表保存的窗口/样本池等维度必须和被外键引用的 summary 行一致；不能只凭 summary_id 命中。
+                for dimension_name in (
+                    "universe_key",
+                    "factor_bar_interval",
+                    "factor_window_bars",
+                    "return_bar_interval",
+                    "forward_return_bars",
+                    "window_scope",
+                    "period_start",
+                    "period_end",
+                ):
+                    validity_fields = (
+                        f"{prefix}_summary_{dimension_name}",
+                        dimension_name,
+                    )
+                    present_validity_fields = [
+                        field_name for field_name in validity_fields if field_name in validity
+                    ]
+                    if not present_validity_fields:
+                        continue
+                    if dimension_name not in metric:
+                        raise FactorComboFlowError(
+                            FlowOutcome.FAIL_CONTRACT,
+                            f"linked {prefix} summary is missing dimension {dimension_name}",
+                            {"validity": validity, "summary": metric},
+                        )
+                    for validity_field in present_validity_fields:
+                        if not cls._same_identity_scalar(
+                            dimension_name,
+                            validity.get(validity_field),
+                            metric.get(dimension_name),
+                        ):
+                            raise FactorComboFlowError(
+                                FlowOutcome.FAIL_CONTRACT,
+                                f"refresh validity {prefix} summary differs at {dimension_name}",
+                                {
+                                    "dimension": dimension_name,
+                                    "validity_field": validity_field,
+                                    "validity": validity.get(validity_field),
+                                    "summary": metric.get(dimension_name),
+                                    "validity_row": validity,
+                                    "summary_row": metric,
+                                },
+                            )
 
     @classmethod
     def _normalize_refresh_validity_rows(
@@ -3170,17 +6859,43 @@ class FactorComboService:
                         "validity_rows": candidates,
                     },
                 )
+            unexpected_run_ids = sorted(
+                {
+                    linked_run_id
+                    for row in selected
+                    for linked_run_id in row["_linked_run_ids"]
+                    if linked_run_id not in refresh_run_ids
+                }
+            )
+            if unexpected_run_ids:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_validity_status links the selected refresh to unexpected calculation Runs",
+                    {
+                        "factor_id": sub_factor_id,
+                        "refresh_run_ids": refresh_run_ids,
+                        "unexpected_run_ids": unexpected_run_ids,
+                        "validity_rows": selected,
+                    },
+                )
             return selected
 
-        # 没有明确 Run ID 时，优先使用最新更新时间；测试替身若不提供时间则保留全部候选，避免丢失多个维度。
-        recencies = [
-            str(row.get("updated_at") or row.get("created_at") or "").strip()
-            for row in candidates
-        ]
-        if not any(recencies):
-            return candidates
-        latest = max(recencies)
-        return [row for row, recency in zip(candidates, recencies, strict=True) if recency == latest]
+        # 没有明确 Run ID 时不能用 updated_at 猜“最新批次”。只有当所有候选明确属于同一组计算 Run 时，
+        # 才能把这组快照作为本次证据；多个 Run 组意味着无法证明批次归属，应直接暴露契约歧义。
+        run_sets = {frozenset(row["_linked_run_ids"]) for row in candidates}
+        if not run_sets:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_REFRESH,
+                "factor_validity_status has no linked calculation Run set",
+                {"factor_id": sub_factor_id, "validity_rows": candidates},
+            )
+        if len(run_sets) != 1:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "refresh validity rows belong to multiple calculation Run batches but the refresh response has no Run ID",
+                {"factor_id": sub_factor_id, "run_sets": [sorted(value) for value in run_sets], "validity_rows": candidates},
+            )
+        return candidates
 
     @classmethod
     def _normalize_calculation_rows(
@@ -3197,7 +6912,14 @@ class FactorComboService:
 
         if not calculation_rows:
             return [], [], [], set()
-        detailed = any("summary_row_count" not in row for row in calculation_rows)
+        detail_flags = ["summary_row_count" not in row for row in calculation_rows]
+        if any(detail_flags) and not all(detail_flags):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor_ic_summary_metrics mixes aggregate Run rows with summary detail rows",
+                calculation_rows,
+            )
+        detailed = all(detail_flags)
         if not detailed:
             normalized_runs: list[dict[str, Any]] = []
             run_ids: list[str] = []
@@ -3296,6 +7018,25 @@ class FactorComboService:
                 "factor_ic_summary_metrics row is missing summary id",
                 row,
             )
+            if "summary_id" in row and "id" in row:
+                row_id = cls._positive_int_or_failure(
+                    row.get("id"),
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_ic_summary_metrics row id is invalid",
+                    row,
+                )
+                if row_id != summary_id:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        "factor_ic_summary_metrics id and summary_id refer to different rows",
+                        row,
+                    )
+            if summary_id in summary_ids:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_ic_summary_metrics contains duplicate summary id",
+                    {"summary_id": summary_id, "rows": metric_rows + [row]},
+                )
             normalized = dict(row)
             normalized["factor_id"] = row_factor_id
             normalized["run_id"] = run_id
@@ -3359,6 +7100,214 @@ class FactorComboService:
                 row,
             )
 
+    @classmethod
+    def _validate_refresh_run_details(
+        cls,
+        sub_factor_id: int,
+        expected_run_ids: tuple[str, ...],
+        run_details: Any,
+        calculation_metrics: list[dict[str, Any]],
+        refresh_run_contexts: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """核对 ``factor_ic_runs`` 主表及其与 summary、刷新响应的关联。
+
+        参数 ``sub_factor_id`` 是本次刷新目标子因子，``expected_run_ids`` 是刷新响应或有效性快照确定的 Run 集合，
+        ``run_details`` 是 Repository 查询的 ``factor_ic_runs`` 完整记录，``calculation_metrics`` 是同一批次的
+        summary 明细，``refresh_run_contexts`` 是刷新接口明确返回的 Run 上下文。返回按 Run 排序的规范化主表记录；
+        缺少主表、状态未完成、运行配置缺失、summary 维度与 Run 不一致或 API 上下文无法对账时抛出
+        ``FactorComboFlowError``。``run_details is None`` 只代表离线旧替身没有实现该查询，保留兼容模式，不代表真实
+        数据可以省略主表校验。
+        """
+
+        if run_details is None:
+            return []
+        if not isinstance(run_details, list):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor_ic_runs repository result must be a list",
+                run_details,
+            )
+
+        expected_set = set(expected_run_ids)
+        rows_by_run: dict[str, dict[str, Any]] = {}
+        for raw_row in run_details:
+            if not isinstance(raw_row, dict):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_ic_runs repository row must be an object",
+                    run_details,
+                )
+            run_id = cls._required_non_empty_string_or_failure(
+                raw_row.get("run_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "factor_ic_runs row is missing run_id",
+                raw_row,
+            )
+            if run_id not in expected_set:
+                # Repository 查询的是目标子因子的历史 Run，历史行不属于本次刷新，可以保留在诊断中但不能参与对账。
+                continue
+            if run_id in rows_by_run:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_ic_runs contains multiple master rows for the same run_id",
+                    {"run_id": run_id, "rows": [rows_by_run[run_id], raw_row]},
+                )
+            row = dict(raw_row)
+            row["run_id"] = run_id
+            status_row = dict(row)
+            status_row["run_status"] = row.get("status", row.get("run_status"))
+            cls._validate_calculation_run_status(status_row)
+
+            required_fields = (
+                "interval_value",
+                "forward_return_horizon",
+                "universe_key",
+                "config_hash",
+                "config_json",
+            )
+            missing_fields = [
+                field_name
+                for field_name in required_fields
+                if field_name not in row or row[field_name] is None or (isinstance(row[field_name], str) and not row[field_name].strip())
+            ]
+            if missing_fields:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_ic_runs row is missing configuration fields required for refresh reconciliation",
+                    {"run_id": run_id, "missing_fields": missing_fields, "row": row},
+                )
+            cls._required_sha256_or_failure(
+                row["config_hash"],
+                FlowOutcome.FAIL_CONTRACT,
+                "factor_ic_runs config_hash is not a SHA-256 value",
+                row,
+            )
+            parsed_config = cls._parse_json_value(row["config_json"], "factor_ic_runs.config_json")
+            if not isinstance(parsed_config, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_ic_runs config_json must be a JSON object",
+                    row,
+                )
+            row["config_json"] = dict(parsed_config)
+            rows_by_run[run_id] = row
+
+        missing_run_ids = [run_id for run_id in expected_run_ids if run_id not in rows_by_run]
+        if missing_run_ids:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_REFRESH,
+                "factor_ic_runs master rows are missing for refresh run_id values",
+                {"expected_run_ids": expected_run_ids, "missing_run_ids": missing_run_ids, "run_details": run_details},
+            )
+
+        for metric in calculation_metrics:
+            run_id = cls._required_non_empty_string_or_failure(
+                metric.get("run_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "summary metric is missing run_id while reconciling factor_ic_runs",
+                metric,
+            )
+            run = rows_by_run.get(run_id)
+            if run is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "summary metric points to a Run outside the selected factor_ic_runs set",
+                    {"metric": metric, "expected_run_ids": expected_run_ids},
+                )
+            dimension_pairs = (
+                (
+                    "interval_value",
+                    ("interval_value", "factor_bar_interval"),
+                    ("interval_value", "run_interval_value", "run_factor_bar_interval"),
+                ),
+                (
+                    "forward_return_horizon",
+                    ("forward_return_horizon", "forward_return_bars"),
+                    ("forward_return_horizon", "run_forward_return_horizon", "run_forward_return_bars"),
+                ),
+                ("universe_key", ("universe_key",), ("universe_key", "run_universe_key")),
+            )
+            for dimension_name, summary_fields, run_fields in dimension_pairs:
+                summary_field = next((field for field in summary_fields if field in metric and metric[field] is not None), None)
+                run_field = next((field for field in run_fields if field in run and run[field] is not None), None)
+                if summary_field is None or run_field is None:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"summary/Run reconciliation is missing {dimension_name}",
+                        {"metric": metric, "run": run, "dimension": dimension_name},
+                    )
+                if not cls._same_identity_scalar(dimension_name, metric[summary_field], run[run_field]):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"summary metric and factor_ic_runs differ at {dimension_name}",
+                        {
+                            "dimension": dimension_name,
+                            "summary": metric[summary_field],
+                            "run": run[run_field],
+                            "metric": metric,
+                            "run_detail": run,
+                        },
+                    )
+
+        contexts_by_run: dict[str, dict[str, Any]] = {}
+        for context in refresh_run_contexts:
+            run_id = cls._required_non_empty_string_or_failure(
+                context.get("run_id"),
+                FlowOutcome.FAIL_CONTRACT,
+                "Performance Refresh run context is missing run_id",
+                context,
+            )
+            if run_id not in expected_set:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "Performance Refresh returned a Run context outside the selected Run set",
+                    {"context": context, "expected_run_ids": expected_run_ids},
+                )
+            existing = contexts_by_run.setdefault(run_id, {})
+            for key, value in context.items():
+                if key == "run_id" or value is None:
+                    continue
+                if key in existing and not cls._same_persisted_value(existing[key], value, field_name=key):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        "Performance Refresh returned conflicting Run context values",
+                        {"run_id": run_id, "field": key, "first": existing[key], "second": value},
+                    )
+                existing[key] = value
+
+        for run_id, context in contexts_by_run.items():
+            run = rows_by_run[run_id]
+            context_to_db = {
+                "status": ("status", "run_status"),
+                "interval_value": ("interval_value", "run_interval_value"),
+                "forward_return_horizon": ("forward_return_horizon", "run_forward_return_horizon"),
+                "universe_key": ("universe_key", "run_universe_key"),
+                "config_hash": ("config_hash", "run_config_hash"),
+                "config_json": ("config_json", "run_config_json"),
+            }
+            for context_field, db_fields in context_to_db.items():
+                if context_field not in context:
+                    continue
+                db_field = next((field for field in db_fields if field in run), None)
+                if db_field is None:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"factor_ic_runs is missing field returned by Performance Refresh: {context_field}",
+                        {"context": context, "run": run},
+                    )
+                if not cls._same_persisted_value(
+                    context[context_field],
+                    run[db_field],
+                    field_name=context_field,
+                    allow_database_extra=context_field == "config_json",
+                ):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"Performance Refresh and factor_ic_runs differ at {context_field}",
+                        {"field": context_field, "api": context[context_field], "database": run[db_field], "run": run},
+                    )
+        return [rows_by_run[run_id] for run_id in expected_run_ids]
+
     @staticmethod
     def _is_populated_calculation_metric(row: dict[str, Any]) -> bool:
         """判断新版 summary 行是否至少包含一个非空计算指标。
@@ -3385,79 +7334,173 @@ class FactorComboService:
         其值，但 API 明确暴露且能定位到 DB 记录时，任何值不一致都抛出 ``FAIL_CONTRACT``。
         """
 
-        if not isinstance(api_sub_factor, dict):
+        if api_sub_factor is None:
             return []
+        if not isinstance(api_sub_factor, dict):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "registered sub-factor refresh response must be an object when API/DB comparison is requested",
+                api_sub_factor,
+            )
+
+        metric_container_names = tuple(
+            field_name for field_name in _API_METRIC_CONTAINER_FIELDS if field_name in api_sub_factor
+        )
+        validity_container_names = tuple(
+            field_name for field_name in _API_VALIDITY_CONTAINER_FIELDS if field_name in api_sub_factor
+        )
+        # API 未暴露任何明确的刷新指标容器时，不猜测它的值；一旦显式返回容器，就必须至少完成一条真实字段对账。
+        if not metric_container_names and not validity_container_names:
+            return []
+
         matches: list[dict[str, Any]] = []
         api_metrics = cls._extract_api_metric_objects(api_sub_factor)
+        if metric_container_names and not api_metrics:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "API refresh metric container is present but contains no comparable metric object",
+                {
+                    "container_names": metric_container_names,
+                    "api_sub_factor": api_sub_factor,
+                },
+            )
         for api_metric in api_metrics:
+            cls._require_refresh_object_identity(api_metric, "metric")
             cls._validate_api_factor_identity(api_metric, sub_factor_id, "metric")
             db_candidates = cls._find_matching_metric_rows(api_metric, calculation_metrics)
             if not db_candidates:
-                # 没有身份字段且 DB 有多个窗口/范围时，无法安全判定对应关系；API 明确给出任一身份条件却找不到时必须报错。
-                if cls._has_identity_value(api_metric, _METRIC_MATCH_IDENTITY_FIELDS):
-                    raise FactorComboFlowError(
-                        FlowOutcome.FAIL_CONTRACT,
-                        "API refresh metric cannot be matched to factor_ic_summary_metrics",
-                        {"api": api_metric, "database_metrics": calculation_metrics},
-                    )
-                continue
-            if len(db_candidates) > 1:
-                if cls._has_strong_identity_value(
-                    api_metric,
-                    ("id", "summary_id", "run_id"),
-                ):
-                    raise FactorComboFlowError(
-                        FlowOutcome.FAIL_CONTRACT,
-                        "API refresh metric matches multiple factor_ic_summary_metrics rows",
-                        {"api": api_metric, "database_metrics": db_candidates},
-                    )
-                continue
-            if len(db_candidates) != 1:
-                continue
-            db_metric = db_candidates[0]
-            compared_fields = cls._compare_metric_fields(api_metric, db_metric)
-            if compared_fields:
-                matches.append(
-                    {
-                        "kind": "metric",
-                        "api_identity": cls._metric_identity(api_metric),
-                        "db_summary_id": db_metric.get("summary_id", db_metric.get("id")),
-                        "fields": tuple(compared_fields),
-                    }
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "API refresh metric cannot be matched to exactly one factor_ic_summary_metrics row",
+                    {"api": api_metric, "database_metrics": calculation_metrics},
                 )
+            if len(db_candidates) > 1:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "API refresh metric matches multiple factor_ic_summary_metrics rows",
+                    {"api": api_metric, "database_metrics": db_candidates},
+                )
+            db_metric = db_candidates[0]
+            cls._validate_database_refresh_identity(db_metric, sub_factor_id, "metric")
+            compared_fields = cls._compare_metric_fields(api_metric, db_metric)
+            if not compared_fields:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "API refresh metric contains no comparable calculation field",
+                    {"api": api_metric, "database_metric": db_metric},
+                )
+            matches.append(
+                {
+                    "kind": "metric",
+                    "api_identity": cls._metric_identity(api_metric),
+                    "db_summary_id": db_metric.get("summary_id", db_metric.get("id")),
+                    "fields": tuple(compared_fields),
+                }
+            )
 
-        for api_validity in cls._extract_api_validity_objects(api_sub_factor):
+        api_validities = cls._extract_api_validity_objects(api_sub_factor)
+        if validity_container_names and not api_validities:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "API refresh validity container is present but contains no comparable validity object",
+                {
+                    "container_names": validity_container_names,
+                    "api_sub_factor": api_sub_factor,
+                },
+            )
+        for api_validity in api_validities:
+            cls._require_refresh_object_identity(api_validity, "validity")
             cls._validate_api_factor_identity(api_validity, sub_factor_id, "validity")
             db_candidates = cls._find_matching_validity_rows(api_validity, validity_snapshots)
             if not db_candidates:
-                if cls._has_identity_value(api_validity, _VALIDITY_MATCH_IDENTITY_FIELDS):
-                    raise FactorComboFlowError(
-                        FlowOutcome.FAIL_CONTRACT,
-                        "API refresh validity cannot be matched to factor_validity_status",
-                        {"api": api_validity, "database_validity": validity_snapshots},
-                    )
-                continue
-            if len(db_candidates) > 1:
-                if cls._has_strong_identity_value(api_validity, ("id", "run_id")):
-                    raise FactorComboFlowError(
-                        FlowOutcome.FAIL_CONTRACT,
-                        "API refresh validity matches multiple factor_validity_status rows",
-                        {"api": api_validity, "database_validity": db_candidates},
-                    )
-                continue
-            if len(db_candidates) != 1:
-                continue
-            compared_fields = cls._compare_validity_fields(api_validity, db_candidates[0])
-            if compared_fields:
-                matches.append(
-                    {
-                        "kind": "validity",
-                        "api_identity": {key: api_validity.get(key) for key in ("id", "run_id")},
-                        "db_validity_id": db_candidates[0].get("id"),
-                        "fields": tuple(compared_fields),
-                    }
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "API refresh validity cannot be matched to exactly one factor_validity_status row",
+                    {"api": api_validity, "database_validity": validity_snapshots},
                 )
+            if len(db_candidates) > 1:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "API refresh validity matches multiple factor_validity_status rows",
+                    {"api": api_validity, "database_validity": db_candidates},
+                )
+            db_validity = db_candidates[0]
+            cls._validate_database_refresh_identity(db_validity, sub_factor_id, "validity")
+            compared_fields = cls._compare_validity_fields(api_validity, db_validity)
+            if not compared_fields:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "API refresh validity contains no comparable validity field",
+                    {"api": api_validity, "database_validity": db_candidates[0]},
+                )
+            matches.append(
+                {
+                    "kind": "validity",
+                    "api_identity": {key: api_validity.get(key) for key in ("id", "run_id")},
+                    "db_validity_id": db_validity.get("id"),
+                    "fields": tuple(compared_fields),
+                }
+            )
+        if not matches:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "API refresh response exposed evidence containers but no API/DB field was compared",
+                {"api_sub_factor": api_sub_factor},
+            )
         return matches
+
+    @classmethod
+    def _validate_database_refresh_identity(
+        cls,
+        database_row: Mapping[str, Any],
+        expected_factor_id: int,
+        object_kind: str,
+    ) -> None:
+        """校验刷新对账命中的数据库行确实属于目标子因子。
+
+        参数 ``database_row`` 是从 ``factor_ic_summary_metrics`` 或 ``factor_validity_status`` 命中的数据库行，
+        ``expected_factor_id`` 是登记后目标子因子 ID，``object_kind`` 只能是 ``metric`` 或 ``validity``。
+        不返回值；数据库行缺少因子归属字段、指向其他因子或未标记为子因子时抛出 ``FAIL_CONTRACT``。该校验即使
+        调用方已经提前按 ID 查询，也必须保留，避免错误的 Repository 实现、测试替身或后续重构把其他因子的行带入对账。
+        """
+
+        if object_kind not in {"metric", "validity"}:
+            raise ValueError(f"Unsupported refresh object kind: {object_kind}")
+        details = {
+            "expected_factor_id": expected_factor_id,
+            "object_kind": object_kind,
+            "database_row": dict(database_row),
+        }
+        if "factor_id" not in database_row or database_row.get("factor_id") is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"database refresh {object_kind} row is missing factor_id",
+                details,
+            )
+        database_factor_id = cls._positive_int_or_failure(
+            database_row.get("factor_id"),
+            FlowOutcome.FAIL_CONTRACT,
+            f"database refresh {object_kind} factor_id is invalid",
+            details,
+        )
+        if database_factor_id != expected_factor_id:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"database refresh {object_kind} belongs to another factor",
+                details,
+            )
+        if "is_sub_factor_id" not in database_row or database_row.get("is_sub_factor_id") is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"database refresh {object_kind} row is missing is_sub_factor_id",
+                details,
+            )
+        if not cls._same_scalar(database_row.get("is_sub_factor_id"), True):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"database refresh {object_kind} row is not marked as a sub-factor",
+                details,
+            )
 
     @staticmethod
     def _has_identity_value(data: dict[str, Any], fields: tuple[str, ...]) -> bool:
@@ -3482,6 +7525,73 @@ class FactorComboService:
         """
 
         return FactorComboService._has_identity_value(data, fields)
+
+    @classmethod
+    def _require_refresh_object_identity(cls, value: dict[str, Any], object_kind: str) -> None:
+        """要求刷新指标或有效性对象具备可唯一定位数据库行的身份。
+
+        参数 ``value`` 是详情接口返回的指标/有效性对象，``object_kind`` 只能是 ``metric`` 或 ``validity``。不返回
+        值；对象必须提供主键/汇总 ID，或提供 Run 加窗口维度的组合身份。只有数值字段（例如单独的 ``mean_ic``）
+        不足以证明它对应哪一条数据库记录，遇到这种响应直接抛出 ``FAIL_CONTRACT``。
+        """
+
+        if object_kind == "metric":
+            identity_fields = ("summary_id", "id")
+            has_primary_identity = any(
+                field_name in value and value[field_name] is not None
+                for field_name in identity_fields
+            )
+            has_run_dimension_identity = (
+                "run_id" in value
+                and value.get("run_id") is not None
+                and "ic_scope" in value
+                and value.get("ic_scope") is not None
+                and "window_scope" in value
+                and value.get("window_scope") is not None
+                and any(
+                    field_name in value and value[field_name] is not None
+                    for field_name in (
+                        "universe_key",
+                        "symbol",
+                        "period_start",
+                        "period_end",
+                        "metric_window_bars",
+                        "metric_window_days",
+                    )
+                )
+            )
+        elif object_kind == "validity":
+            has_primary_identity = "id" in value and value.get("id") is not None
+            has_run_dimension_identity = (
+                "run_id" in value
+                and value.get("run_id") is not None
+                and any(
+                    field_name in value and value[field_name] is not None
+                    for field_name in (
+                        "time_series_summary_id",
+                        "cross_sectional_summary_id",
+                        "period_start",
+                        "period_end",
+                    )
+                )
+            )
+        else:
+            raise ValueError(f"Unsupported refresh object kind: {object_kind}")
+
+        null_identity_fields = identity_fields if object_kind == "metric" else ("id", "run_id")
+        for field_name in null_identity_fields:
+            if field_name in value and value[field_name] is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"API refresh {object_kind} {field_name} must not be null when returned",
+                    value,
+                )
+        if not has_primary_identity and not has_run_dimension_identity:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"API refresh {object_kind} has no strong database identity",
+                value,
+            )
 
     @classmethod
     def _extract_api_metric_objects(cls, data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -3531,7 +7641,13 @@ class FactorComboService:
         抛出 ``FAIL_CONTRACT``。字段缺省时保留对旧详情接口的兼容性。
         """
 
-        if api_object.get("factor_id") is not None:
+        if "factor_id" in api_object and api_object.get("factor_id") is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"API refresh {object_kind} factor_id must not be null when returned",
+                {"expected_factor_id": expected_factor_id, "api": api_object},
+            )
+        if "factor_id" in api_object:
             api_factor_id = cls._positive_int_or_failure(
                 api_object.get("factor_id"),
                 FlowOutcome.FAIL_CONTRACT,
@@ -3544,7 +7660,13 @@ class FactorComboService:
                     f"API refresh {object_kind} belongs to another factor",
                     {"expected_factor_id": expected_factor_id, "api": api_object},
                 )
-        if api_object.get("is_sub_factor_id") is not None and not cls._same_scalar(
+        if "is_sub_factor_id" in api_object and api_object.get("is_sub_factor_id") is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"API refresh {object_kind} is_sub_factor_id must not be null when returned",
+                {"expected_factor_id": expected_factor_id, "api": api_object},
+            )
+        if "is_sub_factor_id" in api_object and not cls._same_scalar(
             api_object.get("is_sub_factor_id"), True
         ):
             raise FactorComboFlowError(
@@ -3567,9 +7689,16 @@ class FactorComboService:
         """
 
         candidates = list(database_metrics)
-        for api_key, db_keys in (("summary_id", ("summary_id", "id")), ("id", ("summary_id", "id"))):
-            if api_key not in api_metric or api_metric[api_key] is None:
+        # ``summary_id`` 与普通 ``id`` 即使当前数值相同，也代表不同的契约语义，不能交叉兜底。
+        for api_key, db_key in (("summary_id", "summary_id"), ("id", "id")):
+            if api_key not in api_metric:
                 continue
+            if api_metric[api_key] is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"API refresh metric {api_key} must not be null when returned",
+                    api_metric,
+                )
             expected = cls._positive_int_or_failure(
                 api_metric[api_key],
                 FlowOutcome.FAIL_CONTRACT,
@@ -3579,9 +7708,15 @@ class FactorComboService:
             candidates = [
                 row
                 for row in candidates
-                if any(cls._safe_int(row.get(key)) == expected for key in db_keys)
+                if cls._safe_int(row.get(db_key)) == expected
             ]
-        if "run_id" in api_metric and api_metric["run_id"] is not None:
+        if "run_id" in api_metric and api_metric["run_id"] is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "API refresh metric run_id must not be null when returned",
+                api_metric,
+            )
+        if "run_id" in api_metric:
             run_id = cls._required_non_empty_string_or_failure(
                 api_metric["run_id"],
                 FlowOutcome.FAIL_CONTRACT,
@@ -3589,6 +7724,20 @@ class FactorComboService:
                 api_metric,
             )
             candidates = [row for row in candidates if str(row.get("run_id", "")).strip() == run_id]
+        for key in ("factor_id", "is_sub_factor_id"):
+            if key not in api_metric:
+                continue
+            if api_metric[key] is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"API refresh metric {key} must not be null when returned",
+                    api_metric,
+                )
+            candidates = [
+                row
+                for row in candidates
+                if key in row and cls._same_identity_scalar(key, row.get(key), api_metric[key])
+            ]
         for key in (
             "ic_scope",
             "calculation_mode",
@@ -3606,7 +7755,7 @@ class FactorComboService:
             "period_start",
             "period_end",
         ):
-            if key not in api_metric or (api_metric[key] is None and key not in _DATETIME_IDENTITY_FIELDS):
+            if key not in api_metric:
                 continue
             expected_value = api_metric[key]
             candidates = [
@@ -3629,7 +7778,13 @@ class FactorComboService:
         """
 
         candidates = list(database_validity)
-        if "id" in api_validity and api_validity["id"] is not None:
+        if "id" in api_validity and api_validity["id"] is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "API refresh validity id must not be null when returned",
+                api_validity,
+            )
+        if "id" in api_validity:
             expected = cls._positive_int_or_failure(
                 api_validity["id"],
                 FlowOutcome.FAIL_CONTRACT,
@@ -3637,7 +7792,13 @@ class FactorComboService:
                 api_validity,
             )
             candidates = [row for row in candidates if cls._safe_int(row.get("id")) == expected]
-        if "run_id" in api_validity and api_validity["run_id"] is not None:
+        if "run_id" in api_validity and api_validity["run_id"] is None:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "API refresh validity run_id must not be null when returned",
+                api_validity,
+            )
+        if "run_id" in api_validity:
             expected_run_id = cls._required_non_empty_string_or_failure(
                 api_validity["run_id"],
                 FlowOutcome.FAIL_CONTRACT,
@@ -3645,6 +7806,20 @@ class FactorComboService:
                 api_validity,
             )
             candidates = [row for row in candidates if str(row.get("run_id", "")).strip() == expected_run_id]
+        for key in ("factor_id", "is_sub_factor_id"):
+            if key not in api_validity:
+                continue
+            if api_validity[key] is None:
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"API refresh validity {key} must not be null when returned",
+                    api_validity,
+                )
+            candidates = [
+                row
+                for row in candidates
+                if key in row and cls._same_identity_scalar(key, row.get(key), api_validity[key])
+            ]
         for key in (
             "universe_key",
             "factor_bar_interval",
@@ -3659,8 +7834,15 @@ class FactorComboService:
             "period_start",
             "period_end",
         ):
-            if key not in api_validity or (api_validity[key] is None and key not in _DATETIME_IDENTITY_FIELDS):
+            if key not in api_validity:
                 continue
+            if key.endswith("_summary_id") or key.endswith("_summary_run_id"):
+                if api_validity[key] is None:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"API refresh validity {key} must not be null when returned",
+                        api_validity,
+                    )
             expected_value = api_validity[key]
             candidates = [
                 row
@@ -3681,13 +7863,14 @@ class FactorComboService:
         for api_field, db_fields in _API_TO_DB_METRIC_FIELDS.items():
             if api_field not in api_metric:
                 continue
-            db_field = next((field for field in db_fields if field in db_metric), None)
-            if db_field is None:
+            present_fields = [field for field in db_fields if field in db_metric]
+            if not present_fields:
                 raise FactorComboFlowError(
                     FlowOutcome.FAIL_CONTRACT,
                     f"DB refresh metric is missing field required by API: {api_field}",
                     {"field": api_field, "db_fields": db_fields, "api_metric": api_metric, "db_metric": db_metric},
                 )
+            db_field = present_fields[0]
             db_value = db_metric[db_field]
             if not cls._same_identity_scalar(api_field, api_metric[api_field], db_value):
                 raise FactorComboFlowError(
@@ -3695,6 +7878,17 @@ class FactorComboService:
                     f"API and DB refresh metric differ at {api_field}",
                     {"field": api_field, "api": api_metric[api_field], "db": db_value, "api_metric": api_metric},
                 )
+            for alias_field in present_fields[1:]:
+                if not cls._same_identity_scalar(api_field, db_value, db_metric[alias_field]):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"DB refresh metric alias columns conflict for {api_field}",
+                        {
+                            "field": api_field,
+                            "database_fields": present_fields,
+                            "database_values": {field: db_metric[field] for field in present_fields},
+                        },
+                    )
             compared.append(api_field)
         return compared
 
@@ -3929,6 +8123,76 @@ class FactorComboService:
 
         visit(refresh_data.get("results"))
         return tuple(found)
+
+    @staticmethod
+    def _extract_refresh_run_contexts(refresh_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """提取 Performance Refresh 结果中明确返回的 Run 配置上下文。
+
+        参数 ``refresh_data`` 是刷新任务完成响应的 data 对象。返回按出现顺序收集的 Run 上下文；只读取结果对象中
+        与 Run 关联的字段，不把刷新任务本身的 ``task_id`` 当作指标 Run。接口只返回 Run ID 时，返回对象也只包含
+        ``run_id``，由数据库主表继续完成配置核验。
+        """
+
+        run_keys = (
+            "run_id",
+            "ic_run_id",
+            "factor_ic_run_id",
+            "summary_run_id",
+            "time_series_run_id",
+            "cross_sectional_run_id",
+        )
+        context_fields = (
+            "status",
+            "run_status",
+            "factor_id",
+            "is_sub_factor_id",
+            "interval_value",
+            "interval",
+            "factor_bar_interval",
+            "forward_return_horizon",
+            "forward_return_bars",
+            "universe_key",
+            "config_hash",
+            "config_json",
+            "method",
+            "weighting_method",
+            "data_start",
+            "data_end",
+        )
+        contexts: list[dict[str, Any]] = []
+
+        def visit(value: Any) -> None:
+            """递归遍历刷新结果对象。"""
+
+            if isinstance(value, dict):
+                run_id: str | None = None
+                for key in run_keys:
+                    candidate = value.get(key)
+                    if isinstance(candidate, (str, int)) and not isinstance(candidate, bool) and str(candidate).strip():
+                        run_id = str(candidate).strip()
+                        break
+                if run_id is not None:
+                    context: dict[str, Any] = {"run_id": run_id}
+                    for field_name in context_fields:
+                        if field_name in value:
+                            context[field_name] = value[field_name]
+                    # 统一常见别名，后续只按标准字段对账。
+                    if "run_status" in context and "status" not in context:
+                        context["status"] = context["run_status"]
+                    if "interval" in context and "interval_value" not in context:
+                        context["interval_value"] = context["interval"]
+                    if "factor_bar_interval" in context and "interval_value" not in context:
+                        context["interval_value"] = context["factor_bar_interval"]
+                    contexts.append(context)
+                for child in value.values():
+                    if isinstance(child, (dict, list)):
+                        visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(refresh_data.get("results"))
+        return contexts
 
     def verify_registered_sub_factor(
         self,
@@ -4243,6 +8507,7 @@ class FactorComboService:
                         round_record,
                     )
                 registration = self.register_real_result_and_refresh(result)
+                self.scope.release_form(form.form_id)
                 round_record["registration"] = {
                     "sub_factor_id": registration.first_registration.get("sub_factor_id"),
                     "registration_id": registration.first_registration.get("registration_id"),
@@ -4277,6 +8542,7 @@ class FactorComboService:
                 continue
 
             rounds.append(round_record)
+            self.scope.release_form(form.form_id)
             return RealResearchFlowResult(
                 outcome=FlowOutcome.PASS_INVALID,
                 agent=agent,
@@ -4648,7 +8914,7 @@ class FactorComboService:
             cls._validate_nested_identity(
                 registration,
                 "combo_id",
-                identity["combo_id"],
+                identity["factor_combo_version_id"],
                 f"{context} registration.combo_id",
                 data,
             )
@@ -4769,6 +9035,143 @@ class FactorComboService:
         return value
 
     @classmethod
+    def _validate_real_report(cls, report: dict[str, Any], details: Any) -> None:
+        """校验真实组合报告中会被后续登记使用的结构和字段类型。
+
+        参数 ``report`` 是 Pipeline 返回的 ``factor_combo_report``，``details`` 是完整结果响应诊断对象。不返回值；
+        报告名必须是非空字符串，明确返回的报告编号、公式、组件、方向、权重和指标容器必须具有可登记的类型。
+        未在响应中出现的可选字段不会被强制补造或猜测。
+        """
+
+        cls._required_non_empty_string_or_failure(
+            report.get("factor_name"),
+            FlowOutcome.FAIL_CONTRACT,
+            "factor_combo_report.factor_name is missing or blank",
+            details,
+        )
+        for field_name in ("report_no", "formula"):
+            if field_name in report:
+                cls._required_non_empty_string_or_failure(
+                    report.get(field_name),
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor_combo_report.{field_name} must be a non-empty string when present",
+                    details,
+                )
+
+        combo = report.get("combo")
+        if combo is not None:
+            if not isinstance(combo, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_combo_report.combo must be an object when present",
+                    details,
+                )
+            if "formula" in combo:
+                cls._required_non_empty_string_or_failure(
+                    combo.get("formula"),
+                    FlowOutcome.FAIL_CONTRACT,
+                    "factor_combo_report.combo.formula must be a non-empty string when present",
+                    details,
+                )
+            combo_components = combo.get("components")
+            if combo_components is not None:
+                cls._validate_real_report_components(combo_components, details, "factor_combo_report.combo.components")
+
+        if "components" in report:
+            cls._validate_real_report_components(report.get("components"), details, "factor_combo_report.components")
+        for field_name in ("performance", "metrics"):
+            if field_name in report and not isinstance(report.get(field_name), Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"factor_combo_report.{field_name} must be an object when present",
+                    details,
+                )
+
+    @classmethod
+    def _validate_real_report_components(cls, components: Any, details: Any, field_name: str) -> None:
+        """校验组合报告组件数组及其明确返回的身份、方向和权重。
+
+        参数 ``components`` 是报告中的组件值，``details`` 是完整结果诊断对象，``field_name`` 是组件路径。不返回值；
+        组件必须是非空数组且每项为对象，显式 ID 必须为正整数，方向只能为 -1/1，权重必须是非布尔数字。
+        """
+
+        if not isinstance(components, list) or not components:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{field_name} must be a non-empty array",
+                details,
+            )
+        for index, component in enumerate(components):
+            if not isinstance(component, Mapping):
+                raise FactorComboFlowError(
+                    FlowOutcome.FAIL_CONTRACT,
+                    f"{field_name}[{index}] must be an object",
+                    details,
+                )
+            for identity_field in (
+                "factor_id",
+                "sub_factor_id",
+                "component_factor_id",
+                "component_sub_factor_id",
+            ):
+                if identity_field in component:
+                    cls._positive_int_or_failure(
+                        component.get(identity_field),
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].{identity_field} must be a positive integer",
+                        details,
+                    )
+            if "direction" in component:
+                raw_direction = component.get("direction")
+                if isinstance(raw_direction, bool):
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].direction must be -1 or 1",
+                        details,
+                    )
+                if isinstance(raw_direction, Decimal):
+                    if raw_direction != raw_direction.to_integral_value():
+                        raise FactorComboFlowError(
+                            FlowOutcome.FAIL_CONTRACT,
+                            f"{field_name}[{index}].direction must be -1 or 1",
+                            details,
+                        )
+                elif isinstance(raw_direction, str) and re.fullmatch(r"[+-]?[0-9]+", raw_direction.strip()) is None:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].direction must be -1 or 1",
+                        details,
+                    )
+                try:
+                    direction = int(raw_direction)
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].direction must be -1 or 1",
+                        details,
+                    ) from error
+                if isinstance(raw_direction, float) and not raw_direction.is_integer():
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].direction must be -1 or 1",
+                        details,
+                    )
+                if direction not in {-1, 1}:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].direction must be -1 or 1",
+                        details,
+                    )
+            if "weight" in component:
+                weight = component.get("weight")
+                if isinstance(weight, bool) or cls._coerce_decimal(weight) is None:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"{field_name}[{index}].weight must be numeric",
+                        details,
+                    )
+
+    @classmethod
     def _validate_real_review(cls, review: dict[str, Any], details: Any) -> None:
         """校验真实组合结果的评审决策字段，不把缺失字段当成无效业务结果。
 
@@ -4776,18 +9179,24 @@ class FactorComboService:
         不返回值；``experiment_valid``、``registration_ready`` 或搜索继续标志类型错误时抛出契约异常。
         """
 
-        cls._required_boolean_or_failure(
+        experiment_valid = cls._required_boolean_or_failure(
             review.get("experiment_valid"),
             FlowOutcome.FAIL_CONTRACT,
             "factor_combo_review.experiment_valid is missing or not boolean",
             details,
         )
-        cls._required_boolean_or_failure(
+        registration_ready = cls._required_boolean_or_failure(
             review.get("registration_ready"),
             FlowOutcome.FAIL_CONTRACT,
             "factor_combo_review.registration_ready is missing or not boolean",
             details,
         )
+        if registration_ready and not experiment_valid:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                "factor_combo_review.registration_ready cannot be true when experiment_valid is false",
+                details,
+            )
         search = review.get("search")
         if search is not None and not isinstance(search, dict):
             raise FactorComboFlowError(
@@ -4825,6 +9234,27 @@ class FactorComboService:
                     f"factor_validity_status.{field_name} must be boolean or null",
                     details,
                 )
+        for field_name in (
+            "overall_score",
+            "time_series_score",
+            "cross_sectional_score",
+            "validity_threshold",
+        ):
+            if field_name in validity and validity[field_name] is not None:
+                if isinstance(validity[field_name], bool) or cls._coerce_decimal(validity[field_name]) is None:
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"factor_validity_status.{field_name} must be numeric or null",
+                        details,
+                    )
+        for field_name in ("overall_status", "time_series_status", "cross_sectional_status"):
+            if field_name in validity and validity[field_name] is not None:
+                if not isinstance(validity[field_name], str) or not validity[field_name].strip():
+                    raise FactorComboFlowError(
+                        FlowOutcome.FAIL_CONTRACT,
+                        f"factor_validity_status.{field_name} must be a non-empty string or null",
+                        details,
+                    )
 
     @staticmethod
     def _validate_completed_refresh(data: dict[str, Any], expected_factor_name: str) -> None:
@@ -4978,17 +9408,6 @@ class FactorComboService:
                 return True
         return False
 
-    def cleanup(self) -> None:
-        """按配置清理本次测试创建且未被真实 Run 使用的数据。
-
-        不接收参数。
-        不返回值；未开启 ``cleanup_test_data`` 时保留测试数据供排查，受保护的真实 Run 表单始终保留。
-        """
-
-        if not self._settings.cleanup_test_data:
-            return
-        self._repository.clean_test_graph(self.scope.cleanable_form_ids(), self.scope.cleanable_session_ids())
-
     def _worker_form_from_claim(self, submitted: SubmittedForm, data: dict[str, Any]) -> WorkerForm:
         """把兼容认领响应转换为 Worker 表单上下文。
 
@@ -5095,6 +9514,99 @@ class FactorComboService:
         if any(marker in normalized for marker in markers):
             return True
         return any(marker.replace(" ", "") in compact for marker in ("alreadyregistered", "registrationcompleted"))
+
+    @staticmethod
+    def _require_response_fields(
+        data: Mapping[str, Any],
+        field_names: Iterable[str],
+        resource_name: str,
+    ) -> None:
+        """要求接口响应明确包含文档声明的字段。
+
+        参数 ``data`` 是接口成功响应的 ``data`` 对象，``field_names`` 是该响应契约的必填字段，``resource_name`` 是
+        错误上下文。不返回值；只要字段缺失就抛出 ``FactorComboFlowError(FAIL_CONTRACT)``，不会用路径参数、请求参数或
+        默认值替代缺失响应字段。
+        """
+
+        if not isinstance(data, Mapping):
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} response data must be an object",
+                data,
+            )
+        missing = [field_name for field_name in field_names if field_name not in data]
+        if missing:
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} response is missing required fields: {', '.join(missing)}",
+                dict(data),
+            )
+
+    @staticmethod
+    def _required_response_int(
+        data: Mapping[str, Any],
+        field_name: str,
+        resource_name: str,
+        *,
+        minimum: int = 1,
+    ) -> int:
+        """读取接口响应中的严格整数值。
+
+        参数 ``data`` 是响应数据对象，``field_name`` 是字段名，``resource_name`` 是错误上下文，``minimum`` 是允许的
+        最小值。返回 Python ``int``；布尔值、字符串、浮点数、小数和低于下限的值均抛出契约异常，避免响应类型错误被
+        隐式转换后掩盖。
+        """
+
+        value = data.get(field_name)
+        if type(value) is not int or value < minimum:  # noqa: E721 - 这里必须区分 bool 和 int
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} response field {field_name} must be an integer >= {minimum}",
+                dict(data),
+            )
+        return value
+
+    @staticmethod
+    def _required_response_string(
+        data: Mapping[str, Any],
+        field_name: str,
+        resource_name: str,
+    ) -> str:
+        """读取接口响应中的严格非空字符串。
+
+        参数 ``data`` 是响应数据对象，``field_name`` 是字段名，``resource_name`` 是错误上下文。返回去除首尾空白的
+        字符串；缺失、null、数字或空字符串均抛出 ``FactorComboFlowError(FAIL_CONTRACT)``，不把其他类型强转为字符串。
+        """
+
+        value = data.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} response field {field_name} must be a non-empty string",
+                dict(data),
+            )
+        return value.strip()
+
+    @staticmethod
+    def _required_response_bool(
+        data: Mapping[str, Any],
+        field_name: str,
+        resource_name: str,
+    ) -> bool:
+        """读取接口响应中的严格 JSON 布尔值。
+
+        参数 ``data`` 是响应数据对象，``field_name`` 是字段名，``resource_name`` 是错误上下文。返回 ``True`` 或
+        ``False``；缺失、数字、字符串和 null 均抛出 ``FactorComboFlowError(FAIL_CONTRACT)``。
+        """
+
+        value = data.get(field_name)
+        if type(value) is not bool:  # noqa: E721 - 必须拒绝 0/1 和字符串布尔值
+            raise FactorComboFlowError(
+                FlowOutcome.FAIL_CONTRACT,
+                f"{resource_name} response field {field_name} must be a boolean",
+                dict(data),
+            )
+        return value
 
     @staticmethod
     def _required_int(data: dict[str, Any], field_name: str, resource_name: str) -> int:

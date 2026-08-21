@@ -21,7 +21,7 @@ class TestRegisterFactorComboReportAPI:
         factor_combo_worker_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """登记有效实验报告，并核对子因子、详情、有效性、登记记录和组合状态。"""
+        """登记完成实验报告，并核对子因子、详情、初始有效性、登记记录和组合状态。"""
 
         experiment = factor_combo_worker_service.create_completed_experiment()
         payload = factor_combo_worker_service.build_register_payload(experiment)
@@ -51,13 +51,22 @@ class TestRegisterFactorComboReportAPI:
         validity = factor_combo_repository.get_registered_validity_status(validity_status_id)
         registration = factor_combo_repository.get_registration(experiment.version.combo_id)
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
-        assert all(item is not None for item in (sub_factor, factor_detail, validity, registration, version)), {
+        components = factor_combo_repository.get_components(experiment.version.version_id)
+        form = factor_combo_repository.get_form(experiment.version.worker_form.submitted.form_id)
+        stored_experiment = factor_combo_repository.get_experiment(experiment.experiment_info_id)
+        parent_relation_count = factor_combo_repository.count_parent_relations_for_sub_factor(sub_factor_id)
+        assert all(
+            item is not None
+            for item in (sub_factor, factor_detail, validity, registration, version, form, stored_experiment)
+        ), {
             "api": body,
             "sub_factor": sub_factor,
             "factor_detail": factor_detail,
             "validity": validity,
             "registration": registration,
             "version": version,
+            "form": form,
+            "experiment": stored_experiment,
         }
         assert int(sub_factor["id"]) == sub_factor_id, {"api": body, "db": sub_factor}
         assert sub_factor["sub_factor_name"] == payload["report"]["factor_name"], {"api": body, "db": sub_factor}
@@ -66,12 +75,12 @@ class TestRegisterFactorComboReportAPI:
         assert bool(factor_detail["is_sub_factor_id"]) is True, {"api": body, "db": factor_detail}
         assert int(factor_detail["status"]) == 1, {"api": body, "db": factor_detail}
         assert int(validity["factor_id"]) == sub_factor_id, {"api": body, "db": validity}
-        assert validity["time_series_status"] == "valid", {"api": body, "db": validity}
-        assert bool(validity["time_series_is_valid"]) is True, {"api": body, "db": validity}
+        assert validity["time_series_status"] == "unknown", {"api": body, "db": validity}
+        assert validity["time_series_is_valid"] is None, {"api": body, "db": validity}
         assert validity["cross_sectional_status"] == "unknown", {"api": body, "db": validity}
         assert validity["cross_sectional_is_valid"] is None, {"api": body, "db": validity}
-        assert validity["overall_status"] == "valid", {"api": body, "db": validity}
-        assert bool(validity["overall_is_valid"]) is True, {"api": body, "db": validity}
+        assert validity["overall_status"] == "unknown", {"api": body, "db": validity}
+        assert validity["overall_is_valid"] is None, {"api": body, "db": validity}
         assert int(registration["id"]) == registration_id, {"api": body, "db": registration}
         assert int(registration["sub_factor_id"]) == sub_factor_id, {"api": body, "db": registration}
         assert registration["factor_id"] is None, {"api": body, "db": registration}
@@ -88,6 +97,18 @@ class TestRegisterFactorComboReportAPI:
         assert int(data["factor_detail"]["id"]) == factor_detail_id, body
         assert int(data["factor_validity_status"]["id"]) == validity_status_id, body
         assert int(data["registration"]["id"]) == registration_id, body
+        factor_combo_worker_service.validate_registration_persistence(
+            data,
+            payload,
+            version,
+            sub_factor,
+            factor_detail,
+            validity,
+            registration,
+            form_row=form,
+            experiment_row=stored_experiment,
+            parent_relation_count=parent_relation_count,
+        )
 
     def test_identical_registration_replay_returns_same_resources(
         self,
@@ -158,9 +179,10 @@ class TestRegisterFactorComboReportAPI:
             "api": body,
             "db": sub_factor,
         }
-        assert float(validity["overall_score"]) == pytest.approx(
-            float(payload["factor_validity_status"]["overall_score"])
-        ), {"api": body, "db": validity}
+        assert validity["overall_score"] == payload["factor_validity_status"]["overall_score"], {
+            "api": body,
+            "db": validity,
+        }
 
     def test_invalid_experiment_cannot_be_registered(
         self,
@@ -228,10 +250,12 @@ class TestRegisterFactorComboReportAPI:
     ) -> None:
         """使用数据库中已有子因子名称登记，并验证名称冲突不会复用或覆盖原实体。"""
 
-        existing_name = factor_combo_repository.find_existing_sub_factor_name()
-        if existing_name is None:
-            pytest.skip("测试数据库不存在可用于名称冲突校验的子因子")
         experiment = factor_combo_worker_service.create_completed_experiment()
+        # 成功创建实验已经证明测试库存在可用子因子；名称准备失败应让用例失败，而不是把计划场景跳过。
+        existing_name = factor_combo_repository.find_existing_sub_factor_name()
+        assert existing_name is not None and existing_name.strip(), (
+            "名称冲突场景的前置数据准备失败：实验已创建，但 sub_factors 没有可用名称"
+        )
         payload = factor_combo_worker_service.build_register_payload(experiment)
         payload["report"]["factor_name"] = existing_name
 

@@ -63,6 +63,14 @@ class TestWriteFactorComboExperimentAPI:
         assert int(form["factor_combo_id"]) == version.version_id, {"api": body, "db": form}
         assert int(form["factor_combo_experiment_info_id"]) == experiment_info_id, {"api": body, "db": form}
         assert int(stored_version["experiment_id"]) == experiment_info_id, {"api": body, "db": stored_version}
+        factor_combo_worker_service.validate_experiment_persistence(
+            data,
+            payload,
+            experiment,
+            form,
+            stored_version,
+            expected_experiment_id=worker_form.experiment_id,
+        )
 
     def test_identical_experiment_replay_returns_same_record(
         self,
@@ -317,12 +325,12 @@ class TestWriteFactorComboExperimentAPI:
         assert factor_combo_repository.get_experiment_by_external_id(second_worker.experiment_id) is None, body
         assert factor_combo_repository.count_experiments_by_artifact_uri(first_worker.artifact_uri) == 1, body
 
-    def test_artifact_sha256_cannot_be_reused_by_another_experiment(
+    def test_unreadable_artifact_is_rejected_without_partial_write(
         self,
         factor_combo_worker_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """使用不同 URI 复用已有实验的 SHA256，并验证重复内容也被拒绝且不新增实验。"""
+        """使用不可读取的 Artifact URI，并验证服务在写入实验前拒绝且不产生部分记录。"""
 
         first_worker = factor_combo_worker_service.create_worker_form()
         second_worker = factor_combo_worker_service.create_worker_form()
@@ -339,8 +347,9 @@ class TestWriteFactorComboExperimentAPI:
         second_body = second_response.json()
 
         assert first_response.status_code == 201, first_body
-        assert second_response.status_code == 409, second_body
+        assert second_response.status_code == 422, second_body
         assert second_body.get("success") is False, second_body
+        assert "artifact" in str(second_body.get("error", "")).lower(), second_body
         assert factor_combo_repository.get_experiment_by_external_id(second_worker.experiment_id) is None, second_body
         assert factor_combo_repository.count_experiments_by_artifact_hash(first_worker.artifact_sha256) == 1, {
             "first": first_body,

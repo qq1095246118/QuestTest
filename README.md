@@ -48,7 +48,7 @@ export AUTOMATION_DB_USERNAME='automation_user'
 export AUTOMATION_DB_PASSWORD='replace-with-secret'
 ```
 
-真实密码、Token 和生产凭据不得写入 YAML、JSON、Python 代码或版本库。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
+用户明确提供的测试环境密码、Token 和地址可以写入本地 `config/test.yaml`；生产凭据不得写入任何配置。包含真实凭据的测试配置不得提交到版本库。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
 
 运行真实用例时，框架会分别使用有权限和无权限账号调用 `POST /auth/login` 获取 JWT，再通过 `GET /me` 校验账号身份。JWT 只保存在当前 pytest 进程内；正常业务响应为 `401` 时不会自动重新登录。`AUTOMATION_API_AUTH_TOKEN` 仅保留为有权限账号的临时调试回退，不能替代无权限账号。
 
@@ -73,9 +73,9 @@ export AUTOMATION_FACTOR_COMBO_WORKER_CONTRACTS='true'
 .venv/bin/python -m pytest tests/cases/factor_combo -v --live --env test
 ```
 
-`AUTOMATION_FACTOR_COMBO_CLEANUP_TEST_DATA=true` 会在用例结束后清理当前用例创建且未被真实 Pipeline 使用的数据；默认保留数据用于排查。真实 Agent Run 可能仍被外部任务占用，因此框架会保护其表单，不做自动清理。
+`AUTOMATION_FACTOR_COMBO_CLEANUP_TEST_DATA=true` 会由 pytest Fixture 在用例结束时清理当前用例创建且已进入安全终态的数据，默认值为 `true` 以保持测试隔离；排查问题时可显式设为 `false` 保留数据。Fixture 传递会话到表单的归属图，Repository 会复核归属；同一会话仍有其他表单时不会删除会话。清理前如果发现生成子因子、实验或因子池被 Scope 外记录引用，或者版本身份不完整，会保守地保留整组数据，避免误删共享资源。因子池检查包括其他组合版本复用同一 `pool_id`、池成员属于其他表单或没有表单归属，以及其他表单指向该池。真实 Agent Run 启动后会暂时保护其表单；即使 Worker/直接 API 流程没有经过 Service，表单仍带有非终态或未知状态的 `pipeline_run_id` 时也继续保留，避免清理竞态。
 
-开启清理时，框架会同时删除测试子因子唯一拥有的 IC summary、IC 切片、因子值切片和刷新任务记录；`factor_ic_runs` 没有因子归属字段，可能被共享，因此只保留 Run 主记录，避免误删其他因子的计算批次。
+开启清理时，框架会在事务中先核对资源归属、版本身份、实验/指标/登记映射及外部引用；任何缺失或不一致都会保留整组数据。当前表结构以具体版本主键为准，同时兼容历史组合族 ID，但必须有版本哈希和直接指针作交叉确认。确认安全后，会删除测试子因子唯一拥有的 IC summary、IC 切片、因子值切片、刷新任务和 `factor_combo_metrics`，并先清空 `metrics_id`、`experiment_id`、`best_experiment_result_id` 等指针，再按外键依赖删除组合成分、因子池成员、生成子因子、实验、组合版本、因子池、表单和无剩余表单的会话消息。`factor_ic_runs` 没有因子归属字段，可能被共享，因此只保留 Run 主记录，避免误删其他因子的计算批次。
 
 真实端到端链路的完整通过条件是：Pipeline 返回结构化结果、登记成功、登记请求幂等重放复用同一个 `refresh_task_id`、Performance Refresh 的所有任务单元完成、登记后的子因子详情能查询到刷新数据，并且数据库的 `factor_ic_summary_metrics`/`factor_ic_runs`/`factor_validity_status` 能证明同一复合子因子的实际计算结果已经落库。summary 的中位数、标准差、正值率、IS/OOS、t-stat、分层、多空和评分等新版字段都可作为计算证据；有效性引用的 summary ID 必须能回指同一因子和 Run。API 明确返回的字段（包括 `null`）必须与 DB 一致，不能因 DB 为 `NULL` 而忽略。测试脚本不会手工调用刷新任务创建接口，也不会把登记时的占位有效性快照当成计算结果。独立接口用例严格验证首次登记 `201/false`；E2E 在首次响应丢失时可从同请求重试得到的 `200/true` 恢复，但仍会再次重放并核对相同资源与刷新任务。
 

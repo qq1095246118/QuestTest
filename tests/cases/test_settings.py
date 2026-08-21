@@ -37,6 +37,20 @@ class TestAuthenticationSettings:
 class TestFactorComboSettings:
     """验证组合因子真实流程的默认运行边界。"""
 
+    def test_cleanup_is_enabled_by_default_for_test_isolation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """未设置环境变量时默认开启测试数据清理。"""
+
+        monkeypatch.delenv("AUTOMATION_FACTOR_COMBO_CLEANUP_TEST_DATA", raising=False)
+        settings = SettingsLoader.load(
+            environment="test",
+            project_root=Path(__file__).resolve().parents[2],
+        )
+
+        assert settings.factor_combo.cleanup_test_data is True
+
     def test_default_research_round_limit_matches_current_e2e_flow(
         self,
         monkeypatch: pytest.MonkeyPatch,

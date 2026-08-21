@@ -19,7 +19,8 @@ from api.sub_factor_api import SubFactorAPI
 from config.settings import AccountCredentials, ApiSettings, Settings, SettingsLoader
 from db.client import DatabaseClient
 from db.factor_combo_repository import FactorComboRepository
-from service.factor_combo_service import FactorComboService, TestResourceScope
+from service.factor_combo_service import FactorComboService
+from tests.resource_scope import TestResourceScope
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -292,6 +293,22 @@ def _make_factor_combo_service(
     )
 
 
+def _cleanup_factor_combo_resources(
+    settings: Settings,
+    scope: TestResourceScope,
+    repository: FactorComboRepository,
+) -> None:
+    """在 pytest Fixture 生命周期结束时清理当前用例拥有的组合因子资源。
+
+    参数 ``settings`` 提供测试数据清理开关，``scope`` 是 Fixture 创建的资源归属记录，``repository`` 负责测试库事务和
+    实体删除。不返回值；未开启清理时保留数据，仓储发现异步任务未进入安全终态或数据库异常时继续抛出异常，不能静默放过。
+    """
+
+    if not settings.factor_combo.cleanup_test_data:
+        return
+    repository.clean_test_graph(scope.cleanable_resource_graph())
+
+
 @pytest.fixture
 def factor_combo_service(
     settings: Settings,
@@ -316,7 +333,7 @@ def factor_combo_service(
     try:
         yield service
     finally:
-        service.cleanup()
+        _cleanup_factor_combo_resources(settings, scope, factor_combo_repository)
 
 
 @pytest.fixture
@@ -411,7 +428,7 @@ def factor_combo_real_run_context(
         }
         yield context
     finally:
-        service.cleanup()
+        _cleanup_factor_combo_resources(settings, scope, factor_combo_repository)
 
 
 @pytest.fixture(scope="session")
@@ -480,7 +497,7 @@ def factor_combo_real_e2e_context(
             "flow": flow,
         }
     finally:
-        service.cleanup()
+        _cleanup_factor_combo_resources(settings, scope, factor_combo_repository)
 
 
 def _authenticate_account(

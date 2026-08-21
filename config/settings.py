@@ -264,7 +264,7 @@ class SettingsLoader:
                 worker_contracts_enabled=SettingsLoader._to_boolean(
                     factor_combo.get("worker_contracts_enabled", False)
                 ),
-                cleanup_test_data=SettingsLoader._to_boolean(factor_combo.get("cleanup_test_data", False)),
+                cleanup_test_data=SettingsLoader._to_boolean(factor_combo.get("cleanup_test_data", True)),
                 agent_base_url=SettingsLoader._optional_string(factor_combo.get("agent_base_url")),
                 refresh_poll_interval_seconds=float(factor_combo.get("refresh_poll_interval_seconds", 10)),
                 refresh_poll_timeout_seconds=float(factor_combo.get("refresh_poll_timeout_seconds", 10800)),

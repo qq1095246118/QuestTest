@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from service.factor_combo_service import FactorComboService, TestResourceScope as ResourceScope
+from service.factor_combo_service import FactorComboService
+from tests.resource_scope import TestResourceScope as ResourceScope
 
 
 def _service_for_payload() -> FactorComboService:
@@ -30,7 +31,25 @@ class TestFactorComboPayload:
 
         payload = _service_for_payload().build_form_payload(1, ["factor-a", "factor-b"])
 
+        assert payload["is_sub_factor"] == 1
         assert payload["method_groups"] == {"rule_methods": ["ic_weight"]}
+
+    def test_parent_factor_payload_uses_zero_type_flag(self) -> None:
+        """构造母因子表单时使用接口规定的 0 类型标识。"""
+
+        payload = _service_for_payload().build_form_payload(1, ["factor-a"], is_sub_factor=0)
+
+        assert payload["is_sub_factor"] == 0
+
+    def test_invalid_factor_type_flag_is_rejected_before_request(self) -> None:
+        """构造不支持的因子类型标识时直接失败，避免发送无效请求。"""
+
+        try:
+            _service_for_payload().build_form_payload(1, ["factor-a"], is_sub_factor=2)
+        except ValueError as error:
+            assert str(error) == "is_sub_factor must be 0 (parent factor) or 1 (sub-factor)"
+        else:
+            raise AssertionError("invalid is_sub_factor value should fail")
 
     def test_explicit_null_method_groups_is_preserved_as_json_null(self) -> None:
         """调用方显式传入 None 时保留 JSON null，不被替换成默认配置。"""

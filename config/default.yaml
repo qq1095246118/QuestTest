@@ -24,7 +24,7 @@ factor_combo:
   poll_timeout_seconds: 600
   max_research_rounds: 2
   worker_contracts_enabled: false
-  cleanup_test_data: false
+  cleanup_test_data: true
   refresh_poll_interval_seconds: 10
   refresh_poll_timeout_seconds: 10800
   max_refresh_polls: 1080
