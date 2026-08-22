@@ -217,7 +217,7 @@ def test_business_action_returns_expected_status():
 9. 登记重放的 `sub_factor_id`、`registration_id` 和业务 `combo_id` 必须分别与首次响应一致，并按正整数业务语义比较；登记接口返回“已完成”409 时只查询现有表单、版本和登记映射，不能再次登记或手工创建刷新任务。
 10. 真实 Run 的状态查询遇到网络异常、临时 HTTP 错误或轮询超时时，只能在原 `pipeline_run_id` 上有限重试并保留诊断；除非状态接口明确返回失败终态或 `recommended_action=retry_run`，否则不得设置 `force_fresh_pipeline_run=true`。强制新 Run 的 POST 请求不得启用底层自动重试。
 11. 独立接口用例中，全新组合版本的首次登记必须是 HTTP 201 且 `idempotent_replay=false`。真实 E2E 遇到首次响应丢失时，允许把同请求自动重试得到的 HTTP 200 且 `idempotent_replay=true` 作为恢复结果，但仍须再实际重放一次并复用同一个刷新任务。两条路径都必须校验版本、子因子、因子详情、有效性快照和登记标记的 ID/哈希关系；登记因子名必须与原 Pipeline 报告一致。登记后的子因子回查必须在明确指标容器中看到 IC、有效性或计算结果，普通报告元数据不能作为刷新证据。
-12. API/DB 对账以字段是否明确返回为边界：API 没有返回的字段不猜测；API 明确返回的字段包括显式 `null` 时，DB 必须存在对应列且值一致，不能因为 DB 值为 `NULL` 就跳过。JSON 布尔和 MySQL `tinyint(1)` 按业务布尔值比较，普通数值仍按 Decimal 容差比较。指标的 `summary_id`、`run_id`、范围和窗口身份必须同时满足；明确 ID/Run 命中多条 DB 记录时应判为契约失败，不能静默通过。仅旧离线替身提供聚合计数而没有 summary 明细时可保留兼容模式，真实 Repository 必须使用新版明细查询。
+12. API/DB 对账以字段是否明确返回为边界：API 没有返回的字段不猜测；API 明确返回的字段包括显式 `null` 时，DB 必须存在对应列且值一致，不能因为 DB 值为 `NULL` 就跳过。登记报告是唯一例外：`POST /factor-combo/reports/register` 会先标准化 `report.performance` 再计算哈希并持久化，允许删除值为 `null` 的可选指标；`ts_ic`、`return_rate`、`out_of_sample_icir`、`net_sharpe`、`max_drawdown` 和 `annual_turnover` 六个始终必填指标即使为 `null` 也必须保留。该例外不得扩展到有效性快照或其他请求、响应字段。JSON 布尔和 MySQL `tinyint(1)` 按业务布尔值比较，普通数值仍按 Decimal 容差比较。指标的 `summary_id`、`run_id`、范围和窗口身份必须同时满足；明确 ID/Run 命中多条 DB 记录时应判为契约失败，不能静默通过。仅旧离线替身提供聚合计数而没有 summary 明细时可保留兼容模式，真实 Repository 必须使用新版明细查询。
 
 接口契约测试可以直接调用 `api`，数据库访问测试可以直接调用 `db`，避免 Service 层把底层问题隐藏掉。
 
@@ -276,7 +276,7 @@ Repository 必须在事务中重新核对以下条件：
 
 - 目标表单的 `session_id` 必须与当前 Scope 的归属图一致；同一会话仍有未纳入本次清理的表单时，不删除该会话及其消息。
 - 表单存在非空且非终态或未知状态的 `pipeline_run_id` 时，保留整组资源；刷新任务存在空状态、未知状态或运行中状态时同样保留。网络异常、5xx、409 或未知异步状态不能被当成可清理状态。
-- 组合版本、实验、指标和登记映射必须同时具备可解析的具体主键/版本哈希，并且逐层指向本次目标版本。当前表结构文档把 `factor_combo_experiment_info.combo_id`、`factor_combo_metrics.combo_id` 和登记映射的 `combo_id` 定义为 `factor_combo.id`；项目仍兼容历史数据使用组合族 `combo_id` 的情况，但只有版本哈希与当前版本指针同时匹配时才可清理，无法确认具体版本时必须保留。
+- 组合版本、实验、指标和登记映射必须同时具备可解析的具体主键/版本哈希，并且逐层指向本次目标版本。最新版接口契约把 `factor_combo_experiment_info.combo_id` 和 `factor_combo_registered_factor.combo_id` 定义为业务 `factor_combo.combo_id`，登记记录还必须以 `combo_version_hash` 唯一定位具体版本；新版实验接口不再写 `factor_combo_metrics`。清理历史数据时，仅在实验直接指针、指标直接指针或登记版本哈希能够证明记录属于当前版本时，才兼容旧记录把 `factor_combo.id` 写入 `combo_id` 的情况；无法确认具体版本时必须保留。
 - 生成子因子的登记记录、`factor_sub_factor_relations`、`sub_factor_parent_relations`、组合成分、因子池成员、实验、版本、表单、反馈和指标不能被当前 Scope 外的记录引用。因子池还必须检查：`factor_combo.pool_id` 是否被其他组合版本复用、`factor_combo_pool_member.pool_id` 是否被其他表单或无归属成员引用、`factor_combo_form.factor_combo_pool_id` 是否被其他表单引用。`form_id IS NULL` 的反馈引用按外部引用处理。
 
 发现共享引用、记录缺失、身份字段缺失或身份不一致时，清理事务只读保留，不执行部分删除。安全清理时，先删除仍引用生成子因子的登记、组合成分、因子池成员、指标明细、刷新任务、详情和谱系关系，再删除生成子因子；随后清空表单、组合版本和实验之间的指针，清理 `factor_combo_metrics`，最后按外键依赖删除实验、组合版本、因子池、表单及无剩余表单的会话消息。`factor_ic_runs` 没有可证明的测试子因子归属字段，可能被多个因子共享，只保留其审计记录，不按测试流程删除。

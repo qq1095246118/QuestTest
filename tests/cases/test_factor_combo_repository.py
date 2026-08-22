@@ -237,6 +237,7 @@ class TestFactorComboRefreshEvidenceRepository:
             assert f"summary.{field_name}" in query, query
         assert parameters == (801,), parameters
 
+
     def test_validity_query_excludes_registration_snapshot_and_joins_summary_identity(self) -> None:
         """查询刷新有效性时只排除没有 summary 外键的初始快照，并读取时序/截面汇总身份。"""
 
@@ -282,9 +283,9 @@ class TestFactorComboRefreshEvidenceRepository:
                 [{"id": 41, "session_id": 7, "status": "completed", "pipeline_run_id": None, "factor_combo_experiment_info_id": 902}],
                 [{"id": 701, "combo_id": 801, "experiment_id": 901, "best_experiment_result_id": 902, "combo_version_hash": "hash-1"}],
                 [{"id": 601, "combo_id": 701, "component_factor_id": 11, "component_sub_factor_id": 100}],
-                [{"id": 901, "combo_id": 701, "metrics_id": 10001}, {"id": 902, "combo_id": 701, "metrics_id": None}],
-                [{"id": 10001, "experiment_info_id": 901, "combo_id": 701}],
-                [{"id": 501, "combo_id": 701, "combo_version_hash": "hash-1", "factor_id": None, "sub_factor_id": 1001, "version_id": 701}],
+                [{"id": 901, "combo_id": 801, "metrics_id": 10001}, {"id": 902, "combo_id": 801, "metrics_id": None}],
+                [{"id": 10001, "experiment_info_id": 901, "combo_id": 801}],
+                [{"id": 501, "combo_id": 801, "combo_version_hash": "hash-1", "factor_id": None, "sub_factor_id": 1001, "version_id": 701}],
                 None,
                 None,
             ]
@@ -318,8 +319,8 @@ class TestFactorComboRefreshEvidenceRepository:
         assert "factor_sub_factor_relations" in external_query, external_query
         assert "sub_factor_parent_relations" in external_query, external_query
 
-    def test_cleanup_accepts_legacy_family_combo_identity_with_exact_version_hash(self) -> None:
-        """历史记录使用组合族 ID 时，只要版本哈希和直接指针一致仍可安全清理。"""
+    def test_cleanup_accepts_historical_version_identity_with_exact_version_hash(self) -> None:
+        """历史记录使用版本主键时，只要版本哈希和直接指针一致仍可安全清理。"""
 
         transaction = StubCleanupTransaction(
             _cleanup_responses(
@@ -341,12 +342,12 @@ class TestFactorComboRefreshEvidenceRepository:
                         "combo_version_hash": "hash-1",
                     }
                 ],
-                experiment_rows=[{"id": 901, "combo_id": 801, "metrics_id": 10001}],
-                metric_rows=[{"id": 10001, "experiment_info_id": 901, "combo_id": 801}],
+                experiment_rows=[{"id": 901, "combo_id": 701, "metrics_id": 10001}],
+                metric_rows=[{"id": 10001, "experiment_info_id": 901, "combo_id": 701}],
                 registration_rows=[
                     {
                         "id": 501,
-                        "combo_id": 801,
+                        "combo_id": 701,
                         "combo_version_hash": "hash-1",
                         "factor_id": None,
                         "sub_factor_id": 1001,
@@ -447,6 +448,20 @@ class TestFactorComboRefreshEvidenceRepository:
         repository.clean_test_graph({7: {41}})
 
         assert transaction.executions == [], transaction.executions
+
+    def test_simulated_worker_run_does_not_block_cleanup(self) -> None:
+        """Worker 合约模拟 Run 不对应异步任务，不应因表单仍是 processing 而阻止清理。"""
+
+        rows = [
+            {
+                "id": 41,
+                "session_id": 7,
+                "status": "processing",
+                "pipeline_run_id": "legacy-simulated-form-41-initial",
+            }
+        ]
+
+        assert FactorComboRepository._has_active_pipeline_runs(rows) is False
 
     def test_cleanup_keeps_graph_when_sub_factor_has_external_registration(self) -> None:
         """生成子因子被其他登记记录引用时，清理不得删除共享实体。"""
@@ -768,6 +783,40 @@ class TestFactorComboRefreshEvidenceRepository:
         assert 88 in external_parameters, external_parameters
         assert 701 in external_parameters, external_parameters
         assert 41 in external_parameters, external_parameters
+
+
+class TestFactorComboRegistrationRepository:
+    """验证登记记录按业务组合身份和具体版本哈希关联。"""
+
+    def test_registration_query_joins_business_combo_id_and_version_hash(self) -> None:
+        """登记表 combo_id 应关联版本业务 ID，并由版本主键和哈希进一步限定唯一版本。"""
+
+        version_hash = "A" * 64
+        expected = {
+            "id": 501,
+            "combo_id": 801,
+            "combo_version_hash": version_hash.lower(),
+            "version_id": 701,
+            "version_business_id": 801,
+            "version_combo_version_hash": version_hash.lower(),
+        }
+        client = StubDatabaseClient([[expected]])
+        repository = FactorComboRepository(client, "test")  # type: ignore[arg-type]
+
+        registration = repository.get_registration(
+            801,
+            version_id=701,
+            combo_version_hash=version_hash,
+        )
+
+        assert registration == expected, registration
+        query, parameters = client.queries[0]
+        assert "registered.combo_id = version.combo_id" in query, query
+        assert "registered.combo_id = version.id" not in query, query
+        assert "registered.combo_version_hash = version.combo_version_hash" in query, query
+        assert "version.combo_id = %s" in query, query
+        assert "version.id = %s" in query, query
+        assert parameters == (801, 701, version_hash.lower()), parameters
 
 
 class TestFactorComboTestDataPreparationRepository:

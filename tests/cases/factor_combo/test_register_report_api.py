@@ -39,7 +39,8 @@ class TestRegisterFactorComboReportAPI:
         assert data.get("combo_id") == experiment.version.combo_id, body
         assert data.get("combo_version_hash") == experiment.version.combo_version_hash, body
         assert data.get("sub_factor_type") == 1, body
-        assert isinstance(data.get("refresh_status"), str) and data["refresh_status"], body
+        assert isinstance(data.get("refresh_task_id"), str) and data["refresh_task_id"].strip(), body
+        assert isinstance(data.get("refresh_status"), str) and data["refresh_status"].strip(), body
         for field in ("sub_factor", "factor_detail", "factor_validity_status", "registration"):
             assert isinstance(data.get(field), dict), body
         sub_factor_id = int(data["sub_factor_id"])
@@ -49,7 +50,11 @@ class TestRegisterFactorComboReportAPI:
         sub_factor = factor_combo_repository.get_registered_sub_factor(sub_factor_id)
         factor_detail = factor_combo_repository.get_registered_factor_detail(factor_detail_id)
         validity = factor_combo_repository.get_registered_validity_status(validity_status_id)
-        registration = factor_combo_repository.get_registration(experiment.version.combo_id)
+        registration = factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        )
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         components = factor_combo_repository.get_components(experiment.version.version_id)
         form = factor_combo_repository.get_form(experiment.version.worker_form.submitted.form_id)
@@ -71,10 +76,54 @@ class TestRegisterFactorComboReportAPI:
         assert int(sub_factor["id"]) == sub_factor_id, {"api": body, "db": sub_factor}
         assert sub_factor["sub_factor_name"] == payload["report"]["factor_name"], {"api": body, "db": sub_factor}
         assert int(sub_factor["type"]) == 1, {"api": body, "db": sub_factor}
+        stored_performance = sub_factor["metadata"]["report"]["performance"]
+        expected_performance = {
+            field: value
+            for field, value in payload["report"]["performance"].items()
+            if value is not None
+            or field
+            in {"ts_ic", "return_rate", "out_of_sample_icir", "net_sharpe", "max_drawdown", "annual_turnover"}
+        }
+        assert stored_performance == expected_performance, {"api": body, "db": sub_factor}
+        assert set(stored_performance) == {
+            "metrics_status",
+            "ts_ic",
+            "return_rate",
+            "annualized_return",
+            "out_of_sample_icir",
+            "net_sharpe",
+            "benchmark_sharpe",
+            "max_drawdown",
+            "calmar",
+            "profit_loss_ratio",
+            "annual_turnover",
+            "positive_return_rate",
+            "observations",
+            "trade_observations",
+            "decay_ratio",
+            "metric_mode",
+            "universe_key",
+            "symbols",
+        }, {"api": body, "db": sub_factor}
         assert int(factor_detail["factor_id"]) == sub_factor_id, {"api": body, "db": factor_detail}
         assert bool(factor_detail["is_sub_factor_id"]) is True, {"api": body, "db": factor_detail}
         assert int(factor_detail["status"]) == 1, {"api": body, "db": factor_detail}
         assert int(validity["factor_id"]) == sub_factor_id, {"api": body, "db": validity}
+        assert validity["factor_bar_interval"] == payload["factor_validity_status"]["factor_bar_interval"], {
+            "api": body,
+            "db": validity,
+        }
+        assert str(validity["factor_window_bars"]) == str(
+            payload["factor_validity_status"]["factor_window_bars"]
+        ), {"api": body, "db": validity}
+        assert sub_factor["factor_bar_interval"] == payload["factor_validity_status"]["factor_bar_interval"], {
+            "api": body,
+            "db": sub_factor,
+        }
+        assert str(sub_factor["window"]) == str(payload["factor_validity_status"]["factor_window_bars"]), {
+            "api": body,
+            "db": sub_factor,
+        }
         assert validity["time_series_status"] == "unknown", {"api": body, "db": validity}
         assert validity["time_series_is_valid"] is None, {"api": body, "db": validity}
         assert validity["cross_sectional_status"] == "unknown", {"api": body, "db": validity}
@@ -83,7 +132,12 @@ class TestRegisterFactorComboReportAPI:
         assert validity["overall_is_valid"] is None, {"api": body, "db": validity}
         assert int(registration["id"]) == registration_id, {"api": body, "db": registration}
         assert int(registration["sub_factor_id"]) == sub_factor_id, {"api": body, "db": registration}
-        assert registration["factor_id"] is None, {"api": body, "db": registration}
+        assert registration["factor_id"] is None and parent_relation_count == 0, {
+            "api": body,
+            "registration": registration,
+            "parent_relation_count": parent_relation_count,
+            "components": components,
+        }
         assert registration["combo_version_hash"] == experiment.version.combo_version_hash, {
             "api": body,
             "db": registration,
@@ -129,6 +183,16 @@ class TestRegisterFactorComboReportAPI:
         assert replay_response.status_code == 200, replay_body
         assert first_body["data"]["idempotent_replay"] is False, first_body
         assert replay_body["data"]["idempotent_replay"] is True, replay_body
+        assert isinstance(first_body["data"].get("refresh_task_id"), str), first_body
+        assert first_body["data"]["refresh_task_id"].strip(), first_body
+        assert replay_body["data"].get("refresh_task_id") == first_body["data"]["refresh_task_id"], {
+            "first": first_body,
+            "replay": replay_body,
+        }
+        assert isinstance(first_body["data"].get("refresh_status"), str), first_body
+        assert first_body["data"]["refresh_status"].strip(), first_body
+        assert isinstance(replay_body["data"].get("refresh_status"), str), replay_body
+        assert replay_body["data"]["refresh_status"].strip(), replay_body
         for field in (
             "sub_factor_id",
             "factor_detail_id",
@@ -141,7 +205,11 @@ class TestRegisterFactorComboReportAPI:
                 "first": first_body,
                 "replay": replay_body,
             }
-        registration = factor_combo_repository.get_registration(experiment.version.combo_id)
+        registration = factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        )
         assert registration is not None, {"first": first_body, "replay": replay_body}
         assert int(registration["id"]) == int(first_body["data"]["registration_id"]), registration
 
@@ -203,7 +271,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 409, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
         assert version is not None and version["status"] == "candidate", {"api": body, "db": version}
 
     @pytest.mark.parametrize(
@@ -239,7 +311,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == expected_status, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         assert version is not None and version["status"] == "candidate", {"api": body, "db": version}
 
@@ -264,7 +340,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 409, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
 
     def test_unavailable_performance_metrics_can_be_registered_as_all_null(
         self,
@@ -285,10 +365,440 @@ class TestRegisterFactorComboReportAPI:
         assert sub_factor is not None, {"api": body, "db": sub_factor}
         performance = sub_factor["metadata"]["report"]["performance"]
         assert performance["metrics_status"] == "unavailable", {"api": body, "db": sub_factor}
-        assert all(value is None for key, value in performance.items() if key != "metrics_status"), {
+        for field in (
+            "ts_ic",
+            "return_rate",
+            "out_of_sample_icir",
+            "net_sharpe",
+            "max_drawdown",
+            "annual_turnover",
+        ):
+            assert performance[field] is None, {"field": field, "api": body, "db": sub_factor}
+        assert all(
+            field not in performance
+            for field in (
+                "annualized_return",
+                "benchmark_sharpe",
+                "calmar",
+                "profit_loss_ratio",
+                "positive_return_rate",
+                "observations",
+                "trade_observations",
+                "decay_ratio",
+                "cs_rank_ic",
+                "cs_icir",
+                "cs_score",
+            )
+        ), {"api": body, "db": sub_factor}
+        assert performance["metric_mode"] == "time_series", {"api": body, "db": sub_factor}
+        assert performance["universe_key"] == "main", {"api": body, "db": sub_factor}
+        assert performance["symbols"] == ["BTCUSDT"], {
             "api": body,
             "db": sub_factor,
         }
+
+    def test_cross_sectional_performance_is_registered_with_mode_specific_metrics(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """提交完整截面绩效，并验证截面指标、币池和币种列表原样写入报告 JSON。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(
+            experiment,
+            metric_mode="cross_sectional",
+        )
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        performance = sub_factor["metadata"]["report"]["performance"]
+        assert performance == payload["report"]["performance"], {"api": body, "db": sub_factor}
+        assert performance["metric_mode"] == "cross_sectional", {"api": body, "db": sub_factor}
+        assert performance["ts_ic"] is None, {"api": body, "db": sub_factor}
+        assert performance["cs_rank_ic"] == 0.08, {"api": body, "db": sub_factor}
+        assert performance["cs_icir"] == 1.92, {"api": body, "db": sub_factor}
+        assert performance["cs_score"] == 68.4, {"api": body, "db": sub_factor}
+        assert performance["universe_key"] == "main", {"api": body, "db": sub_factor}
+        assert performance["symbols"] == ["BTCUSDT", "ETHUSDT"], {"api": body, "db": sub_factor}
+
+    @pytest.mark.parametrize("missing_field", ["cs_rank_ic", "cs_icir", "universe_key", "symbols"])
+    def test_cross_sectional_performance_requires_mode_specific_fields(
+        self,
+        missing_field: str,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """逐一省略截面模式必填字段，并验证请求被拒绝且不创建登记记录。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(
+            experiment,
+            metric_mode="cross_sectional",
+        )
+        del payload["report"]["performance"][missing_field]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
+
+    @pytest.mark.parametrize("null_field", ["cs_rank_ic", "cs_icir"])
+    def test_cross_sectional_measured_metrics_cannot_be_null(
+        self,
+        null_field: str,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """将截面实测必填指标显式设为 null，并验证请求被拒绝且不创建登记记录。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(
+            experiment,
+            metric_mode="cross_sectional",
+        )
+        payload["report"]["performance"][null_field] = None
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
+
+    @pytest.mark.parametrize(
+        ("field", "invalid_value"),
+        [("universe_key", ""), ("symbols", [])],
+    )
+    def test_cross_sectional_context_rejects_blank_universe_or_empty_symbols(
+        self,
+        field: str,
+        invalid_value: object,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """提交空币池或空币种数组，并验证截面上下文校验失败且不创建登记记录。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(
+            experiment,
+            metric_mode="cross_sectional",
+        )
+        payload["report"]["performance"][field] = invalid_value
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
+
+    def test_cross_sectional_symbols_accept_unvalidated_values_and_duplicates(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """提交空字符串和重复币种，并验证当前文档声明的宽松 symbols 规则及原样持久化。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(
+            experiment,
+            metric_mode="cross_sectional",
+        )
+        payload["report"]["performance"]["symbols"] = ["", "BTCUSDT", "BTCUSDT"]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        assert sub_factor["metadata"]["report"]["performance"]["symbols"] == [
+            "",
+            "BTCUSDT",
+            "BTCUSDT",
+        ], {"api": body, "db": sub_factor}
+
+    def test_time_series_performance_allows_cross_sectional_context_to_be_omitted(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """在时序模式省略截面指标及币池上下文，并验证登记成功且数据库未补造这些字段。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        performance = payload["report"]["performance"]
+        for field in ("cs_rank_ic", "cs_icir", "cs_score", "universe_key", "symbols"):
+            del performance[field]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        stored_performance = sub_factor["metadata"]["report"]["performance"]
+        assert stored_performance == performance, {"api": body, "db": sub_factor}
+        assert all(
+            field not in stored_performance
+            for field in ("cs_rank_ic", "cs_icir", "cs_score", "universe_key", "symbols")
+        ), {"api": body, "db": sub_factor}
+
+    def test_omitted_metric_mode_defaults_to_time_series(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """省略指标模式提交完整时序指标，并验证后端按默认时序模式接受请求。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        del payload["report"]["performance"]["metric_mode"]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        stored_performance = sub_factor["metadata"]["report"]["performance"]
+        assert "metric_mode" not in stored_performance, {"api": body, "db": sub_factor}
+        expected_performance = {
+            field: value
+            for field, value in payload["report"]["performance"].items()
+            if value is not None
+            or field
+            in {"ts_ic", "return_rate", "out_of_sample_icir", "net_sharpe", "max_drawdown", "annual_turnover"}
+        }
+        assert stored_performance == expected_performance, {"api": body, "db": sub_factor}
+
+    def test_omitted_metrics_status_defaults_to_measured(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """省略绩效可用状态提交数值指标，并验证后端按 measured 规则接受且不补写请求字段。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        del payload["report"]["performance"]["metrics_status"]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        stored_performance = sub_factor["metadata"]["report"]["performance"]
+        assert "metrics_status" not in stored_performance, {"api": body, "db": sub_factor}
+        expected_performance = {
+            field: value
+            for field, value in payload["report"]["performance"].items()
+            if value is not None
+            or field
+            in {"ts_ic", "return_rate", "out_of_sample_icir", "net_sharpe", "max_drawdown", "annual_turnover"}
+        }
+        assert stored_performance == expected_performance, {"api": body, "db": sub_factor}
+
+    @pytest.mark.parametrize(
+        "optional_field",
+        [
+            "annualized_return",
+            "benchmark_sharpe",
+            "calmar",
+            "profit_loss_ratio",
+            "observations",
+            "trade_observations",
+            "decay_ratio",
+        ],
+    )
+    def test_optional_performance_field_can_be_omitted(
+        self,
+        optional_field: str,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """逐一省略新版可选绩效字段，并验证登记成功且数据库不会补造该字段。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        del payload["report"]["performance"][optional_field]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        stored_performance = sub_factor["metadata"]["report"]["performance"]
+        assert optional_field not in stored_performance, {"api": body, "db": sub_factor}
+        expected_performance = {
+            field: value
+            for field, value in payload["report"]["performance"].items()
+            if value is not None
+            or field
+            in {"ts_ic", "return_rate", "out_of_sample_icir", "net_sharpe", "max_drawdown", "annual_turnover"}
+        }
+        assert stored_performance == expected_performance, {"api": body, "db": sub_factor}
+
+    def test_rolling_oos_win_rate_can_replace_positive_return_rate(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """仅提交兼容正收益率字段，并验证登记成功且数据库原样保存该字段。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        del payload["report"]["performance"]["positive_return_rate"]
+        payload["report"]["performance"]["rolling_oos_win_rate"] = 0.79
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 201, body
+        assert body.get("success") is True, body
+        sub_factor = factor_combo_repository.get_registered_sub_factor(int(body["data"]["sub_factor_id"]))
+        assert sub_factor is not None, {"api": body, "db": sub_factor}
+        stored_performance = sub_factor["metadata"]["report"]["performance"]
+        assert "positive_return_rate" not in stored_performance, {"api": body, "db": sub_factor}
+        assert stored_performance.get("rolling_oos_win_rate") == 0.79, {"api": body, "db": sub_factor}
+
+    def test_both_positive_return_rate_fields_missing_are_rejected(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """同时省略正收益率主字段和兼容字段，并验证后端拒绝不完整报告。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        del payload["report"]["performance"]["positive_return_rate"]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
+
+    @pytest.mark.parametrize(
+        ("field", "invalid_value"),
+        [
+            ("annualized_return", -1.0001),
+            ("profit_loss_ratio", -0.01),
+            ("positive_return_rate", 1.01),
+            ("rolling_oos_win_rate", 1.01),
+            ("observations", -1),
+            ("observations", 1.5),
+            ("trade_observations", -1),
+            ("trade_observations", 1.5),
+            ("decay_ratio", -0.01),
+            ("metric_mode", "hybrid"),
+            ("cs_rank_ic", 1.01),
+            ("calmar", "4.24"),
+            ("cs_score", "68.4"),
+            ("universe_key", None),
+            ("symbols", None),
+        ],
+    )
+    def test_new_performance_fields_reject_invalid_types_or_ranges(
+        self,
+        field: str,
+        invalid_value: object,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """提交新增绩效字段的非法类型或边界值，并验证请求失败且不创建登记记录。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        payload["report"]["performance"][field] = invalid_value
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
+
+    def test_symbols_with_non_string_member_is_rejected_during_json_parsing(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """在 symbols 中提交非字符串成员，并验证严格 JSON 解析返回 400 且不创建登记记录。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment)
+        payload["report"]["performance"]["symbols"] = ["BTCUSDT", 1]
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 400, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
+
+    def test_unavailable_performance_rejects_non_null_numeric_metric(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """在 unavailable 模式提交非空新增数值指标，并验证请求失败且不创建登记记录。"""
+
+        experiment = factor_combo_worker_service.create_completed_experiment()
+        payload = factor_combo_worker_service.build_register_payload(experiment, metrics_available=False)
+        payload["report"]["performance"]["annualized_return"] = 0.42
+
+        response = factor_combo_worker_service.register_report_request(payload)
+        body = response.json()
+
+        assert response.status_code == 422, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
 
     def test_measured_performance_rejects_mixed_numeric_and_null_values(
         self,
@@ -306,7 +816,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
 
     def test_period_start_after_period_end_is_rejected(
         self,
@@ -325,7 +839,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
 
     def test_timezone_aware_validity_period_can_be_registered(
         self,
@@ -404,7 +922,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 409, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            version.combo_id,
+            version_id=version.version_id,
+            combo_version_hash=version.combo_version_hash,
+        ) is None, body
         stored_version = factor_combo_repository.get_combo_version(version.version_id)
         assert stored_version is not None and stored_version["status"] == "candidate", {
             "api": body,
@@ -428,7 +950,11 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 409, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(pending.experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            pending.experiment.version.combo_id,
+            version_id=pending.experiment.version.version_id,
+            combo_version_hash=pending.experiment.version.combo_version_hash,
+        ) is None, body
         assert feedback is not None and feedback["status"] == "pending", {"api": body, "db": feedback}
         assert version is not None and version["status"] == "rejected", {"api": body, "db": version}
 
@@ -458,7 +984,11 @@ class TestRegisterFactorComboReportAPI:
         assert wrong_session_body.get("success") is False, wrong_session_body
         assert wrong_run_response.status_code == 404, wrong_run_body
         assert wrong_run_body.get("success") is False, wrong_run_body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, {
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, {
             "wrong_session": wrong_session_body,
             "wrong_run": wrong_run_body,
         }
@@ -485,5 +1015,9 @@ class TestRegisterFactorComboReportAPI:
 
         assert response.status_code == 401, body
         assert body.get("success") is False, body
-        assert factor_combo_repository.get_registration(experiment.version.combo_id) is None, body
+        assert factor_combo_repository.get_registration(
+            experiment.version.combo_id,
+            version_id=experiment.version.version_id,
+            combo_version_hash=experiment.version.combo_version_hash,
+        ) is None, body
         assert version is not None and version["status"] == "candidate", {"api": body, "db": version}

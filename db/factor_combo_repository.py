@@ -13,6 +13,7 @@ from db.client import DatabaseClient, DatabaseTransaction
 
 
 _TEST_PARENT_FACTOR_PREFIX = "__questtest_unrelated_parent__"
+_SIMULATED_PIPELINE_RUN_PREFIX = "legacy-simulated-form-"
 _TEST_PARENT_EXCLUDED_COLUMNS = {
     "id",
     "created_at",
@@ -70,15 +71,15 @@ class FactorComboRepository:
         self._test_parent_factor_ids_by_form: dict[int, set[int]] = {}
 
     def find_parent_with_sub_factors(self, minimum_sub_factors: int = 2) -> ParentFactorChoice | None:
-        """查找一个拥有足够关联子因子的真实母因子。
+        """查找一个拥有足够关联子因子的真实母因子及其全部关联子因子。
 
-        参数 ``minimum_sub_factors`` 是所需最少关联子因子数。
-        返回 ``ParentFactorChoice``；测试库中不存在符合条件的母因子时返回 ``None``。
+        参数 ``minimum_sub_factors`` 是所需最少关联子因子数；查询不依赖有效性评分，也不做数量截断。
+        返回按子因子 ID 升序排列的 ``ParentFactorChoice``；测试库中不存在符合条件的母因子时返回 ``None``。
         """
 
         rows = self._client.fetch_all(
             """
-            SELECT
+            SELECT DISTINCT
                 f.id AS factor_id,
                 f.factor_name,
                 r.sub_factor_id,
@@ -114,75 +115,6 @@ class FactorComboRepository:
                     factor_id=factor_id,
                     factor_name=factor_names[factor_id],
                     sub_factors=tuple(sub_factors),
-                )
-        return None
-
-    def find_ranked_parent_with_sub_factors(self, minimum_sub_factors: int = 2) -> ParentFactorChoice | None:
-        """查找可按最新时序评分展开的母因子及预期前十二个子因子。
-
-        参数 ``minimum_sub_factors`` 是母因子至少需要具备的有效评分子因子数量。
-        返回按时序评分降序、子因子 ID 升序排列的 ``ParentFactorChoice``；没有符合数据时返回 ``None``。
-        """
-
-        rows = self._client.fetch_all(
-            """
-            WITH latest_scored AS (
-                SELECT
-                    factor_id AS sub_factor_id,
-                    time_series_score,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY factor_id
-                        ORDER BY updated_at DESC, id DESC
-                    ) AS rn
-                FROM factor_validity_status
-                WHERE is_sub_factor_id = 1
-                  AND universe_key = 'main'
-                  AND window_scope = 'rolling'
-                  AND time_series_score IS NOT NULL
-            )
-            SELECT
-                f.id AS factor_id,
-                f.factor_name,
-                relation_item.sub_factor_id,
-                sf.sub_factor_name,
-                latest_scored.time_series_score
-            FROM factors AS f
-            INNER JOIN factor_sub_factor_relations AS relation_item
-                ON relation_item.factor_id = f.id
-            INNER JOIN sub_factors AS sf
-                ON sf.id = relation_item.sub_factor_id
-            INNER JOIN latest_scored
-                ON latest_scored.sub_factor_id = relation_item.sub_factor_id
-               AND latest_scored.rn = 1
-            WHERE f.factor_name IS NOT NULL
-              AND TRIM(f.factor_name) <> ''
-              AND sf.sub_factor_name IS NOT NULL
-              AND TRIM(sf.sub_factor_name) <> ''
-            ORDER BY
-                f.id ASC,
-                latest_scored.time_series_score DESC,
-                relation_item.sub_factor_id ASC
-            """
-        )
-        grouped: dict[int, list[SubFactorChoice]] = {}
-        factor_names: dict[int, str] = {}
-        for row in rows:
-            factor_id = int(row["factor_id"])
-            factor_names[factor_id] = str(row["factor_name"])
-            grouped.setdefault(factor_id, []).append(
-                SubFactorChoice(
-                    sub_factor_id=int(row["sub_factor_id"]),
-                    sub_factor_name=str(row["sub_factor_name"]),
-                    parent_factor_id=factor_id,
-                    parent_factor_name=str(row["factor_name"]),
-                )
-            )
-        for factor_id, sub_factors in grouped.items():
-            if len(sub_factors) >= minimum_sub_factors:
-                return ParentFactorChoice(
-                    factor_id=factor_id,
-                    factor_name=factor_names[factor_id],
-                    sub_factors=tuple(sub_factors[:12]),
                 )
         return None
 
@@ -910,6 +842,25 @@ class FactorComboRepository:
         )
         return int(row["record_count"]) if row is not None else 0
 
+    def find_existing_local_artifact(self) -> dict[str, Any] | None:
+        """查找一个已有的绝对路径 Artifact，供 SHA256 冲突场景复用其可读内容。
+
+        不接收参数。返回包含 ``artifact_uri`` 和 ``artifact_hash`` 的已有实验字典；测试库没有绝对路径 Artifact
+        时返回 ``None``。该方法只读数据库，不验证文件本身，文件可读性由实验接口在真实请求中验证。
+        """
+
+        row = self._client.fetch_one(
+            """
+            SELECT artifact_uri, artifact_hash
+            FROM factor_combo_experiment_info
+            WHERE artifact_uri LIKE '/%'
+              AND artifact_hash IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        )
+        return self._normalize_database_row(row)
+
     def get_feedback(self, feedback_id: int) -> dict[str, Any] | None:
         """读取组合报告反馈及下一轮关联指针。
 
@@ -949,15 +900,16 @@ class FactorComboRepository:
         """按组合业务标识或具体版本读取唯一登记完成标记。
 
         参数 ``combo_id`` 是组合业务标识，``version_id`` 是具体 ``factor_combo.id``，``combo_version_hash`` 是版本内容
-        哈希。登记表的 ``combo_id`` 严格按当前表结构关联到 ``factor_combo.id``，不再兼容把业务组合标识直接当作
-        登记外键。查询最多读取两条结果；若身份条件仍命中多条登记记录则抛出 ``RuntimeError``，不会静默取最新一条。
+        哈希。登记表的 ``combo_id`` 按新版契约关联 ``factor_combo.combo_id``，再以版本哈希定位具体版本；可选版本主键
+        用于进一步限定目标。查询最多读取两条结果；若身份条件仍命中多条登记记录则抛出 ``RuntimeError``，不会静默
+        取最新一条。
         返回带有 ``version_id``、``version_business_id`` 和 ``version_combo_version_hash`` canonical 字段的登记字典；
         未找到时返回 ``None``。
         """
 
         predicates = [
             "version.combo_id = %s",
-            "registered.combo_id = version.id",
+            "registered.combo_id = version.combo_id",
             "registered.combo_version_hash = version.combo_version_hash",
         ]
         parameters: list[Any] = [int(combo_id)]
@@ -1497,7 +1449,7 @@ class FactorComboRepository:
                 return
             try:
                 version_ids = sorted({int(row["id"]) for row in version_rows})
-                version_family_ids = {int(row["combo_id"]) for row in version_rows}
+                business_combo_ids = {int(row["combo_id"]) for row in version_rows}
                 pool_ids = {
                     int(row["pool_id"])
                     for row in version_rows
@@ -1517,7 +1469,7 @@ class FactorComboRepository:
                 if row.get("combo_version_hash") is not None
             ]
             version_id_set = set(version_ids)
-            allowed_combo_ids = version_id_set | version_family_ids
+            accepted_combo_identities = version_id_set | business_combo_ids
             combo_version_hash_set = set(combo_version_hashes)
             try:
                 experiment_ids = [
@@ -1554,8 +1506,8 @@ class FactorComboRepository:
             for experiment_row in experiment_rows:
                 try:
                     experiment_combo_id = experiment_row.get("combo_id")
-                    if experiment_combo_id is None or int(experiment_combo_id) not in allowed_combo_ids:
-                        # 兼容历史组合族 ID，但仍要求实验由当前版本指针直接取得；其他值不能进入删除范围。
+                    if experiment_combo_id is None or int(experiment_combo_id) not in accepted_combo_identities:
+                        # 新版记录使用业务组合 ID；仅对当前版本直接指向的旧实验兼容版本主键，其他值不能进入删除范围。
                         return
                 except (TypeError, ValueError):
                     return
@@ -1573,7 +1525,7 @@ class FactorComboRepository:
                 for metric_row in metric_rows:
                     if int(metric_row["experiment_info_id"]) not in experiment_rows_by_id:
                         return
-                    if int(metric_row["combo_id"]) not in allowed_combo_ids:
+                    if int(metric_row["combo_id"]) not in accepted_combo_identities:
                         return
             except (TypeError, ValueError):
                 return
@@ -1605,7 +1557,7 @@ class FactorComboRepository:
                 transaction,
                 version_ids,
                 combo_version_hashes,
-                legacy_combo_ids=sorted(version_family_ids),
+                business_combo_ids=sorted(business_combo_ids),
             )
             try:
                 registration_ids = sorted(
@@ -1627,11 +1579,11 @@ class FactorComboRepository:
                         or registration_row.get("sub_factor_id") is None
                         or registration_combo_id is None
                         or registration_version_id is None
-                        or int(registration_combo_id) not in allowed_combo_ids
+                        or int(registration_combo_id) not in accepted_combo_identities
                         or int(registration_version_id) not in version_id_set
                         or registration_hash not in combo_version_hash_set
                     ):
-                        # 登记记录必须同时命中具体版本主键和版本哈希，不能按组合族 ID 猜测归属。
+                        # 新版业务组合 ID 或历史版本主键都必须再以版本哈希命中具体版本，不能只按 combo_id 猜测归属。
                         return
                 except (TypeError, ValueError):
                     return
@@ -1827,7 +1779,8 @@ class FactorComboRepository:
         """判断表单上的 Pipeline Run 是否仍处于活动或未知状态。
 
         参数 ``form_rows`` 是清理事务已读取的表单行。返回 ``True`` 表示至少一条非空
-        ``pipeline_run_id`` 没有明确终态；缺少状态也按未知状态处理，确保直接 API/Worker 流程不会绕过保护。
+        ``pipeline_run_id`` 没有明确终态；框架生成的 ``legacy-simulated-form-*`` Worker 合约标识不对应异步任务，
+        可以直接清理。其他 Run 缺少终态时仍按活动状态处理，确保真实 Agent 流程不会绕过保护。
         """
 
         terminal_statuses = {
@@ -1851,6 +1804,8 @@ class FactorComboRepository:
         for row in form_rows:
             pipeline_run_id = str(row.get("pipeline_run_id") or "").strip()
             if not pipeline_run_id:
+                continue
+            if pipeline_run_id.startswith(_SIMULATED_PIPELINE_RUN_PREFIX):
                 continue
             status = str(row.get("status") or "").strip().lower().replace("-", "_").replace(" ", "_")
             if status not in terminal_statuses:
@@ -2441,7 +2396,7 @@ class FactorComboRepository:
         """读取待清理实验的关联组合版本和指标指针。
 
         参数 ``transaction`` 是当前清理事务，``experiment_ids`` 是 ``factor_combo_experiment_info.id`` 主键集合。
-        返回实验 ID、组合版本标识和 ``metrics_id``；集合为空时返回空列表。
+        返回实验 ID、业务组合标识和 ``metrics_id``；集合为空时返回空列表。
         """
 
         if not experiment_ids:
@@ -2535,22 +2490,22 @@ class FactorComboRepository:
         version_ids: Sequence[int],
         combo_version_hashes: Sequence[str],
         *,
-        legacy_combo_ids: Sequence[int] = (),
+        business_combo_ids: Sequence[int] = (),
     ) -> list[dict[str, Any]]:
         """在清理事务中查询组合登记产生的子因子。
 
         参数 ``transaction`` 是当前数据库事务，``version_ids`` 是 ``factor_combo.id`` 主键集合，
-        ``combo_version_hashes`` 是当前目标版本的版本哈希集合，``legacy_combo_ids`` 是历史实现可能写入登记表的
-        组合族 ID。返回登记字典列表；任一必需集合为空时返回空列表。
+        ``combo_version_hashes`` 是当前目标版本的版本哈希集合，``business_combo_ids`` 是新版登记表使用的业务
+        组合 ID。返回登记字典列表；任一必需集合为空时返回空列表。
         查询会把“版本主键命中但哈希错误”或“哈希命中但版本主键错误”的异常登记也读出来，交由调用方保守保留，
-        避免只按正确哈希过滤后把损坏或跨版本的登记记录遗漏掉。历史组合族 ID 只有在版本哈希精确命中时才可能被
+        避免只按正确哈希过滤后把损坏或跨版本的登记记录遗漏掉。历史版本主键只有在版本哈希精确命中时才可能被
         调用方接受；无法确认具体版本的记录会阻止清理。
         """
 
         if not version_ids or not combo_version_hashes:
             return []
         version_placeholders = self._placeholders(version_ids)
-        candidate_combo_ids = sorted({int(value) for value in version_ids} | {int(value) for value in legacy_combo_ids})
+        candidate_combo_ids = sorted({int(value) for value in version_ids} | {int(value) for value in business_combo_ids})
         candidate_combo_placeholders = self._placeholders(candidate_combo_ids)
         hash_placeholders = self._placeholders(combo_version_hashes)
         return transaction.fetch_all(

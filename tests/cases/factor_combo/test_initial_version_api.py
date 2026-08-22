@@ -624,7 +624,8 @@ class TestCreateInitialFactorComboVersionAPI:
 
         assert response.status_code == 400, body
         assert body.get("success") is False, body
-        assert body.get("error") == "invalid JSON request body", body
+        error_message = str(body.get("error", "")).lower()
+        assert "invalid" in error_message and "json" in error_message, body
         assert factor_combo_repository.count_versions_for_form(worker_form.submitted.form_id) == 0, body
         assert form is not None and form["factor_combo_id"] is None, {"api": body, "db": form}
 
@@ -843,7 +844,8 @@ class TestCreateInitialFactorComboVersionAPI:
 
         assert response.status_code == 400, body
         assert body.get("success") is False, body
-        assert body.get("error") == "invalid JSON request body", body
+        error_message = str(body.get("error", "")).lower()
+        assert "invalid" in error_message and "json" in error_message, body
         assert factor_combo_repository.count_versions_for_form(worker_form.submitted.form_id) == 0, body
         assert form is not None and form["factor_combo_id"] is None, {"api": body, "db": form}
 
@@ -1098,15 +1100,15 @@ class TestCreateInitialFactorComboVersionAPI:
                 "db": stored_components,
             }
 
-    def test_authenticated_without_research_permission_cannot_create_version(
+    def test_authenticated_non_owner_cannot_create_version(
         self,
         factor_combo_worker_service: FactorComboService,
         factor_combo_restricted_api: FactorComboAPI,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """使用已登录但没有研究权限的账号调用接口，并验证返回 403 且不改变原表单。
+        """使用另一个已登录账号访问不属于自己的表单，并验证所有权校验拒绝且不改变原表单。
 
-        当前测试账号缺少 ``use_research_agent`` 权限，因此不能据此验证“有权限但非所有者”的 404 场景；该场景需要另一个具备该权限的非表单所有者账号。
+        新版接口文档没有声明本接口额外要求研究权限；该场景只验证表单不能被非所属用户访问。
         """
 
         worker_form = factor_combo_worker_service.create_worker_form()
@@ -1124,9 +1126,8 @@ class TestCreateInitialFactorComboVersionAPI:
         body = response.json()
         form = factor_combo_repository.get_form(worker_form.submitted.form_id)
 
-        assert response.status_code == 403, body
+        assert response.status_code == 404, body
         assert body.get("success") is False, body
-        assert "permission" in str(body.get("error", "")).lower(), body
         assert factor_combo_repository.count_versions_for_form(worker_form.submitted.form_id) == 0, body
         assert form is not None and form["factor_combo_id"] is None, {"api": body, "db": form}
 

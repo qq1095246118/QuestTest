@@ -5,31 +5,19 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="大版本更新">
-      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/default.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/default.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config/test.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/test.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db/factor_combo_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor_combo_repository.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/automation-test-framework-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/automation-test-framework-design.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/example_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/example_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/service/factor_combo_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_combo_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_experiment_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_experiment_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_feedback_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_feedback_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_initial_version_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_initial_version_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_next_version_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_next_version_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_register_report_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_register_report_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_start_run_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_start_run_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_submit_form_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_submit_form_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_work_order_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_work_order_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/test_example_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_example_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_flow.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_factor_combo_flow.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_payload.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_factor_combo_payload.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_factor_combo_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/test_settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,7 +55,23 @@
       <option name="project" value="LOCAL" />
       <updated>1787213432956</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="大版本更新">
+      <option name="closed" value="true" />
+      <created>1787312678778</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1787312678778</updated>
+    </task>
+    <task id="LOCAL-00004" summary="大版本更新">
+      <option name="closed" value="true" />
+      <created>1787312683070</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1787312683070</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">

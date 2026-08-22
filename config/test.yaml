@@ -1,6 +1,9 @@
 environment: test
 api:
   base_url: "https://test-factor-backend.questvector.ai/api/v1"
+  timeout_seconds: 60
+  retry_attempts: 2
+  retry_backoff_seconds: 0.25
 authentication:
   privileged_email: "haoran@gmail.com"
   privileged_password: "Aa%@#haoran"
@@ -9,6 +12,7 @@ authentication:
 factor_combo:
   agent_base_url: "https://test-factor-frontend.questvector.ai/api/v2"
   worker_contracts_enabled: true
+  cleanup_test_data: true
 database:
   driver: mysql
   host: "43.167.190.122"

@@ -78,7 +78,9 @@ class StubRepository:
             registration_values.pop("business_combo_id", legacy_business_combo_id or 701)
         )
         version_id = int(registration_values.get("version_id", 702))
-        persisted_combo_id = int(registration_values.pop("persisted_combo_id", version_id))
+        persisted_combo_id = int(
+            registration_values.pop("persisted_combo_id", self.registration_lookup_combo_id)
+        )
         self.registration = {
             "id": 901,
             "combo_id": persisted_combo_id,
@@ -505,7 +507,50 @@ def _run_result_response(run_id: str, *, valid: bool, continue_exploration: bool
                 "pipeline_run_id": run_id,
                 "pipeline_status": "completed",
                 "result": {
-                    "factor_combo_report": {"factor_name": "composite-test-factor"},
+                    "factor_combo_report": {
+                        "report_no": "AUTOTEST-REPORT-001",
+                        "factor_name": "composite-test-factor",
+                        "conclusion": "autotest factor combo conclusion",
+                        "combo": {
+                            "research_methods": ["machine_learning"],
+                            "algorithms": ["ElasticNet"],
+                            "factor_code": "return 0.6 * factor_a - 0.4 * factor_b",
+                            "formula": "0.6*factor_a-0.4*factor_b",
+                        },
+                        "components": [
+                            {
+                                "factor_code": "factor_momentum",
+                                "sub_factor_code": "sf_mom_24h_rank",
+                                "name": "24h momentum rank",
+                                "direction": 1,
+                                "weight": 0.6,
+                            }
+                        ],
+                        "performance": {
+                            "metrics_status": "measured",
+                            "ts_ic": 0.08989,
+                            "return_rate": 0.3,
+                            "annualized_return": 0.42,
+                            "out_of_sample_icir": 3.21,
+                            "net_sharpe": 1.39,
+                            "benchmark_sharpe": 1.12,
+                            "max_drawdown": -0.099,
+                            "calmar": 4.24,
+                            "profit_loss_ratio": 1.45,
+                            "annual_turnover": 0.78,
+                            "positive_return_rate": 0.79,
+                            "observations": 694,
+                            "trade_observations": 350,
+                            "decay_ratio": 0.85,
+                            "metric_mode": "time_series",
+                            "cs_rank_ic": None,
+                            "cs_icir": None,
+                            "cs_score": None,
+                            "universe_key": "main",
+                            "symbols": ["BTCUSDT"],
+                        },
+                        "explanation": {"summary": "autotest factor combo explanation"},
+                    },
                     "factor_combo_review": {
                         "experiment_valid": valid,
                         "registration_ready": valid,
@@ -522,13 +567,18 @@ def _run_result_response(run_id: str, *, valid: bool, continue_exploration: bool
 
 
 def _result() -> RealPipelineResult:
-    """构造不含伪造指标的最小真实结果对象。"""
+    """构造包含新版绩效契约的真实流程结果替身。"""
 
     form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="completed")
     run = RealRun(form=form, pipeline_run_id="combo-22-abcdef0123456789")
+    report = deepcopy(
+        _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False).json()["data"]["result"][
+            "factor_combo_report"
+        ]
+    )
     return RealPipelineResult(
         run=run,
-        report={"factor_name": "composite-test-factor", "components": []},
+        report=report,
         review={"experiment_valid": True, "registration_ready": True},
         validity={"time_series_is_valid": True, "cross_sectional_is_valid": None},
         raw_data={"pipeline_run_id": run.pipeline_run_id},
@@ -2473,6 +2523,169 @@ class TestRefreshEvidenceReconciliation:
         assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
 
 
+class TestRegistrationCrossEntityValidation:
+    """验证登记链路只依赖最新版表结构中真实存在的跨表指针。"""
+
+    def test_registration_report_normalization_omits_only_optional_null_metrics(self) -> None:
+        """标准化登记报告时删除可省略空指标，同时保留 unavailable 模式的六个必填空指标。"""
+
+        report = {
+            "factor_name": "composite-test-factor",
+            "performance": {
+                "metrics_status": "unavailable",
+                "ts_ic": None,
+                "return_rate": None,
+                "annualized_return": None,
+                "out_of_sample_icir": None,
+                "net_sharpe": None,
+                "benchmark_sharpe": None,
+                "max_drawdown": None,
+                "calmar": None,
+                "profit_loss_ratio": None,
+                "annual_turnover": None,
+                "positive_return_rate": None,
+                "observations": None,
+                "trade_observations": None,
+                "decay_ratio": None,
+                "metric_mode": "time_series",
+                "cs_rank_ic": None,
+                "cs_icir": None,
+                "cs_score": None,
+                "universe_key": "main",
+                "symbols": ["BTCUSDT"],
+            },
+        }
+
+        normalized = FactorComboService._normalize_registration_report_for_persistence(report)
+
+        assert normalized["performance"] == {
+            "metrics_status": "unavailable",
+            "ts_ic": None,
+            "return_rate": None,
+            "out_of_sample_icir": None,
+            "net_sharpe": None,
+            "max_drawdown": None,
+            "annual_turnover": None,
+            "metric_mode": "time_series",
+            "universe_key": "main",
+            "symbols": ["BTCUSDT"],
+        }, normalized
+        assert "annualized_return" in report["performance"], report
+        assert report["performance"]["annualized_return"] is None, report
+
+    def test_experiment_row_does_not_require_form_or_pipeline_columns(self) -> None:
+        """实验表没有 form_id 和 pipeline_run_id 时，仍可通过表单、版本和实验指针证明同一链路。"""
+
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+        version_hash = "a" * 64
+        response_data = {
+            "form_id": 22,
+            "factor_combo_version_id": 33,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "sub_factor_id": 55,
+            "registration": {"id": 66},
+        }
+        request_payload = {
+            "session_id": 11,
+            "pipeline_run_id": "run-registration-001",
+        }
+        version_row = {
+            "id": 33,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "experiment_id": 77,
+        }
+        form_row = {
+            "id": 22,
+            "session_id": 11,
+            "pipeline_run_id": "run-registration-001",
+            "factor_combo_id": 33,
+            "factor_combo_experiment_info_id": 77,
+        }
+        experiment_row = {
+            "id": 77,
+            "combo_id": 44,
+            "valid": 1,
+        }
+
+        service._validate_registration_cross_entity_pointers(
+            response_data,
+            request_payload,
+            version_row,
+            form_row,
+            experiment_row,
+            sub_factor_id=55,
+            registration_id=66,
+            response_combo_id=44,
+        )
+
+    def test_registration_mapping_rejects_non_null_parent_factor(self) -> None:
+        """登记映射写入母因子 ID 时必须失败，复合子因子当前应保持无父级。"""
+
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+        version_hash = "b" * 64
+        response_data = {
+            "registered": True,
+            "idempotent_replay": False,
+            "factor_combo_version_id": 33,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "sub_factor_id": 55,
+            "factor_detail_id": 77,
+            "registration_id": 66,
+            "factor_validity_status_id": 88,
+            "sub_factor_type": 1,
+            "refresh_task_id": "autotest-refresh-task-55",
+            "refresh_status": "queued",
+            "sub_factor": {},
+            "factor_detail": {},
+            "factor_validity_status": {},
+            "registration": {},
+        }
+        version_row = {
+            "id": 33,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "status": "active",
+        }
+        sub_factor_row = {"id": 55, "type": 1}
+        factor_detail_row = {"id": 77, "is_sub_factor_id": 1, "status": 1}
+        validity_row = {"id": 88, "is_sub_factor_id": 1}
+        registration_row = {
+            "id": 66,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "factor_id": 36,
+            "sub_factor_id": 55,
+        }
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.validate_registration_persistence(
+                response_data,
+                {},
+                version_row,
+                sub_factor_row,
+                factor_detail_row,
+                validity_row,
+                registration_row,
+                form_row={},
+                experiment_row={},
+                parent_relation_count=0,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "factor_id must be NULL" in str(error.value), error.value
+
+
 class TestWorkOrderReconciliation:
     """验证工作单成员父级关系和快照来源不会被弱聚合结果掩盖。"""
 
@@ -2569,8 +2782,128 @@ class TestWorkOrderReconciliation:
         assert "conflict" in str(error.value).lower(), str(error.value)
 
 
+class TestFeedbackPersistenceReconciliation:
+    """验证反馈接口字段与新版反馈表 source 字段准确对账。"""
+
+    def test_feedback_uses_source_columns_and_form_session(self) -> None:
+        """反馈正文、Run、实验和版本应映射到 source 列，session 与 reply 按业务实体单独核对。"""
+
+        response_data = {
+            "feedback_recorded": True,
+            "idempotent_replay": False,
+            "feedback_id": 900,
+            "feedback_round": 1,
+            "feedback_status": "pending",
+            "reply": 2,
+            "form_id": 22,
+            "form_status": "processing",
+            "factor_combo_experiment_info_id": 800,
+            "rejected_factor_combo_version_id": 702,
+            "experiment_valid": False,
+        }
+        request_payload = {
+            "session_id": 11,
+            "form_id": 22,
+            "pipeline_run_id": "combo-22-abcdef0123456789",
+            "reply": 2,
+            "feedback": "autotest improve drawdown",
+        }
+        feedback_row = {
+            "id": 900,
+            "form_id": 22,
+            "feedback_round": 1,
+            "status": "pending",
+            "source_factor_combo_version_id": 702,
+            "source_experiment_info_id": 800,
+            "source_pipeline_run_id": "combo-22-abcdef0123456789",
+            "feedback_text": "autotest improve drawdown",
+            "next_factor_combo_version_id": None,
+            "next_pipeline_run_id": None,
+            "next_experiment_info_id": None,
+        }
+        form_row = {
+            "id": 22,
+            "session_id": 11,
+            "status": "processing",
+            "pipeline_run_id": None,
+            "factor_combo_id": None,
+            "factor_combo_experiment_info_id": None,
+        }
+        experiment_row = {
+            "id": 800,
+            "valid": False,
+            "failure_reason": "autotest improve drawdown",
+        }
+        version_row = {"id": 702, "experiment_id": 800, "status": "rejected"}
+
+        compared = FactorComboService.validate_feedback_persistence(
+            FactorComboService.__new__(FactorComboService),
+            response_data,
+            request_payload,
+            feedback_row,
+            form_row,
+            experiment_row,
+            version_row,
+        )
+
+        assert set(compared["request_fields"]) == {"form_id", "pipeline_run_id", "feedback"}, compared
+        assert "factor_combo_experiment_info_id" in compared["response_fields"], compared
+
+
 class TestNextVersionReconciliation:
     """验证下一版本不会静默复用上一版本的完整组件内容。"""
+
+    def test_next_version_feedback_uses_source_experiment_column(self) -> None:
+        """下一版本应通过反馈表 source_experiment_info_id 核对来源实验。"""
+
+        response_data = {
+            "form_id": 22,
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_version_id": 703,
+            "combo_version_hash": "b" * 64,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "feedback_id": 900,
+            "feedback_round": 2,
+            "feedback_status": "processing",
+        }
+        feedback_row = {
+            "id": 900,
+            "form_id": 22,
+            "feedback_round": 2,
+            "status": "processing",
+            "source_factor_combo_version_id": 702,
+            "source_experiment_info_id": 800,
+            "next_factor_combo_version_id": 703,
+            "next_pipeline_run_id": "combo-22-newrun00000001",
+            "next_experiment_info_id": None,
+        }
+        version_row = {"id": 703, "initial_form_id": None}
+        source_version_row = {
+            "id": 702,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "combo_version_hash": "a" * 64,
+            "status": "rejected",
+            "initial_form_id": 22,
+            "experiment_id": 800,
+        }
+        form_row = {
+            "id": 22,
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_id": 703,
+        }
+
+        FactorComboService._validate_next_version_feedback_links(
+            FactorComboService.__new__(FactorComboService),
+            response_data,
+            feedback_row,
+            version_row,
+            source_version_row,
+            form_row,
+        )
 
     def test_next_version_rejects_reused_component_content(self) -> None:
         """新版本哈希即使被伪造为不同值，也不能复用旧版本全部组件内容。"""
@@ -2596,7 +2929,6 @@ class TestNextVersionReconciliation:
             },
         ]
         request_payload = {
-            "combo_id": 701,
             "generation_method": "ml",
             "pipeline_run_id": "combo-22-newrun00000001",
             "components": [
@@ -2648,7 +2980,7 @@ class TestNextVersionReconciliation:
             "pipeline_run_id": "combo-22-newrun00000001",
             "combo_version_hash": "b" * 64,
             "status": "candidate",
-            "initial_form_id": 22,
+            "initial_form_id": None,
             "experiment_id": None,
         }
         source_version_row = {
@@ -2667,7 +2999,7 @@ class TestNextVersionReconciliation:
             "feedback_round": 2,
             "status": "processing",
             "source_factor_combo_version_id": 702,
-            "experiment_info_id": 800,
+            "source_experiment_info_id": 800,
             "next_factor_combo_version_id": 703,
             "next_pipeline_run_id": "combo-22-newrun00000001",
             "next_experiment_info_id": None,
@@ -2692,7 +3024,8 @@ class TestNextVersionReconciliation:
             )
 
         assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
-        assert "component" in str(error.value).lower(), str(error.value)
+        assert "reuses the complete source component content" in str(error.value), str(error.value)
+        assert "missing_fields" not in error.value.details, error.value
 
 
 class TestRealResearchFlowBranches:
@@ -2918,6 +3251,182 @@ class TestRealResearchFlowBranches:
 
         assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
         assert "factor_name" in str(error.value), str(error.value)
+
+    def test_real_result_preserves_complete_new_performance_contract(self) -> None:
+        """读取完整新版绩效结果，并验证真实登记请求不补造、不改写或丢失任何指标字段。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = response.json()
+        expected_performance = deepcopy(body["data"]["result"]["factor_combo_report"]["performance"])
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        result = service.require_real_pipeline_result(StubResponse(200, body), run)
+        payload = service.build_real_register_payload(result)
+
+        assert result.report["performance"] == expected_performance, result.report
+        assert payload["report"]["performance"] == expected_performance, payload
+        assert set(payload["report"]["performance"]) == {
+            "metrics_status",
+            "ts_ic",
+            "return_rate",
+            "annualized_return",
+            "out_of_sample_icir",
+            "net_sharpe",
+            "benchmark_sharpe",
+            "max_drawdown",
+            "calmar",
+            "profit_loss_ratio",
+            "annual_turnover",
+            "positive_return_rate",
+            "observations",
+            "trade_observations",
+            "decay_ratio",
+            "metric_mode",
+            "cs_rank_ic",
+            "cs_icir",
+            "cs_score",
+            "universe_key",
+            "symbols",
+        }, payload
+
+    def test_real_result_accepts_and_preserves_rolling_oos_win_rate_alias(self) -> None:
+        """仅返回兼容正收益率字段时允许登记，并确保 Service 不改名或补造主字段。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = response.json()
+        performance = body["data"]["result"]["factor_combo_report"]["performance"]
+        del performance["positive_return_rate"]
+        performance["rolling_oos_win_rate"] = 0.79
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        result = service.require_real_pipeline_result(StubResponse(200, body), run)
+        payload = service.build_real_register_payload(result)
+
+        assert result.report["performance"] == performance, result.report
+        assert payload["report"]["performance"] == performance, payload
+        assert payload["report"]["performance"]["rolling_oos_win_rate"] == 0.79, payload
+        assert "positive_return_rate" not in payload["report"]["performance"], payload
+
+    def test_real_cross_sectional_result_requires_and_preserves_cross_sectional_context(self) -> None:
+        """读取截面模式结果，并验证截面 IC、币池和币种上下文通过校验且原样进入登记请求。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = response.json()
+        performance = body["data"]["result"]["factor_combo_report"]["performance"]
+        performance["metric_mode"] = "cross_sectional"
+        performance["ts_ic"] = None
+        performance["cs_rank_ic"] = 0.08
+        performance["cs_icir"] = 1.92
+        performance["cs_score"] = 68.4
+        performance["symbols"] = ["BTCUSDT", "ETHUSDT"]
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        result = service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert result.report["performance"] == performance, result.report
+        assert result.report["performance"]["ts_ic"] is None, result.report
+        assert result.report["performance"]["cs_rank_ic"] == 0.08, result.report
+        assert result.report["performance"]["symbols"] == ["BTCUSDT", "ETHUSDT"], result.report
+
+    @pytest.mark.parametrize("missing_field", ["cs_rank_ic", "cs_icir", "universe_key", "symbols"])
+    def test_real_cross_sectional_result_rejects_missing_mode_specific_field(self, missing_field: str) -> None:
+        """逐一删除真实截面结果的条件必填字段，并验证结果在登记前被识别为契约失败。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = response.json()
+        performance = body["data"]["result"]["factor_combo_report"]["performance"]
+        performance["metric_mode"] = "cross_sectional"
+        performance["ts_ic"] = None
+        performance["cs_rank_ic"] = 0.08
+        performance["cs_icir"] = 1.92
+        del performance[missing_field]
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert missing_field in str(error.value.details), error.value.details
+
+    @pytest.mark.parametrize(
+        ("field", "invalid_value"),
+        [
+            ("positive_return_rate", 1.01),
+            ("observations", 1.5),
+            ("decay_ratio", -0.01),
+            ("metric_mode", "hybrid"),
+            ("universe_key", None),
+            ("symbols", None),
+            ("symbols", ["BTCUSDT", 1]),
+        ],
+    )
+    def test_real_result_rejects_invalid_new_performance_value(
+        self,
+        field: str,
+        invalid_value: object,
+    ) -> None:
+        """修改真实结果中的新增绩效字段为非法值，并验证不会继续构造登记流程。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = response.json()
+        body["data"]["result"]["factor_combo_report"]["performance"][field] = invalid_value
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert field in str(error.value), error.value
 
     def test_technical_pipeline_failure_uses_fresh_run_before_business_decision(self) -> None:
         """首轮 Pipeline 技术失败时使用 force_fresh_pipeline_run 重试，再处理真实结果。"""
