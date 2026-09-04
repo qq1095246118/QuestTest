@@ -21,6 +21,7 @@ from db.client import DatabaseClient
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
 from tests.resource_scope import TestResourceScope
+from tools.http_response import read_json_object, read_json_or_diagnostic
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -56,6 +57,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "integration: cases that require a configured external API or database")
     config.addinivalue_line("markers", "worker_contract: cases that call test-only Worker compatibility endpoints")
     config.addinivalue_line("markers", "external_agent: cases that start or poll a real research Agent run")
+    config.addinivalue_line("markers", "unit: offline framework and service/repository unit tests")
 
 
 @pytest.fixture(scope="session")
@@ -89,7 +91,8 @@ def privileged_account(settings: Settings, live_mode: bool) -> AuthenticatedAcco
     """登录并校验有权限账号，返回可跨 Factor/Agent API 复用的完整上下文。
 
     参数 ``settings`` 提供地址和账号配置，``live_mode`` 控制真实访问开关。
-    返回 ``AuthenticatedAccount``；账号必须 approved 且拥有 ``use_research_agent`` 和 ``manage_factor_library``，否则直接失败。
+    返回 ``AuthenticatedAccount``；账号必须 approved 且拥有 ``use_factor_agent``、``use_research_agent`` 和
+    ``manage_factor_library``，否则直接失败。
     """
 
     _validate_factor_combo_live_environment(settings, live_mode)
@@ -99,7 +102,7 @@ def privileged_account(settings: Settings, live_mode: bool) -> AuthenticatedAcco
             settings.api,
             credentials,
             "有权限",
-            required_permissions={"use_research_agent", "manage_factor_library"},
+            required_permissions={"use_factor_agent", "use_research_agent", "manage_factor_library"},
         )
     if credentials.email or credentials.password:
         pytest.fail("有权限账号必须同时配置 AUTOMATION_PRIVILEGED_EMAIL 和 AUTOMATION_PRIVILEGED_PASSWORD")
@@ -108,7 +111,7 @@ def privileged_account(settings: Settings, live_mode: bool) -> AuthenticatedAcco
             settings.api,
             None,
             "有权限 Token",
-            required_permissions={"use_research_agent", "manage_factor_library"},
+            required_permissions={"use_factor_agent", "use_research_agent", "manage_factor_library"},
         )
     pytest.skip("需要配置有权限账号密码；临时调试也可配置 AUTOMATION_API_AUTH_TOKEN")
 
@@ -129,13 +132,18 @@ def restricted_account(settings: Settings, live_mode: bool) -> AuthenticatedAcco
     """登录无权限账号并生成携带动态 JWT 的 API 配置。
 
     参数 ``settings`` 提供基础网络配置和无权限账号，``live_mode`` 控制是否允许访问测试环境。
-    返回完整的无权限 ``AuthenticatedAccount``；配置缺失时跳过，配置不完整或登录失败时直接失败。
+    返回完整的受限 ``AuthenticatedAccount``；账号不得拥有组合实验或报告登记权限，配置缺失时跳过，配置不完整、
+    登录失败或权限前置不成立时直接失败。账号可能拥有与本批接口无关的其他权限，不将其误判为配置错误。
     """
 
     _validate_factor_combo_live_environment(settings, live_mode)
     credentials = settings.authentication.restricted
     if credentials.email and credentials.password:
-        return _authenticate_account(settings.api, credentials, "无权限", required_permissions=set())
+        account = _authenticate_account(settings.api, credentials, "无权限", required_permissions=set())
+        unexpected_permissions = sorted({"use_factor_agent", "use_research_agent"} & account.permissions)
+        if unexpected_permissions:
+            raise RuntimeError(f"无权限账号意外拥有受测权限: {', '.join(unexpected_permissions)}")
+        return account
     if credentials.email or credentials.password:
         pytest.fail("无权限账号必须同时配置 AUTOMATION_RESTRICTED_EMAIL 和 AUTOMATION_RESTRICTED_PASSWORD")
     pytest.skip("无权限场景需要配置 AUTOMATION_RESTRICTED_EMAIL 和 AUTOMATION_RESTRICTED_PASSWORD")
@@ -150,6 +158,48 @@ def restricted_api_settings(restricted_account: AuthenticatedAccount) -> ApiSett
     """
 
     return restricted_account.api_settings
+
+
+@pytest.fixture(scope="session")
+def non_owner_account(
+    settings: Settings,
+    live_mode: bool,
+    privileged_account: AuthenticatedAccount,
+) -> AuthenticatedAccount:
+    """登录并校验一个具备业务权限但不拥有当前测试资源的账号。
+
+    参数 ``settings`` 提供独立非所有者账号配置，``live_mode`` 控制真实访问开关，``privileged_account`` 用于确认
+    账号身份确实不同。返回 ``AuthenticatedAccount``；未配置独立账号时跳过所有权隔离场景，配置不完整、登录失败、
+    账号身份重复或权限不足时直接失败，避免把 403 误当成 404 所有权覆盖。
+    """
+
+    _validate_factor_combo_live_environment(settings, live_mode)
+    credentials = settings.authentication.non_owner
+    if not credentials.email and not credentials.password:
+        pytest.skip(
+            "所有权隔离场景需要配置 AUTOMATION_NON_OWNER_EMAIL 和 AUTOMATION_NON_OWNER_PASSWORD"
+        )
+    if not credentials.email or not credentials.password:
+        pytest.fail("非所有者账号必须同时配置 AUTOMATION_NON_OWNER_EMAIL 和 AUTOMATION_NON_OWNER_PASSWORD")
+    account = _authenticate_account(
+        settings.api,
+        credentials,
+        "非所有者",
+        required_permissions={"use_factor_agent", "use_research_agent", "manage_factor_library"},
+    )
+    if account.user_id == privileged_account.user_id or account.email.casefold() == privileged_account.email.casefold():
+        pytest.fail("非所有者账号不能与有权限账号是同一用户")
+    return account
+
+
+@pytest.fixture(scope="session")
+def non_owner_api_settings(non_owner_account: AuthenticatedAccount) -> ApiSettings:
+    """返回已校验非所有者账号的 API 配置。
+
+    参数 ``non_owner_account`` 是独立登录并通过权限校验的账号上下文。返回其 JWT API 设置，不执行额外请求。
+    """
+
+    return non_owner_account.api_settings
 
 
 @pytest.fixture(scope="session")
@@ -212,6 +262,17 @@ def factor_combo_restricted_api(restricted_api_settings: ApiSettings) -> FactorC
     """
 
     return FactorComboAPI(HTTPClient(restricted_api_settings))
+
+
+@pytest.fixture(scope="session")
+def factor_combo_non_owner_api(non_owner_api_settings: ApiSettings) -> FactorComboAPI:
+    """创建具备业务权限但不拥有被测资源的组合因子客户端。
+
+    参数 ``non_owner_api_settings`` 包含独立非所有者账号的 JWT。返回用于验证 404 所有权隔离的客户端；账号配置
+    缺失时由 ``non_owner_account`` 明确跳过，不复用无权限账号。
+    """
+
+    return FactorComboAPI(HTTPClient(non_owner_api_settings))
 
 
 @pytest.fixture(scope="session")
@@ -392,7 +453,7 @@ def factor_combo_real_run_context(
             agent_uid=agent_selection.agent_uid,
             force_fresh_pipeline_run=False,
         )
-        first_body = service._safe_json(first_response)
+        first_body = read_json_or_diagnostic(first_response)
         first_data = first_body.get("data") if isinstance(first_body, dict) else None
         run = service.parse_started_run_response(
             first_response,
@@ -583,7 +644,7 @@ def _response_json_object(response: Any, action: str) -> dict[str, Any]:
     """
 
     try:
-        body = response.json()
+        body = read_json_object(response, action)
     except ValueError as error:
         raise RuntimeError(f"{action}返回了非 JSON 响应: HTTP {response.status_code}") from error
     if not isinstance(body, dict):

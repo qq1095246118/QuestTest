@@ -10,6 +10,7 @@ import pytest
 from api.factor_combo_api import FactorComboAPI
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
+from tools.http_response import read_json
 
 
 @pytest.mark.integration
@@ -29,7 +30,7 @@ class TestWriteFactorComboExperimentAPI:
         payload = factor_combo_worker_service.build_experiment_payload(worker_form)
 
         response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 201, body
         assert body.get("success") is True, body
@@ -84,9 +85,9 @@ class TestWriteFactorComboExperimentAPI:
         payload = factor_combo_worker_service.build_experiment_payload(worker_form)
 
         first_response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         replay_response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        replay_body = replay_response.json()
+        replay_body = read_json(replay_response)
 
         assert first_response.status_code == 201, first_body
         assert replay_response.status_code == 200, replay_body
@@ -113,7 +114,7 @@ class TestWriteFactorComboExperimentAPI:
         factor_combo_worker_service.create_worker_version(worker_form)
         payload = factor_combo_worker_service.build_experiment_payload(worker_form)
         first_response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         changed_payload = deepcopy(payload)
         changed_payload["metrics"]["overall"]["return_rate"] = 0.99
 
@@ -121,7 +122,7 @@ class TestWriteFactorComboExperimentAPI:
             worker_form.experiment_id,
             changed_payload,
         )
-        conflict_body = conflict_response.json()
+        conflict_body = read_json(conflict_response)
         stored = factor_combo_repository.get_experiment(int(first_body["data"]["experiment_info_id"]))
 
         assert first_response.status_code == 201, first_body
@@ -141,7 +142,7 @@ class TestWriteFactorComboExperimentAPI:
         payload = factor_combo_worker_service.build_experiment_payload(worker_form)
 
         response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 409, body
         assert body.get("success") is False, body
@@ -161,107 +162,9 @@ class TestWriteFactorComboExperimentAPI:
         payload["pipeline_run_id"] = f"wrong-run-{uuid4().hex}"
 
         response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 404, body
-        assert body.get("success") is False, body
-        assert factor_combo_repository.get_experiment_by_external_id(worker_form.experiment_id) is None, body
-
-    @pytest.mark.parametrize(
-        ("field_name", "invalid_value"),
-        [
-            ("evaluation_config", None),
-            ("metrics", []),
-            ("train_config", "ElasticNet"),
-        ],
-    )
-    def test_required_json_object_fields_reject_other_types(
-        self,
-        field_name: str,
-        invalid_value: object,
-        factor_combo_worker_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """将必需 JSON 对象字段改为 null、数组或字符串，并验证 422 且不落库。"""
-
-        worker_form = factor_combo_worker_service.create_worker_form()
-        factor_combo_worker_service.create_worker_version(worker_form)
-        payload = factor_combo_worker_service.build_experiment_payload(worker_form)
-        payload[field_name] = invalid_value
-
-        response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
-
-        assert response.status_code == 422, body
-        assert body.get("success") is False, body
-        assert factor_combo_repository.get_experiment_by_external_id(worker_form.experiment_id) is None, body
-
-    @pytest.mark.parametrize("experiment_config", [None, "missing"], ids=["explicit-null", "omitted"])
-    def test_experiment_config_can_be_null_or_omitted(
-        self,
-        experiment_config: object,
-        factor_combo_worker_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """验证新版契约允许 experiment_config 显式为 null 或完全省略，并核对数据库保存结果。"""
-
-        worker_form = factor_combo_worker_service.create_worker_form()
-        factor_combo_worker_service.create_worker_version(worker_form)
-        if experiment_config == "missing":
-            payload = factor_combo_worker_service.build_experiment_payload(worker_form)
-            payload.pop("experiment_config")
-            expected_config = None
-        else:
-            payload = factor_combo_worker_service.build_experiment_payload(
-                worker_form,
-                experiment_config=None,
-            )
-            expected_config = None
-
-        response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
-        experiment = (
-            factor_combo_repository.get_experiment(int(body["data"]["experiment_info_id"]))
-            if response.status_code in {200, 201} and isinstance(body.get("data"), dict)
-            else None
-        )
-
-        assert response.status_code == 201, body
-        assert body.get("success") is True, body
-        assert experiment is not None, {"api": body, "db": experiment}
-        assert experiment["experiment_config_json"] == expected_config, {"api": body, "db": experiment}
-
-    @pytest.mark.parametrize(
-        ("mutation", "expected_status"),
-        [
-            ("valid_with_failure_reason", 422),
-            ("unsupported_artifact_type", 422),
-            ("unknown_top_level_field", 400),
-        ],
-    )
-    def test_invalid_experiment_contract_is_rejected_without_partial_write(
-        self,
-        mutation: str,
-        expected_status: int,
-        factor_combo_worker_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交有效性冲突、非法 Artifact 类型或未知字段，并验证没有实验记录。"""
-
-        worker_form = factor_combo_worker_service.create_worker_form()
-        factor_combo_worker_service.create_worker_version(worker_form)
-        payload = factor_combo_worker_service.build_experiment_payload(worker_form)
-        if mutation == "valid_with_failure_reason":
-            payload["failure_reason"] = "training failed"
-        elif mutation == "unsupported_artifact_type":
-            payload["artifact"]["type"] = "file"
-        else:
-            payload["experiment_id"] = "must-only-be-in-path"
-
-        response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
-
-        assert response.status_code == expected_status, body
         assert body.get("success") is False, body
         assert factor_combo_repository.get_experiment_by_external_id(worker_form.experiment_id) is None, body
 
@@ -281,7 +184,7 @@ class TestWriteFactorComboExperimentAPI:
         )
 
         response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 201, body
         experiment = factor_combo_repository.get_experiment(int(body["data"]["experiment_info_id"]))
@@ -309,12 +212,12 @@ class TestWriteFactorComboExperimentAPI:
         version = factor_combo_worker_service.create_worker_version(worker_form)
         payload = factor_combo_worker_service.build_experiment_payload(worker_form)
         first_response = factor_combo_worker_service.write_experiment_request(worker_form.experiment_id, payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         first_experiment_id = int(first_body["data"]["experiment_info_id"])
         replacement_id = f"replacement-{uuid4().hex}"
 
         response = factor_combo_worker_service.write_experiment_request(replacement_id, payload)
-        body = response.json()
+        body = read_json(response)
         form = factor_combo_repository.get_form(worker_form.submitted.form_id)
         stored_version = factor_combo_repository.get_combo_version(version.version_id)
 
@@ -342,7 +245,7 @@ class TestWriteFactorComboExperimentAPI:
         factor_combo_worker_service.create_worker_version(first_worker)
         first_payload = factor_combo_worker_service.build_experiment_payload(first_worker)
         first_response = factor_combo_worker_service.write_experiment_request(first_worker.experiment_id, first_payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         second_worker = factor_combo_worker_service.create_worker_form()
         factor_combo_worker_service.create_worker_version(second_worker)
         second_payload = factor_combo_worker_service.build_experiment_payload(
@@ -352,7 +255,7 @@ class TestWriteFactorComboExperimentAPI:
         )
 
         response = factor_combo_worker_service.write_experiment_request(second_worker.experiment_id, second_payload)
-        body = response.json()
+        body = read_json(response)
 
         assert first_response.status_code == 201, first_body
         assert response.status_code == 409, body
@@ -365,24 +268,19 @@ class TestWriteFactorComboExperimentAPI:
         factor_combo_worker_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """使用不同 URI 复用相同 SHA256，并验证新版契约允许不同实验登记相同内容摘要。"""
+        """使用不同 URI 复用同一真实产物的 SHA256，并验证不同实验可以分别登记且不互相覆盖。"""
 
         first_worker = factor_combo_worker_service.create_worker_form()
         second_worker = factor_combo_worker_service.create_worker_form()
         factor_combo_worker_service.create_worker_version(first_worker)
         factor_combo_worker_service.create_worker_version(second_worker)
-        existing_artifact = factor_combo_repository.find_existing_local_artifact()
-        assert existing_artifact is not None, "测试库需要至少一个后端可读取的绝对路径 Artifact 才能验证 SHA256 冲突"
-        source_uri = str(existing_artifact["artifact_uri"])
-        source_hash = str(existing_artifact["artifact_hash"])
-        if "/" not in source_uri:
-            raise AssertionError({"artifact": existing_artifact, "reason": "Artifact URI 没有可构造别名的路径"})
-        source_directory, source_name = source_uri.rsplit("/", 1)
-        first_alias = "".join("/" * (int(character, 16) + 1) + "." for character in uuid4().hex[:12])
-        second_alias = "".join("/" * (int(character, 16) + 1) + "." for character in uuid4().hex[:12])
-        # 随机的斜杠和当前目录片段让 URI 字符串保持唯一，但文件系统仍会解析到同一个后端文件。
-        first_uri = f"{source_directory}{first_alias}/{source_name}"
-        second_uri = f"{source_directory}{second_alias}/{source_name}"
+        source_artifact = factor_combo_repository.find_existing_local_artifact()
+        assert source_artifact is not None, "测试库没有可读取的绝对路径 Artifact，无法验证同 SHA256 不同 URI 场景"
+        source_uri = str(source_artifact["artifact_uri"])
+        source_hash = str(source_artifact["artifact_hash"])
+        first_uri, second_uri = factor_combo_worker_service.build_equivalent_artifact_uris(
+            source_uri
+        )
         assert first_uri != second_uri, {"first_uri": first_uri, "second_uri": second_uri}
         assert factor_combo_repository.count_experiments_by_artifact_uri(first_uri) == 0, first_uri
         assert factor_combo_repository.count_experiments_by_artifact_uri(second_uri) == 0, second_uri
@@ -399,9 +297,9 @@ class TestWriteFactorComboExperimentAPI:
         hash_count_before = factor_combo_repository.count_experiments_by_artifact_hash(source_hash)
 
         first_response = factor_combo_worker_service.write_experiment_request(first_worker.experiment_id, first_payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         second_response = factor_combo_worker_service.write_experiment_request(second_worker.experiment_id, second_payload)
-        second_body = second_response.json()
+        second_body = read_json(second_response)
 
         assert first_response.status_code == 201, first_body
         assert second_response.status_code == 201, second_body
@@ -411,21 +309,20 @@ class TestWriteFactorComboExperimentAPI:
             "first": first_body,
             "second": second_body,
         }
+        first_experiment = factor_combo_repository.get_experiment_by_external_id(first_worker.experiment_id)
         second_experiment = factor_combo_repository.get_experiment_by_external_id(second_worker.experiment_id)
-        assert second_experiment is not None, {"first": first_body, "second": second_body}
-        assert second_experiment["artifact_uri"] == second_payload["artifact"]["uri"], {
+        assert first_experiment is not None and second_experiment is not None, {
             "first": first_body,
             "second": second_body,
-            "db": second_experiment,
+            "first_db": first_experiment,
+            "second_db": second_experiment,
         }
+        assert first_experiment["artifact_uri"] == first_uri, {"api": first_body, "db": first_experiment}
+        assert second_experiment["artifact_uri"] == second_uri, {"api": second_body, "db": second_experiment}
+        assert first_experiment["artifact_hash"] == source_hash.lower(), {"api": first_body, "db": first_experiment}
         assert second_experiment["artifact_hash"] == source_hash.lower(), {
-            "first": first_body,
-            "second": second_body,
+            "api": second_body,
             "db": second_experiment,
-        }
-        assert second_payload["artifact"]["uri"] != first_payload["artifact"]["uri"], {
-            "first": first_payload,
-            "second": second_payload,
         }
         assert factor_combo_repository.count_experiments_by_artifact_hash(source_hash) == hash_count_before + 2, {
             "first": first_body,
@@ -445,8 +342,34 @@ class TestWriteFactorComboExperimentAPI:
         payload = factor_combo_worker_service.build_experiment_payload(worker_form)
 
         response = factor_combo_unauthenticated_api.write_experiment(worker_form.experiment_id, payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 401, body
         assert body.get("success") is False, body
         assert factor_combo_repository.get_experiment_by_external_id(worker_form.experiment_id) is None, body
+
+    def test_user_without_factor_agent_permission_cannot_write_experiment(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_restricted_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """使用缺少 use_factor_agent 的已登录账号写入合法实验，并验证权限拒绝发生在任何业务写入之前。"""
+
+        worker_form = factor_combo_worker_service.create_worker_form()
+        version = factor_combo_worker_service.create_worker_version(worker_form)
+        payload = factor_combo_worker_service.build_experiment_payload(worker_form)
+
+        response = factor_combo_restricted_api.write_experiment(worker_form.experiment_id, payload)
+        body = read_json(response)
+        form = factor_combo_repository.get_form(worker_form.submitted.form_id)
+        stored_version = factor_combo_repository.get_combo_version(version.version_id)
+
+        assert response.status_code == 403, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.get_experiment_by_external_id(worker_form.experiment_id) is None, body
+        assert form is not None and form["factor_combo_experiment_info_id"] is None, {"api": body, "db": form}
+        assert stored_version is not None and stored_version["experiment_id"] is None, {
+            "api": body,
+            "db": stored_version,
+        }

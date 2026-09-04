@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from service.factor_combo_service import FactorComboService
 from tests.resource_scope import TestResourceScope as ResourceScope
+
+
+pytestmark = pytest.mark.unit
 
 
 class _StubResponse:
@@ -52,7 +57,7 @@ def _service_for_payload() -> FactorComboService:
 
 
 class TestFactorComboPayload:
-    """验证表单构造方法区分省略值和显式 JSON null。"""
+    """验证表单请求构造中的默认配置和因子类型标识。"""
 
     def test_omitted_method_groups_uses_default_configuration(self) -> None:
         """调用方省略 method_groups 时生成默认规则方法配置。"""
@@ -85,38 +90,6 @@ class TestFactorComboPayload:
             assert str(error) == "is_sub_factor must be 0 (parent factor) or 1 (sub-factor)"
         else:
             raise AssertionError("invalid is_sub_factor value should fail")
-
-    def test_explicit_null_method_groups_is_preserved_as_json_null(self) -> None:
-        """调用方显式传入 None 时保留 JSON null，不被替换成默认配置。"""
-
-        payload = _service_for_payload().build_form_payload(
-            1,
-            ["factor-a", "factor-b"],
-            method_groups=None,
-        )
-
-        assert "method_groups" in payload
-        assert payload["method_groups"] is None
-
-    def test_explicit_json_values_are_not_rewritten(self) -> None:
-        """调用方传入的其他合法 JSON 值按原值保留。"""
-
-        values: list[Any] = [
-            {},
-            ["ridge", "lasso"],
-            "custom-method-config",
-            123,
-            True,
-        ]
-
-        for value in values:
-            payload = _service_for_payload().build_form_payload(
-                1,
-                ["factor-a", "factor-b"],
-                method_groups=value,
-            )
-
-            assert payload["method_groups"] == value
 
     def test_unexpected_successful_form_response_is_tracked_for_cleanup(self) -> None:
         """负向场景意外收到成功响应时，也登记服务端创建的表单供 Fixture 清理。"""

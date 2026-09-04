@@ -9,6 +9,8 @@ authentication:
   privileged_password: ""
   restricted_email: ""
   restricted_password: ""
+  non_owner_email: ""
+  non_owner_password: ""
 database:
   driver: sqlite
   host: ""

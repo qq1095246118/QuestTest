@@ -5,39 +5,95 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="大版本更新">
+      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/factor_combo_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/factor_combo_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/default.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/default.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config/test.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/test.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db/factor_combo_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor_combo_repository.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/automation-test-framework-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/automation-test-framework-design.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/run_tests.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/run_tests.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/service/factor_combo_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor_combo_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/auth/test_login_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/auth/test_login_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/auth/test_me_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/auth/test_me_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_experiment_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_experiment_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_feedback_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_feedback_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_initial_version_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_initial_version_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_next_version_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_next_version_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_real_e2e_flow.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_real_e2e_flow.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_register_report_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_register_report_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_run_result_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_run_result_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_run_status_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_run_status_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_start_run_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_start_run_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_submit_form_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_submit_form_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_flow.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_factor_combo_flow.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_payload.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_factor_combo_payload.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_factor_combo_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor_combo/test_work_order_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor_combo/test_work_order_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_flow.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_payload.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor_combo_payload.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/test_factor_combo_repository.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/test_http_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_http_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/test_settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/assertions.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/assertions.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="200" />
   </component>
+  <component name="Git.Settings">
+    <option name="PATH_TO_GIT" value="/opt/homebrew/bin/git" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="WARN_ABOUT_LARGE_FILES" value="false" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "qq1095246118"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/qq1095246118/QuestTest.git",
+    "accountId": "9dc199da-2e6a-48c5-bf70-897f44c0d3fb"
+  }
+}]]></component>
   <component name="McpProjectServerCommands">
     <commands />
     <urls />
   </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 8
+}]]></component>
+  <component name="ProjectId" id="3IqpQeRjaTVimdGJCwNJHt4VVmJ" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "codex/kline-case-design",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+    "settings.editor.selected.configurable": "vcs.Git"
   }
 }]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-83fa46d5d5d4-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.33514.19" />
+      </set>
+    </attachedChunks>
+  </component>
   <component name="TaskManager">
     <task id="LOCAL-00001" summary="大版本更新">
       <option name="closed" value="true" />
@@ -71,7 +127,22 @@
       <option name="project" value="LOCAL" />
       <updated>1787312683070</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="大版本更新">
+      <option name="closed" value="true" />
+      <created>1787386686928</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1787386686928</updated>
+    </task>
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="大版本更新" />
+      <created>1788501938261</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1788501938261</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">

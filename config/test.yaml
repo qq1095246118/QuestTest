@@ -9,6 +9,8 @@ authentication:
   privileged_password: "Aa%@#haoran"
   restricted_email: "wuquanxian@qq.com"
   restricted_password: "qq1095246118"
+  non_owner_email: "zuhe@qq.com"
+  non_owner_password: "qq1095246118"
 factor_combo:
   agent_base_url: "https://test-factor-frontend.questvector.ai/api/v2"
   worker_contracts_enabled: true

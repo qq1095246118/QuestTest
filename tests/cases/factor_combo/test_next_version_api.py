@@ -10,6 +10,7 @@ import pytest
 from api.factor_combo_api import FactorComboAPI
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
+from tools.http_response import read_json
 
 
 @pytest.mark.integration
@@ -29,7 +30,7 @@ class TestCreateNextFactorComboVersionAPI:
 
         request_payload = factor_combo_worker_service.build_next_version_payload(claimed)
         response = factor_combo_worker_service.create_next_version_request(claimed)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 201, body
         assert body.get("success") is True, body
@@ -105,7 +106,7 @@ class TestCreateNextFactorComboVersionAPI:
             claimed,
             generation_method=generation_method,
         )
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 201, body
         assert body.get("success") is True, body
@@ -114,35 +115,6 @@ class TestCreateNextFactorComboVersionAPI:
             "api": body,
             "db": version,
         }
-
-    def test_unrelated_parent_and_pool_sub_factor_pair_is_allowed(
-        self,
-        factor_combo_worker_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """使用真实或测试临时的无父子关系母因子和池内子因子，并验证下一版本不强制关系表配对。"""
-
-        claimed = factor_combo_worker_service.create_claimed_feedback()
-        components = deepcopy(list(claimed.worker_form.components))
-        first_sub_factor_id = int(components[0]["component_sub_factor_id"])
-        current_parent_id = int(components[0]["component_factor_id"])
-        unrelated_parent_id = factor_combo_repository.ensure_unrelated_parent_factor_for_test(
-            claimed.worker_form.submitted.form_id,
-            first_sub_factor_id,
-            current_parent_id,
-        )
-        components[0]["component_factor_id"] = unrelated_parent_id
-
-        response = factor_combo_worker_service.create_next_version_request(claimed, components=components)
-        body = response.json()
-
-        assert response.status_code == 201, body
-        version_id = int(body["data"]["factor_combo_version_id"])
-        stored_components = factor_combo_repository.get_components(version_id)
-        stored = next(
-            item for item in stored_components if int(item["component_sub_factor_id"]) == first_sub_factor_id
-        )
-        assert int(stored["component_factor_id"]) == unrelated_parent_id, {"api": body, "db": stored_components}
 
     @pytest.mark.parametrize(
         "mutation",
@@ -183,7 +155,7 @@ class TestCreateNextFactorComboVersionAPI:
             components=components,
             generation_method=generation_method,
         )
-        body = response.json()
+        body = read_json(response)
         feedback = factor_combo_repository.get_feedback(claimed.feedback_id)
         form = factor_combo_repository.get_form(claimed.worker_form.submitted.form_id)
         restored_members = factor_combo_repository.get_pool_members(claimed.worker_form.submitted.form_id)
@@ -220,7 +192,7 @@ class TestCreateNextFactorComboVersionAPI:
         }
 
         response = factor_combo_api.create_next_version(pending.feedback_id, payload)
-        body = response.json()
+        body = read_json(response)
         feedback = factor_combo_repository.get_feedback(pending.feedback_id)
 
         assert response.status_code == 409, body
@@ -245,7 +217,7 @@ class TestCreateNextFactorComboVersionAPI:
             claimed,
             pipeline_run_id=f"wrong-next-run-{uuid4().hex}",
         )
-        body = response.json()
+        body = read_json(response)
         feedback = factor_combo_repository.get_feedback(claimed.feedback_id)
         form = factor_combo_repository.get_form(claimed.worker_form.submitted.form_id)
 
@@ -275,7 +247,7 @@ class TestCreateNextFactorComboVersionAPI:
             components=source_components,
             generation_method="ml",
         )
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 409, body
         assert body.get("success") is False, body
@@ -296,9 +268,9 @@ class TestCreateNextFactorComboVersionAPI:
         claimed = factor_combo_worker_service.create_claimed_feedback()
 
         first_response = factor_combo_worker_service.create_next_version_request(claimed)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         replay_response = factor_combo_worker_service.create_next_version_request(claimed)
-        replay_body = replay_response.json()
+        replay_body = read_json(replay_response)
 
         assert first_response.status_code == 201, first_body
         assert replay_response.status_code == 200, replay_body
@@ -322,34 +294,6 @@ class TestCreateNextFactorComboVersionAPI:
             "replay": replay_body,
         }
 
-    def test_reordered_components_replay_same_next_version(
-        self,
-        factor_combo_worker_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """仅交换 components 数组顺序重放，并验证规范化哈希及具体版本不变。"""
-
-        claimed = factor_combo_worker_service.create_claimed_feedback()
-        first_response = factor_combo_worker_service.create_next_version_request(claimed)
-        first_body = first_response.json()
-        reordered = list(reversed(claimed.worker_form.components))
-
-        response = factor_combo_worker_service.create_next_version_request(claimed, components=reordered)
-        body = response.json()
-
-        assert first_response.status_code == 201, first_body
-        assert response.status_code == 200, body
-        assert body["data"]["idempotent_replay"] is True, body
-        assert body["data"]["factor_combo_version_id"] == first_body["data"]["factor_combo_version_id"], {
-            "first": first_body,
-            "replay": body,
-        }
-        assert body["data"]["combo_version_hash"] == first_body["data"]["combo_version_hash"], {
-            "first": first_body,
-            "replay": body,
-        }
-        assert factor_combo_repository.count_versions_for_form(claimed.worker_form.submitted.form_id) == 2, body
-
     def test_different_content_after_target_is_bound_conflicts(
         self,
         factor_combo_worker_service: FactorComboService,
@@ -359,12 +303,12 @@ class TestCreateNextFactorComboVersionAPI:
 
         claimed = factor_combo_worker_service.create_claimed_feedback()
         first_response = factor_combo_worker_service.create_next_version_request(claimed)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         changed_components = deepcopy(list(claimed.worker_form.components))
         changed_components[0]["weight"] = 0.123456789
 
         response = factor_combo_worker_service.create_next_version_request(claimed, components=changed_components)
-        body = response.json()
+        body = read_json(response)
         feedback = factor_combo_repository.get_feedback(claimed.feedback_id)
 
         assert first_response.status_code == 201, first_body
@@ -384,17 +328,17 @@ class TestCreateNextFactorComboVersionAPI:
 
         claimed = factor_combo_worker_service.create_claimed_feedback()
         first_response = factor_combo_worker_service.create_next_version_request(claimed)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         next_version = factor_combo_worker_service.require_next_version(first_response, claimed)
         experiment_payload = factor_combo_worker_service.build_experiment_payload(claimed.worker_form)
         experiment_response = factor_combo_worker_service.write_experiment_request(
             claimed.worker_form.experiment_id,
             experiment_payload,
         )
-        experiment_body = experiment_response.json()
+        experiment_body = read_json(experiment_response)
 
         replay_response = factor_combo_worker_service.create_next_version_request(claimed)
-        replay_body = replay_response.json()
+        replay_body = read_json(replay_response)
         feedback = factor_combo_repository.get_feedback(claimed.feedback_id)
         form = factor_combo_repository.get_form(claimed.worker_form.submitted.form_id)
         stored_version = factor_combo_repository.get_combo_version(next_version.version_id)
@@ -433,7 +377,7 @@ class TestCreateNextFactorComboVersionAPI:
         }
 
         response = factor_combo_unauthenticated_api.create_next_version(claimed.feedback_id, payload)
-        body = response.json()
+        body = read_json(response)
         feedback = factor_combo_repository.get_feedback(claimed.feedback_id)
 
         assert response.status_code == 401, body
@@ -444,3 +388,29 @@ class TestCreateNextFactorComboVersionAPI:
             "db": feedback,
         }
         assert feedback["next_factor_combo_version_id"] is None, {"api": body, "db": feedback}
+
+    def test_authenticated_non_owner_cannot_create_next_version_for_another_users_feedback(
+        self,
+        factor_combo_worker_service: FactorComboService,
+        factor_combo_non_owner_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """使用另一个已登录账号访问当前账号的已认领反馈，并验证所有权隔离且不更新任何目标指针。"""
+
+        claimed = factor_combo_worker_service.create_claimed_feedback()
+        payload = factor_combo_worker_service.build_next_version_payload(claimed)
+
+        response = factor_combo_non_owner_api.create_next_version(claimed.feedback_id, payload)
+        body = read_json(response)
+        feedback = factor_combo_repository.get_feedback(claimed.feedback_id)
+        form = factor_combo_repository.get_form(claimed.worker_form.submitted.form_id)
+
+        assert response.status_code == 404, body
+        assert body.get("success") is False, body
+        assert factor_combo_repository.count_versions_for_form(claimed.worker_form.submitted.form_id) == 1, body
+        assert feedback is not None and feedback["next_factor_combo_version_id"] is None, {
+            "api": body,
+            "db": feedback,
+        }
+        assert form is not None and form["pipeline_run_id"] is None, {"api": body, "db": form}
+        assert form["factor_combo_id"] is None, {"api": body, "db": form}

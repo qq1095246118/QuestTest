@@ -33,7 +33,6 @@ class FactorComboAPI:
             "/factor-combo/forms/submit",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )
 
     def get_work_order(self, form_id: int) -> requests.Response:
@@ -49,20 +48,16 @@ class FactorComboAPI:
         """启动表单对应的真实组合任务。
 
         参数 ``form_id`` 是已提交表单 ID，``payload`` 包含 agent_uid、可选 feedback_id 和强制刷新标记。
-        返回原始 HTTP 响应；运行 ID 和幂等状态由调用方断言。请求要求强制新建 Run 时不启用底层自动重试，
-        避免第一次请求已经被服务端接受但响应丢失后重复创建 Pipeline。
+        返回原始 HTTP 响应；运行 ID 和幂等状态由调用方断言。所有创建 Run 的 POST 请求都不启用底层自动重试，
+        避免服务端已接受请求但响应丢失后重复创建 Pipeline；需要重试时由上层根据业务状态显式决定。
         """
 
-        force_fresh_value = payload.get("force_fresh_pipeline_run")
-        force_fresh = force_fresh_value is True or (
-            isinstance(force_fresh_value, str) and force_fresh_value.strip().lower() == "true"
-        )
         return self._client.request(
             "POST",
             f"/factor-combo/forms/{form_id}/runs",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=not force_fresh,
+            retryable=False,
         )
 
     def get_run_status(self, form_id: int, run_id: str) -> requests.Response:
@@ -95,7 +90,6 @@ class FactorComboAPI:
             f"/factor-combo/forms/{form_id}/legacy-pipeline/claim",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )
 
     def submit_feedback(self, payload: dict[str, Any]) -> requests.Response:
@@ -110,7 +104,6 @@ class FactorComboAPI:
             "/factor-combo/reports/feedback",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )
 
     def register_report(self, payload: dict[str, Any]) -> requests.Response:
@@ -125,7 +118,6 @@ class FactorComboAPI:
             "/factor-combo/reports/register",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )
 
     def create_initial_version(self, form_id: int, payload: dict[str, Any]) -> requests.Response:
@@ -140,7 +132,6 @@ class FactorComboAPI:
             f"/factor-combo/forms/{form_id}/versions",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )
 
     def write_experiment(self, experiment_id: str, payload: dict[str, Any]) -> requests.Response:
@@ -155,7 +146,6 @@ class FactorComboAPI:
             f"/factor-combo/experiments/{experiment_id}",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )
 
     def create_next_version(self, feedback_id: int, payload: dict[str, Any]) -> requests.Response:
@@ -170,5 +160,4 @@ class FactorComboAPI:
             f"/factor-combo/feedbacks/{feedback_id}/next-version",
             json_body=payload,
             headers={"Content-Type": "application/json"},
-            retryable=True,
         )

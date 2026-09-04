@@ -5,7 +5,7 @@
 - 本文档是 QuestTest 的架构基线；后续新增、修改和重构必须遵守本文档的目录职责与依赖方向。
 - 项目采用 Python 3.12、pytest、HTTP/JSON 和 JUnit XML 作为首版技术实现；这些实现选择不改变本文档的分层原则。
 - 测试环境允许 DB 层执行数据准备、事务和清理；生产环境不得配置写入凭据，也不得执行写操作。
-- 默认通过环境变量注入敏感信息；经用户明确提供的测试环境凭据也可以写入本地 `config/test.yaml`，但不得写入生产凭据或提交包含真实凭据的文件。
+- 测试环境经用户明确授权的账号、地址和数据库凭据可以保留在明确的 `config/test.yaml` 中；生产环境密码、Token 和数据库写入凭据仍只能通过环境变量或密钥服务注入，不得写入代码、静态测试数据或生产配置。
 - 当实际业务需求与本文档冲突时，必须先确认规则，再修改框架或实现。
 
 ## 1. 文档信息
@@ -37,7 +37,7 @@
 4. DB 层只负责数据库连接、查询、事务和数据访问，不负责业务编排。
 5. 解耦不等于万能方法。底层客户端可以通用，但上层 API 和 Service 方法应有清晰、稳定的参数语义。
 6. 运行生成物与人工维护文档分离。
-7. 敏感信息不能写入代码、测试数据或提交到版本库；用户明确提供的测试环境凭据可以保存在本地测试配置文件中，但该文件必须保持测试环境范围。
+7. 测试环境配置与生产配置必须隔离；经明确授权的测试凭据可以保存在 `config/test.yaml`，生产凭据和生产地址只能通过环境变量或密钥服务注入。
 
 ## 4. 目录结构
 
@@ -45,6 +45,7 @@
 automation-test/
 ├── tests/                      # 测试入口层：用例、Fixture、测试数据
 │   ├── cases/                  # 实际测试用例，文件名使用 test_*.py
+│   ├── unit/                   # 离线框架、Service 和 Repository 单元测试，不代表真实接口通过
 │   ├── data/                   # 静态测试数据，如 JSON、YAML、CSV
 │   └── conftest.py             # pytest Fixture、前置/后置和环境初始化
 │
@@ -161,6 +162,20 @@ repository.delete_by_id(entity_id)
 
 带有用户、订单、支付等领域含义的方法应放入 `service`、`api` 或 `db`，不能无限堆入 `tools`。
 
+### 5.6 组合因子模块职责
+
+组合因子实现继续遵守 `tests -> service -> api/db`，并按实际职责拆分大文件：
+
+- `service/factor_combo_service.py`：对 Case 提供稳定入口，编排会话、表单、版本、实验、反馈、真实 Run 和登记流程。
+- `service/factor_combo_models.py`：只定义流程上下文、返回模型、资源 Scope 协议和流程异常，不执行请求或数据库操作。
+- `service/factor_combo_persistence.py`：只负责请求、响应与数据库记录的字段级对账，不发起 HTTP 请求、不执行 SQL。
+- `service/factor_combo_refresh.py`：只负责刷新任务轮询、刷新结果验收以及 IC/有效性 API-DB 对账，不创建刷新任务。
+- `db/factor_combo_repository.py`：负责组合因子实体查询和受控测试数据准备。
+- `db/factor_combo_cleanup.py`：负责测试资源图的归属复核、外部引用检查和事务清理。
+
+Case 仍统一依赖 `FactorComboService` 和 `FactorComboRepository` 的公开入口。内部能力类用于控制文件职责和维护成本，
+不得被 Case 当成新的业务入口，也不得反向依赖 `tests`。
+
 ## 6. 依赖方向
 
 ```text
@@ -212,6 +227,7 @@ def test_business_action_returns_expected_status():
 4. 登记响应中的 `refresh_task_id` 是后端自动创建的刷新任务标识。测试代码只允许调用 `GET /factor/performance/runs/{task_id}` 轮询，不得手工调用刷新任务创建接口。
 5. 只有刷新任务状态为 `completed` 且 `completed_factors`、`incomplete_factors` 和 `summary` 的任务单元全部完整时，才能把流程标记为 `PASS_REGISTERED`。登记接口返回 201 只能证明登记阶段完成，不能代表整个入库流程完成。
 6. 真实流程最终必须在 Refresh 完成后重新读取登记生成的子因子，并确认详情接口中出现刷新后的 IC/有效性数据；登记阶段的 DB 读取只能证明登记资源已落库，不能代替刷新后的最终回查。同时必须在数据库的新版 `factor_ic_summary_metrics`、`factor_ic_runs` 和 `factor_validity_status` 中核对同一复合子因子的非空计算结果及汇总关联。`factor_ic_summary_metrics` 的中位数、标准差、正值率、IS/OOS、t-stat、分层、多空和评分字段都属于可核验的计算证据，不能只检查 `mean_ic`。登记时写入的 `factor_combo_register:*` 初始有效性快照不能作为刷新证据，已废弃的 `factor_mining_symbol_window_metric` 不能作为新版指标来源。若刷新响应明确返回指标计算 `run_id`，还必须与数据库 Run 一致；有效性快照引用的每个 summary ID 还必须能在明细中找到同一因子、同一子因子标识和同一 Run。刷新失败、部分完成、查询超时或回查缺少数据分别记录为 `FAIL_REFRESH`、`FAIL_TECHNICAL` 或 `FAIL_CONTRACT`，不得转换为 `skip` 或 `xfail`。
+   当本轮真实研究合法结束为 `PASS_INVALID`、未进入登记分支时，不得把本轮结果计作登记后深度验收通过。框架应另行动态选择具备真实登记记录、刷新有效性外键、时序/截面汇总、原始切片、组合组件和来源关系的测试环境复合子因子，执行只读详情接口与 DB 对账；不得硬编码因子 ID，也不得为补覆盖而伪造指标或直接写 DB。
 7. 真实 Run 的启动请求必须通过同一个 Service 入口发送。首次创建要求 HTTP 202 且 `idempotent_replay=false`，同请求重放要求 HTTP 200 且 `idempotent_replay=true`；HTTP 409 只能复用响应或数据库表单中与当前表单一致的合法 `pipeline_run_id`，不能再次盲目启动。
 8. 读取结构化结果遇到 HTTP 404 时，必须先查询同一 Run 的状态。状态仍未完成时继续等待并读取原 Run，状态已经失败时记录技术失败；不得把“结果暂未发布”直接当成业务无效，也不得因为一次 404 重启已完成的 Run。
 9. 登记重放的 `sub_factor_id`、`registration_id` 和业务 `combo_id` 必须分别与首次响应一致，并按正整数业务语义比较；登记接口返回“已完成”409 时只查询现有表单、版本和登记映射，不能再次登记或手工创建刷新任务。
@@ -219,14 +235,15 @@ def test_business_action_returns_expected_status():
 11. 独立接口用例中，全新组合版本的首次登记必须是 HTTP 201 且 `idempotent_replay=false`。真实 E2E 遇到首次响应丢失时，允许把同请求自动重试得到的 HTTP 200 且 `idempotent_replay=true` 作为恢复结果，但仍须再实际重放一次并复用同一个刷新任务。两条路径都必须校验版本、子因子、因子详情、有效性快照和登记标记的 ID/哈希关系；登记因子名必须与原 Pipeline 报告一致。登记后的子因子回查必须在明确指标容器中看到 IC、有效性或计算结果，普通报告元数据不能作为刷新证据。
 12. API/DB 对账以字段是否明确返回为边界：API 没有返回的字段不猜测；API 明确返回的字段包括显式 `null` 时，DB 必须存在对应列且值一致，不能因为 DB 值为 `NULL` 就跳过。登记报告是唯一例外：`POST /factor-combo/reports/register` 会先标准化 `report.performance` 再计算哈希并持久化，允许删除值为 `null` 的可选指标；`ts_ic`、`return_rate`、`out_of_sample_icir`、`net_sharpe`、`max_drawdown` 和 `annual_turnover` 六个始终必填指标即使为 `null` 也必须保留。该例外不得扩展到有效性快照或其他请求、响应字段。JSON 布尔和 MySQL `tinyint(1)` 按业务布尔值比较，普通数值仍按 Decimal 容差比较。指标的 `summary_id`、`run_id`、范围和窗口身份必须同时满足；明确 ID/Run 命中多条 DB 记录时应判为契约失败，不能静默通过。仅旧离线替身提供聚合计数而没有 summary 明细时可保留兼容模式，真实 Repository 必须使用新版明细查询。
 
-接口契约测试可以直接调用 `api`，数据库访问测试可以直接调用 `db`，避免 Service 层把底层问题隐藏掉。
+接口契约测试可以直接调用 `api`，数据库访问测试可以直接调用 `db`，避免 Service 层把底层问题隐藏掉。`tests/unit/` 只承载
+离线替身和内部算法测试，并用 `unit` 标记；不得把它们的通过结果统计为真实接口或数据库通过。
 
 ## 8. 配置和敏感信息
 
 - 环境地址、超时时间、重试次数等放在 `config`。
-- 用户名、密码、Token 等敏感信息默认通过环境变量或密钥服务注入；用户明确授权时，可以写入本地测试环境配置文件。
+- 测试环境的用户名、密码、Token、服务地址和数据库连接信息可按授权保存在 `config/test.yaml`；生产环境的同类信息只能通过环境变量或密钥服务注入。
 - 配置加载顺序建议为：默认配置 < 环境配置 < 环境变量。
-- `config/test.yaml` 可以保存用户明确提供的测试凭据，但不得保存生产凭据，且包含真实凭据的文件不得提交到版本库。
+- `config/test.yaml` 只允许保存测试环境配置；不得放入生产地址、生产账号或生产凭据。
 - 组合因子 Agent API 地址、刷新轮询间隔、最大等待时间和轮询次数通过 `AUTOMATION_FACTOR_COMBO_*` 环境变量注入；真实测试只接受测试环境的 Factor `/api/v1` 和 Agent `/api/v2` 地址。
 
 ## 9. 报告和日志
@@ -251,7 +268,7 @@ def test_business_action_returns_expected_status():
 
 1. 先生成目录和最小可运行骨架，再逐步补充实现。
 2. 不额外增加未在本文档中定义的复杂分层。
-3. 生成配置模板和 `.env.example`；真实测试信息只有在用户明确提供且目标为测试环境时，才可写入本地测试配置。
+3. 生成配置模板和 `.env.example`；测试环境信息须与生产配置隔离，生产信息只能在运行时通过环境变量或密钥服务注入。
 4. API、DB、Service、Case 各提供至少一个示例实现。
 5. 示例测试应能通过 Mock 或测试环境配置运行，不得硬编码真实接口地址。
 6. 为公共方法添加类型、参数说明和异常说明。
@@ -266,8 +283,9 @@ def test_business_action_returns_expected_status():
 无法复用时，只能在 `test` 环境通过事务创建带唯一测试标记的临时实体，或在一次接口调用期间临时改变当前测试资源的状态，
 并在上下文退出时恢复原快照。准备、恢复或归属校验失败必须让用例失败并保留诊断，不能伪装成环境跳过。
 
-组合因子当前明确的四类数据前置场景包括：初始版本的池外子因子、初始版本的无父子关系母因子与池内子因子、下一版本的无父子关系母因子与池内子因子、
-下一版本的池外子因子。环境未开启 `--live`、未配置账号/数据库、Worker 合约开关关闭或真实 Agent 地址缺失属于运行环境前置，仍可按 Fixture 规则跳过，
+组合因子当前明确的核心数据前置场景包括：初始版本的池外子因子和下一版本的池外子因子。
+无父子关系的额外母因子与池内子因子组合属于已移除的低价值场景，不再作为计划内 Case 或数据准备要求。
+环境未开启 `--live`、未配置账号/数据库、Worker 合约开关关闭或真实 Agent 地址缺失属于运行环境前置，仍可按 Fixture 规则跳过，
 不得与业务数据准备不足混为一谈。
 
 组合因子测试数据清理由 pytest Fixture 按 Scope 记录的 `{session_id: {form_id, ...}}` 资源归属图发起，Repository 只负责测试库事务、归属复核和实体删除。Case 不直接执行清理 SQL，Service 只登记资源并保护仍可能被异步流程使用的表单。

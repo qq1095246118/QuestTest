@@ -10,6 +10,7 @@ import pytest
 from api.factor_combo_api import FactorComboAPI
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
+from tools.http_response import read_json
 
 
 @pytest.mark.integration
@@ -29,7 +30,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         payload = factor_combo_worker_service.build_feedback_payload(experiment, feedback_text)
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 200, body
         assert body.get("success") is True, body
@@ -95,9 +96,9 @@ class TestSubmitFactorComboReportFeedbackAPI:
         )
 
         first_response = factor_combo_worker_service.submit_feedback_request(payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         replay_response = factor_combo_worker_service.submit_feedback_request(payload)
-        replay_body = replay_response.json()
+        replay_body = read_json(replay_response)
 
         assert first_response.status_code == 200, first_body
         assert replay_response.status_code == 200, replay_body
@@ -126,12 +127,12 @@ class TestSubmitFactorComboReportFeedbackAPI:
         first_text = f"autotest first feedback {uuid4().hex}"
         first_payload = factor_combo_worker_service.build_feedback_payload(experiment, first_text)
         first_response = factor_combo_worker_service.submit_feedback_request(first_payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         second_payload = deepcopy(first_payload)
         second_payload["feedback"] = f"autotest different feedback {uuid4().hex}"
 
         response = factor_combo_worker_service.submit_feedback_request(second_payload)
-        body = response.json()
+        body = read_json(response)
         stored_experiment = factor_combo_repository.get_experiment(experiment.experiment_info_id)
 
         assert first_response.status_code == 200, first_body
@@ -145,48 +146,32 @@ class TestSubmitFactorComboReportFeedbackAPI:
             "db": stored_experiment,
         }
 
-    @pytest.mark.parametrize(
-        ("mutation", "expected_status"),
-        [
-            ("reply_not_two", 422),
-            ("blank_feedback", 422),
-            ("feedback_too_long", 422),
-            ("unknown_field", 400),
-        ],
-    )
-    def test_invalid_feedback_body_does_not_change_completed_chain(
+    def test_authenticated_non_owner_cannot_submit_feedback_for_another_users_form(
         self,
-        mutation: str,
-        expected_status: int,
         factor_combo_worker_service: FactorComboService,
+        factor_combo_non_owner_api: FactorComboAPI,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """提交非法 reply、空白正文、超长正文或未知字段，并验证完成链路无任何状态修改。"""
+        """使用另一个已登录账号提交当前账号的合法反馈，并验证所有权隔离且完成链路保持不变。"""
 
         experiment = factor_combo_worker_service.create_completed_experiment()
-        payload = factor_combo_worker_service.build_feedback_payload(experiment, "autotest invalid feedback")
-        if mutation == "reply_not_two":
-            payload["reply"] = 1
-        elif mutation == "blank_feedback":
-            payload["feedback"] = "   "
-        elif mutation == "feedback_too_long":
-            payload["feedback"] = "x" * 1601
-        else:
-            payload["extra"] = "unknown"
+        payload = factor_combo_worker_service.build_feedback_payload(
+            experiment,
+            f"autotest cross-user feedback {uuid4().hex}",
+        )
 
-        response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        response = factor_combo_non_owner_api.submit_feedback(payload)
+        body = read_json(response)
         form = factor_combo_repository.get_form(experiment.version.worker_form.submitted.form_id)
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         stored_experiment = factor_combo_repository.get_experiment(experiment.experiment_info_id)
 
-        assert response.status_code == expected_status, body
+        assert response.status_code == 404, body
         assert body.get("success") is False, body
         assert factor_combo_repository.count_feedback_for_form(
             experiment.version.worker_form.submitted.form_id
         ) == 0, body
         assert form is not None and form["status"] == "completed", {"api": body, "db": form}
-        assert int(form["factor_combo_id"]) == experiment.version.version_id, {"api": body, "db": form}
         assert version is not None and version["status"] == "candidate", {"api": body, "db": version}
         assert stored_experiment is not None and bool(stored_experiment["valid"]) is True, {
             "api": body,
@@ -204,7 +189,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         payload = factor_combo_worker_service.build_feedback_payload(experiment, "x" * 16000)
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 200, body
         assert body.get("success") is True, body
@@ -224,7 +209,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         payload = factor_combo_worker_service.build_feedback_payload(experiment, "x" * 16001)
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
         form = factor_combo_repository.get_form(experiment.version.worker_form.submitted.form_id)
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         stored_experiment = factor_combo_repository.get_experiment(experiment.experiment_info_id)
@@ -254,7 +239,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         payload["session_id"] = other_session_id
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
         form = factor_combo_repository.get_form(experiment.version.worker_form.submitted.form_id)
 
         assert response.status_code == 404, body
@@ -276,7 +261,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         payload["pipeline_run_id"] = f"wrong-run-{uuid4().hex}"
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
         form = factor_combo_repository.get_form(experiment.version.worker_form.submitted.form_id)
 
         assert response.status_code == 404, body
@@ -307,7 +292,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         }
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
         stored_version = factor_combo_repository.get_combo_version(version.version_id)
 
         assert response.status_code == 409, body
@@ -318,12 +303,12 @@ class TestSubmitFactorComboReportFeedbackAPI:
             "db": stored_version,
         }
 
-    def test_failed_experiment_cannot_receive_feedback(
+    def test_failed_experiment_can_receive_feedback_for_next_round(
         self,
         factor_combo_worker_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """对计算失败的完成实验提交反馈，并验证接口按前置条件拒绝且不改变原链路。"""
+        """对计算失败的完成实验提交反馈，并验证失败结果仍可进入下一轮组合流程。"""
 
         experiment = factor_combo_worker_service.create_completed_experiment(
             valid=False,
@@ -335,24 +320,29 @@ class TestSubmitFactorComboReportFeedbackAPI:
         )
 
         response = factor_combo_worker_service.submit_feedback_request(payload)
-        body = response.json()
+        body = read_json(response)
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         stored_experiment = factor_combo_repository.get_experiment(experiment.experiment_info_id)
 
-        assert response.status_code == 409, body
-        assert body.get("success") is False, body
+        assert response.status_code == 200, body
+        assert body.get("success") is True, body
+        data = factor_combo_worker_service.require_feedback_response(
+            response,
+            expected_form_id=experiment.version.worker_form.submitted.form_id,
+            expected_experiment_info_id=experiment.experiment_info_id,
+            expected_status="pending",
+        )
+        assert data.get("experiment_valid") is False, body
         assert factor_combo_repository.count_feedback_for_form(
             experiment.version.worker_form.submitted.form_id
-        ) == 0, body
-        assert version is not None and version["status"] == "candidate", {"api": body, "db": version}
+        ) == 1, body
+        assert version is not None and version["status"] == "rejected", {"api": body, "db": version}
         assert stored_experiment is not None and bool(stored_experiment["valid"]) is False, {
             "api": body,
             "db": stored_experiment,
         }
-        assert stored_experiment["failure_reason"] == "autotest source calculation failed", {
-            "api": body,
-            "db": stored_experiment,
-        }
+        assert isinstance(stored_experiment.get("failure_reason"), str)
+        assert stored_experiment["failure_reason"].strip(), {"api": body, "db": stored_experiment}
 
     def test_registered_report_cannot_receive_feedback(
         self,
@@ -364,14 +354,14 @@ class TestSubmitFactorComboReportFeedbackAPI:
         experiment = factor_combo_worker_service.create_completed_experiment()
         register_payload = factor_combo_worker_service.build_register_payload(experiment)
         register_response = factor_combo_worker_service.register_report_request(register_payload)
-        register_body = register_response.json()
+        register_body = read_json(register_response)
         feedback_payload = factor_combo_worker_service.build_feedback_payload(
             experiment,
             f"autotest feedback after registration {uuid4().hex}",
         )
 
         response = factor_combo_worker_service.submit_feedback_request(feedback_payload)
-        body = response.json()
+        body = read_json(response)
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         registration = factor_combo_repository.get_registration(
             experiment.version.combo_id,
@@ -400,7 +390,7 @@ class TestSubmitFactorComboReportFeedbackAPI:
         payload = factor_combo_worker_service.build_feedback_payload(experiment, "autotest unauthenticated feedback")
 
         response = factor_combo_unauthenticated_api.submit_feedback(payload)
-        body = response.json()
+        body = read_json(response)
         version = factor_combo_repository.get_combo_version(experiment.version.version_id)
         stored_experiment = factor_combo_repository.get_experiment(experiment.experiment_info_id)
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from api.factor_combo_api import FactorComboAPI
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
+from tools.http_response import read_json
 
 
 @pytest.mark.integration
@@ -24,7 +26,7 @@ class TestFactorComboWorkOrderAPI:
         feedback_before = factor_combo_repository.count_feedback_for_form(submitted.form_id)
 
         response = factor_combo_service.get_work_order_request(submitted.form_id)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 200, body
         assert body.get("success") is True, body
@@ -36,6 +38,12 @@ class TestFactorComboWorkOrderAPI:
         assert isinstance(data.get("pool_snapshot_hash"), str) and data["pool_snapshot_hash"], body
         assert isinstance(data.get("form_json"), dict), body
         assert isinstance(data.get("data_spec"), dict), body
+        request_configuration = data["form_json"].get("configuration_parameters", {})
+        assert isinstance(request_configuration, dict), body
+        data_spec = data["data_spec"]
+        assert data_spec.get("combo_bar_interval"), body
+        assert data_spec.get("return_bar_interval"), body
+        assert isinstance(data_spec.get("forward_return_bars"), int), body
         assert isinstance(data.get("pool_members"), list) and len(data["pool_members"]) >= 2, body
         api_member_ids = [int(item["sub_factor_id"]) for item in data["pool_members"]]
         db_members = factor_combo_repository.get_pool_members(submitted.form_id)
@@ -74,8 +82,71 @@ class TestFactorComboWorkOrderAPI:
         """查询不存在的表单工作单，并验证接口返回 404 错误信封。"""
 
         response = factor_combo_service.get_work_order_request(9_999_999_999)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 404, body
         assert body.get("success") is False, body
         assert isinstance(body.get("error"), str) and body["error"], body
+
+    def test_unauthenticated_user_cannot_read_work_order(
+        self,
+        factor_combo_service: FactorComboService,
+        factor_combo_unauthenticated_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """不携带 JWT 查询已提交表单，并验证返回 401 且工作单关联数据保持不变。"""
+
+        submitted, _ = factor_combo_service.create_form_with_sub_factors()
+        form_before = factor_combo_repository.get_form(submitted.form_id)
+        pool_before = factor_combo_repository.get_pool(submitted.pool_id)
+        members_before = factor_combo_repository.get_pool_members(submitted.form_id)
+
+        response = factor_combo_unauthenticated_api.get_work_order(submitted.form_id)
+        body = read_json(response)
+
+        assert response.status_code == 401, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert factor_combo_repository.get_form(submitted.form_id) == form_before, {
+            "api": body,
+            "before": form_before,
+            "after": factor_combo_repository.get_form(submitted.form_id),
+        }
+        assert factor_combo_repository.get_pool(submitted.pool_id) == pool_before, {
+            "api": body,
+            "before": pool_before,
+            "after": factor_combo_repository.get_pool(submitted.pool_id),
+        }
+        assert factor_combo_repository.get_pool_members(submitted.form_id) == members_before, {
+            "api": body,
+            "before": members_before,
+            "after": factor_combo_repository.get_pool_members(submitted.form_id),
+        }
+
+    def test_authenticated_non_owner_cannot_read_work_order(
+        self,
+        factor_combo_service: FactorComboService,
+        factor_combo_non_owner_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """使用另一已登录账号查询不属于自己的表单，并验证返回 404 且不泄露工作单。"""
+
+        submitted, _ = factor_combo_service.create_form_with_sub_factors()
+        form_before = factor_combo_repository.get_form(submitted.form_id)
+        versions_before = factor_combo_repository.count_versions_for_form(submitted.form_id)
+        feedback_before = factor_combo_repository.count_feedback_for_form(submitted.form_id)
+
+        response = factor_combo_non_owner_api.get_work_order(submitted.form_id)
+        body = read_json(response)
+
+        assert response.status_code == 404, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert body.get("data") in (None, {}), body
+        assert factor_combo_repository.get_form(submitted.form_id) == form_before, {
+            "api": body,
+            "before": form_before,
+            "after": factor_combo_repository.get_form(submitted.form_id),
+        }
+        assert factor_combo_repository.count_versions_for_form(submitted.form_id) == versions_before, body
+        assert factor_combo_repository.count_feedback_for_form(submitted.form_id) == feedback_before, body

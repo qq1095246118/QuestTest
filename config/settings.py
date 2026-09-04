@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -29,7 +29,7 @@ class ApiSettings:
 class AccountCredentials:
     """保存一个自动化测试账号的登录凭据。
 
-    参数 ``email`` 和 ``password`` 只能由环境变量或密钥服务注入。
+    参数 ``email`` 和 ``password`` 可来自测试环境 YAML 配置或运行时环境变量；生产凭据不得进入静态配置。
     返回值由 ``SettingsLoader.load`` 创建，供测试启动阶段调用登录接口；任一字段未配置时对应账号不可用。
     """
 
@@ -41,12 +41,14 @@ class AccountCredentials:
 class AuthenticationSettings:
     """保存有权限和无权限两类测试账号。
 
-    参数 ``privileged`` 用于正常业务请求，``restricted`` 用于验证已登录但权限不足的 403 场景。
-    返回值由 ``SettingsLoader.load`` 创建，账号密码不会写入静态配置。
+    参数 ``privileged`` 用于正常业务请求，``restricted`` 用于验证已登录但权限不足的 403 场景，``non_owner`` 用于
+    验证拥有同等业务权限但不拥有目标资源的 404 所有权隔离场景。
+    返回值由 ``SettingsLoader.load`` 创建；生产环境账号密码不得写入静态配置。
     """
 
     privileged: AccountCredentials
     restricted: AccountCredentials
+    non_owner: AccountCredentials = field(default_factory=lambda: AccountCredentials(None, None))
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,8 @@ class SettingsLoader:
         "AUTOMATION_PRIVILEGED_PASSWORD": ("authentication", "privileged_password"),
         "AUTOMATION_RESTRICTED_EMAIL": ("authentication", "restricted_email"),
         "AUTOMATION_RESTRICTED_PASSWORD": ("authentication", "restricted_password"),
+        "AUTOMATION_NON_OWNER_EMAIL": ("authentication", "non_owner_email"),
+        "AUTOMATION_NON_OWNER_PASSWORD": ("authentication", "non_owner_password"),
         "AUTOMATION_DB_DRIVER": ("database", "driver"),
         "AUTOMATION_DB_HOST": ("database", "host"),
         "AUTOMATION_DB_PORT": ("database", "port"),
@@ -245,6 +249,10 @@ class SettingsLoader:
                 restricted=AccountCredentials(
                     email=SettingsLoader._optional_string(authentication.get("restricted_email")),
                     password=SettingsLoader._optional_string(authentication.get("restricted_password")),
+                ),
+                non_owner=AccountCredentials(
+                    email=SettingsLoader._optional_string(authentication.get("non_owner_email")),
+                    password=SettingsLoader._optional_string(authentication.get("non_owner_password")),
                 ),
             ),
             database=DatabaseSettings(

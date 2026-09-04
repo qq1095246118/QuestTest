@@ -9,6 +9,7 @@ import requests
 from api.auth_api import AuthAPI, AuthResponsePayload
 from api.client import HTTPClient
 from config.settings import ApiSettings
+from tools.http_response import read_json
 
 
 class TestLoginAPI:
@@ -40,7 +41,7 @@ class TestLoginAPI:
             "privileged@example.test",
             "test-password",
         )
-        body = actual_response.json()
+        body = read_json(actual_response)
 
         assert actual_response.status_code == 200, body
         assert AuthResponsePayload.token(body) == "new-jwt", body

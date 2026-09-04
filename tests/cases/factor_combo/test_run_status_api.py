@@ -8,6 +8,7 @@ import pytest
 
 from api.factor_combo_api import FactorComboAPI
 from db.factor_combo_repository import FactorComboRepository
+from tools.http_response import read_json
 
 
 @pytest.mark.integration
@@ -36,12 +37,13 @@ class TestFactorComboRunStatusAPI:
         before_row = factor_combo_repository.get_form(run.form.form_id)
 
         response = factor_combo_api.get_run_status(run.form.form_id, run.pipeline_run_id)
-        body = response.json()
+        body = read_json(response)
         after_row = factor_combo_repository.get_form(run.form.form_id)
 
         assert response.status_code == 200, body
         assert body.get("success") is True, body
         assert body.get("data", {}).get("pipeline_status") == "completed", body
+        assert body.get("data", {}).get("recommended_action") == "read_result", body
         assert before_row is not None and after_row is not None, {"api": body, "before": before_row, "after": after_row}
         for field in ("status", "factor_combo_id", "factor_combo_experiment_info_id", "pipeline_run_id"):
             assert before_row.get(field) == after_row.get(field), {
@@ -60,8 +62,55 @@ class TestFactorComboRunStatusAPI:
         form = factor_combo_real_run_context["form"]
 
         response = factor_combo_api.get_run_status(form.form_id, "combo-999999999-0000000000000000")
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
         assert isinstance(body.get("error"), str) and body["error"], body
+
+    def test_unauthenticated_user_cannot_read_run_status(
+        self,
+        factor_combo_real_run_context: dict[str, Any],
+        factor_combo_unauthenticated_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """不携带 JWT 查询真实 Run，并验证返回 401 且表单运行指针不变。"""
+
+        run = factor_combo_real_run_context["run"]
+        form_before = factor_combo_repository.get_form(run.form.form_id)
+
+        response = factor_combo_unauthenticated_api.get_run_status(run.form.form_id, run.pipeline_run_id)
+        body = read_json(response)
+
+        assert response.status_code == 401, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert factor_combo_repository.get_form(run.form.form_id) == form_before, {
+            "api": body,
+            "before": form_before,
+            "after": factor_combo_repository.get_form(run.form.form_id),
+        }
+
+    def test_authenticated_non_owner_cannot_read_run_status(
+        self,
+        factor_combo_real_run_context: dict[str, Any],
+        factor_combo_non_owner_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """使用另一已登录账号查询不属于自己的真实 Run，并验证不返回运行数据且不改变表单。"""
+
+        run = factor_combo_real_run_context["run"]
+        form_before = factor_combo_repository.get_form(run.form.form_id)
+
+        response = factor_combo_non_owner_api.get_run_status(run.form.form_id, run.pipeline_run_id)
+        body = read_json(response)
+
+        assert response.status_code == 404, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert body.get("data") in (None, {}), body
+        assert factor_combo_repository.get_form(run.form.form_id) == form_before, {
+            "api": body,
+            "before": form_before,
+            "after": factor_combo_repository.get_form(run.form.form_id),
+        }

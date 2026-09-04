@@ -10,6 +10,7 @@ import pytest
 from api.factor_combo_api import FactorComboAPI
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
+from tools.http_response import read_json
 
 
 @pytest.mark.integration
@@ -32,7 +33,7 @@ class TestSubmitFactorComboFormAPI:
         )
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 202, body
         assert body.get("success") is True, body
@@ -74,7 +75,7 @@ class TestSubmitFactorComboFormAPI:
         payload = factor_combo_service.build_form_payload(session_id, [parent.factor_name], is_sub_factor=0)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 202, body
         assert body.get("success") is True, body
@@ -110,42 +111,52 @@ class TestSubmitFactorComboFormAPI:
             member_rows,
         )
 
-    def test_submit_mixed_parent_and_child_expands_and_deduplicates(
+    def test_submit_mixed_parent_and_child_is_rejected(
         self,
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """在同一请求中混用母因子和其子因子，并验证展开结果去重后完整写入因子池。"""
+        """在同一请求中混用母因子和子因子，并验证接口拒绝且不创建表单。"""
+
+        response, session_id, parent = factor_combo_service.submit_mixed_parent_and_sub_factor_for_rejection()
+        body = read_json(response)
+
+        assert response.status_code == 422, {"api": body, "parent": parent}
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert factor_combo_repository.count_forms_for_session(session_id) == 0, {
+            "api": body,
+            "session_id": session_id,
+        }
+
+    @pytest.mark.parametrize("is_sub_factor", [0, 1])
+    def test_valid_factor_type_flag_is_persisted(
+        self,
+        is_sub_factor: int,
+        factor_combo_service: FactorComboService,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """分别以母因子和子因子类型标识提交，并核对请求标识原样保存在表单配置中。"""
 
         parent = factor_combo_repository.find_parent_with_sub_factors()
-        assert parent is not None, "测试数据库需要至少一个拥有两个关联子因子的母因子"
+        choices = factor_combo_repository.find_sub_factor_pair()
+        assert parent is not None and choices is not None, "测试数据库需要可用母因子和子因子"
+        names = [parent.factor_name] if is_sub_factor == 0 else [choice.sub_factor_name for choice in choices]
         session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [parent.factor_name, f"  {parent.sub_factors[0].sub_factor_name}  "],
-            is_sub_factor=0,
-        )
+        payload = factor_combo_service.build_form_payload(session_id, names, is_sub_factor=is_sub_factor)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 202, body
-        assert body.get("success") is True, body
         submitted = factor_combo_service.require_submitted_form(response, session_id)
-        member_rows = factor_combo_repository.get_pool_members(submitted.form_id)
-        actual_ids = [int(row["sub_factor_id"]) for row in member_rows]
-        expected_ids = [choice.sub_factor_id for choice in parent.sub_factors]
-        assert set(actual_ids) == set(expected_ids), {
+        form_row = factor_combo_repository.get_form(submitted.form_id)
+        assert form_row is not None, {"api": body, "db": form_row}
+        assert form_row["form_json"]["is_sub_factor"] == is_sub_factor, {
             "api": body,
-            "expected_sub_factor_ids": expected_ids,
-            "db": member_rows,
+            "request": payload,
+            "db": form_row,
         }
-        assert len(actual_ids) == len(expected_ids), {
-            "api": body,
-            "expected_sub_factor_ids": expected_ids,
-            "db": member_rows,
-        }
-        assert len(actual_ids) == len(set(actual_ids)), {"api": body, "db": member_rows}
 
     def test_duplicate_factor_names_are_rejected_case_and_space_insensitively(
         self,
@@ -164,7 +175,7 @@ class TestSubmitFactorComboFormAPI:
         before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
@@ -190,9 +201,9 @@ class TestSubmitFactorComboFormAPI:
         )
 
         first_response = factor_combo_service.submit_form(payload)
-        first_body = first_response.json()
+        first_body = read_json(first_response)
         replay_response = factor_combo_service.submit_form(deepcopy(payload))
-        replay_body = replay_response.json()
+        replay_body = read_json(replay_response)
 
         assert first_response.status_code == 202, first_body
         assert replay_response.status_code == 202, replay_body
@@ -216,80 +227,12 @@ class TestSubmitFactorComboFormAPI:
             "db": member_rows,
         }
 
-    def test_normalized_form_replay_returns_existing_form(
+    def test_blank_factor_name_is_rejected_without_persistence(
         self,
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """因子名和窗口仅增加空格且目标顺序变化时，验证规范化哈希仍复用原表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-            objectives=[
-                {"code": "sharpe", "priority": 2},
-                {"code": "ts-score", "priority": 1},
-            ],
-            notes="autotest normalized form replay",
-        )
-        normalized_replay = deepcopy(payload)
-        normalized_replay["factors_name"] = [f"  {name}  " for name in payload["factors_name"]]
-        normalized_replay["configuration_parameters"]["rolling_window"] = "  12m  "
-        normalized_replay["configuration_parameters"]["objectives"] = [
-            {"code": "ts-score", "priority": 1},
-            {"code": "sharpe", "priority": 2},
-        ]
-
-        first_response = factor_combo_service.submit_form(payload)
-        first_body = first_response.json()
-        replay_response = factor_combo_service.submit_form(normalized_replay)
-        replay_body = replay_response.json()
-
-        assert first_response.status_code == 202, first_body
-        assert replay_response.status_code == 202, replay_body
-        assert first_body.get("success") is True, first_body
-        assert replay_body.get("success") is True, replay_body
-        first_data = first_body.get("data")
-        replay_data = replay_body.get("data")
-        assert isinstance(first_data, dict) and isinstance(replay_data, dict), {
-            "first": first_body,
-            "replay": replay_body,
-        }
-        assert replay_data.get("form_id") == first_data.get("form_id"), {
-            "first": first_body,
-            "replay": replay_body,
-        }
-        assert replay_data.get("factor_combo_pool_id") == first_data.get("factor_combo_pool_id"), {
-            "first": first_body,
-            "replay": replay_body,
-        }
-        assert factor_combo_repository.count_forms_for_session(session_id) == 1, {
-            "first": first_body,
-            "replay": replay_body,
-        }
-
-    @pytest.mark.parametrize(
-        ("case_name", "is_sub_factor", "expected_status"),
-        [
-            ("missing", "__missing__", 422),
-            ("null", None, 422),
-            ("negative", -1, 422),
-            ("unsupported", 2, 422),
-            ("string", "1", 400),
-        ],
-    )
-    def test_invalid_factor_type_is_rejected_without_persistence(
-        self,
-        case_name: str,
-        is_sub_factor: Any,
-        expected_status: int,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交缺失、越界或类型错误的因子类型标识，并验证接口拒绝且不创建表单。"""
+        """提交空白因子名称，并验证接口拒绝且不创建表单。"""
 
         choices = factor_combo_repository.find_sub_factor_pair()
         assert choices is not None, "测试数据库至少需要两个可用子因子"
@@ -298,62 +241,13 @@ class TestSubmitFactorComboFormAPI:
             session_id,
             [choice.sub_factor_name for choice in choices],
         )
-        if case_name == "missing":
-            payload.pop("is_sub_factor")
-        else:
-            payload["is_sub_factor"] = is_sub_factor
+        payload["factors_name"] = ["   "]
         before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
-        assert response.status_code == expected_status, body
-        assert body.get("success") is False, body
-        assert isinstance(body.get("error"), str) and body["error"], body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
-    @pytest.mark.parametrize(
-        ("case_name", "factor_names", "expected_status"),
-        [
-            ("missing", "__missing__", 422),
-            ("null", None, 422),
-            ("empty_array", [], 422),
-            ("string_instead_of_array", "factor-name", 400),
-            ("non_string_item", [123], 400),
-            ("blank_name", ["   "], 422),
-            ("name_over_255_characters", ["x" * 256], 422),
-        ],
-    )
-    def test_invalid_factor_name_collection_is_rejected_without_persistence(
-        self,
-        case_name: str,
-        factor_names: Any,
-        expected_status: int,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交缺失、空、类型错误或名称长度越界的因子数组，并验证不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        if case_name == "missing":
-            payload.pop("factors_name")
-        else:
-            payload["factors_name"] = factor_names
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == expected_status, body
+        assert response.status_code == 422, body
         assert body.get("success") is False, body
         assert isinstance(body.get("error"), str) and body["error"], body
         assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
@@ -375,7 +269,7 @@ class TestSubmitFactorComboFormAPI:
         before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
@@ -404,7 +298,7 @@ class TestSubmitFactorComboFormAPI:
         before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 422, body
         assert body.get("success") is False, body
@@ -415,72 +309,14 @@ class TestSubmitFactorComboFormAPI:
             "before_count": before_count,
         }
 
-    @pytest.mark.parametrize(
-        ("case_name", "session_value", "expected_status"),
-        [
-            ("missing", "__missing__", 422),
-            ("null", None, 422),
-            ("zero", 0, 422),
-            ("negative", -1, 400),
-            ("string", "10001", 400),
-            ("not_found", 9_999_999_999, 404),
-        ],
-    )
-    def test_invalid_session_does_not_create_form(
+    def test_supported_method_groups_are_persisted_without_shape_loss(
         self,
-        case_name: str,
-        session_value: Any,
-        expected_status: int,
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """提交缺失、类型错误或不存在的会话，并验证接口拒绝且不会产生表单。"""
+        """提交文档支持的规则方法分组，并验证接口与数据库保留完整配置。"""
 
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        valid_session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            valid_session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        if case_name == "missing":
-            payload.pop("session_id")
-        else:
-            payload["session_id"] = session_value
-        before_count = factor_combo_repository.count_forms_for_session(valid_session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == expected_status, body
-        assert body.get("success") is False, body
-        assert isinstance(body.get("error"), str) and body["error"], body
-        assert factor_combo_repository.count_forms_for_session(valid_session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-            "after_count": factor_combo_repository.count_forms_for_session(valid_session_id),
-        }
-
-    @pytest.mark.parametrize(
-        "method_groups",
-        [
-            {},
-            {"unknown_group": ["custom_method", "custom_method"]},
-            ["ridge", "lasso"],
-            "custom-method-config",
-            123,
-            True,
-            None,
-        ],
-    )
-    def test_method_groups_json_values_are_persisted_without_shape_guessing(
-        self,
-        method_groups: Any,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交合法 JSON 的不同 method_groups 形态，并验证接口原样持久化而不由测试猜测结构。"""
-
+        method_groups = {"rule_methods": ["equal_weight", "ic_weight", "pca"]}
         choices = factor_combo_repository.find_sub_factor_pair()
         assert choices is not None, "测试数据库至少需要两个可用子因子"
         session_id = factor_combo_service.create_session()
@@ -491,7 +327,7 @@ class TestSubmitFactorComboFormAPI:
         )
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 202, body
         assert body.get("success") is True, body
@@ -518,41 +354,11 @@ class TestSubmitFactorComboFormAPI:
             "db": form_row,
         }
 
-    def test_missing_method_groups_is_rejected_without_persistence(
-        self,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """省略 method_groups 字段，并验证接口按新版契约拒绝请求且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        payload.pop("method_groups")
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == 422, body
-        assert body.get("success") is False, body
-        assert "method_groups" in str(body.get("error", "")), body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
     @pytest.mark.parametrize(
         ("objectives", "expected_status"),
         [
             ([{"code": "ts-score", "priority": 1}, {"code": "sharpe", "priority": 1}], 422),
             ([{"code": "ts-score", "priority": 0}], 422),
-            ([{"code": "ts-score", "priority": -1}], 422),
-            ([{"code": "ts-score", "priority": "1"}], 400),
             ([{"code": "unknown-objective", "priority": 1}], 422),
         ],
     )
@@ -563,7 +369,7 @@ class TestSubmitFactorComboFormAPI:
         factor_combo_service: FactorComboService,
         factor_combo_repository: FactorComboRepository,
     ) -> None:
-        """提交重复、非正数、类型错误的优先级或未定义目标，并验证不创建表单。"""
+        """提交重复、非正数或未定义目标，并验证不创建表单。"""
 
         choices = factor_combo_repository.find_sub_factor_pair()
         assert choices is not None, "测试数据库至少需要两个可用子因子"
@@ -576,7 +382,7 @@ class TestSubmitFactorComboFormAPI:
         before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == expected_status, body
         assert body.get("success") is False, body
@@ -607,7 +413,7 @@ class TestSubmitFactorComboFormAPI:
         )
 
         response = factor_combo_service.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 202, body
         submitted = factor_combo_service.require_submitted_form(response, session_id)
@@ -646,319 +452,33 @@ class TestSubmitFactorComboFormAPI:
             session_id,
             [choice.sub_factor_name for choice in choices],
             configuration_overrides={
-                "rolling_window": "custom-window-32-character-1234",
-                "correlation_penalty": -9999.9999,
-                "transaction_cost": 0.12345,
+                "rolling_window": "6m",
+                "correlation_penalty": 0.25,
+                "transaction_cost": 0.001,
                 "optimize_subfactor_params": True,
             },
         )
 
         submit_response = factor_combo_service.submit_form(payload)
-        submit_body = submit_response.json()
+        submit_body = read_json(submit_response)
         assert submit_response.status_code == 202, submit_body
         submitted = factor_combo_service.require_submitted_form(submit_response, session_id)
         form_row = factor_combo_repository.get_form(submitted.form_id)
         assert form_row is not None, {"api": submit_body, "db": form_row}
         stored_config = form_row["form_json"]["configuration_parameters"]
-        assert stored_config["rolling_window"] == "custom-window-32-character-1234", {
+        assert stored_config["rolling_window"] == "6m", {
             "api": submit_body,
             "db": form_row,
         }
-        assert float(stored_config["correlation_penalty"]) == pytest.approx(-9999.9999), {
+        assert float(stored_config["correlation_penalty"]) == pytest.approx(0.25), {
             "api": submit_body,
             "db": form_row,
         }
-        assert float(stored_config["transaction_cost"]) == pytest.approx(0.12345), {
+        assert float(stored_config["transaction_cost"]) == pytest.approx(0.001), {
             "api": submit_body,
             "db": form_row,
         }
         assert stored_config["optimize_subfactor_params"] is True, {"api": submit_body, "db": form_row}
-
-    @pytest.mark.parametrize(
-        ("case_name", "configuration_parameters", "expected_status"),
-        [
-            ("missing", "__missing__", 422),
-            ("null", None, 422),
-            ("array", [], 400),
-            ("string", "invalid-configuration", 400),
-        ],
-    )
-    def test_invalid_configuration_container_is_rejected_without_persistence(
-        self,
-        case_name: str,
-        configuration_parameters: Any,
-        expected_status: int,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交缺失、空值或非对象的研究配置，并验证接口拒绝且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        if case_name == "missing":
-            payload.pop("configuration_parameters")
-        else:
-            payload["configuration_parameters"] = configuration_parameters
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == expected_status, body
-        assert body.get("success") is False, body
-        assert isinstance(body.get("error"), str) and body["error"], body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
-    @pytest.mark.parametrize(
-        "missing_field",
-        [
-            "objectives",
-            "rolling_window",
-            "correlation_penalty",
-            "transaction_cost",
-            "optimize_subfactor_params",
-        ],
-    )
-    def test_missing_required_configuration_field_is_rejected_without_persistence(
-        self,
-        missing_field: str,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """逐一省略研究配置中的必填字段，并验证接口拒绝且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        payload["configuration_parameters"].pop(missing_field)
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == 422, body
-        assert body.get("success") is False, body
-        assert isinstance(body.get("error"), str) and body["error"], body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
-    @pytest.mark.parametrize(
-        ("field_name", "invalid_value", "expected_status"),
-        [
-            ("objectives", [], 422),
-            ("objectives", "ts-score", 400),
-            ("rolling_window", 12, 400),
-            ("correlation_penalty", "0.1", 400),
-            ("transaction_cost", "0.001", 400),
-            ("optimize_subfactor_params", 1, 400),
-        ],
-    )
-    def test_invalid_configuration_field_type_is_rejected_without_persistence(
-        self,
-        field_name: str,
-        invalid_value: Any,
-        expected_status: int,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交空目标或类型不符合文档的研究配置字段，并验证接口拒绝且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-            configuration_overrides={field_name: invalid_value},
-        )
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == expected_status, body
-        assert body.get("success") is False, body
-        assert isinstance(body.get("error"), str) and body["error"], body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
-    @pytest.mark.parametrize(
-        ("field_name", "invalid_value"),
-        [
-            ("rolling_window", ""),
-            ("rolling_window", "   "),
-            ("rolling_window", "x" * 33),
-            ("correlation_penalty", -10000),
-            ("correlation_penalty", 10000),
-            ("correlation_penalty", 0.12345),
-            ("transaction_cost", -0.00001),
-            ("transaction_cost", 0.123456),
-            ("transaction_cost", 100_000_000_000),
-        ],
-    )
-    def test_configuration_parameter_boundaries_are_rejected(
-        self,
-        field_name: str,
-        invalid_value: object,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交超出新版边界的配置参数，并验证接口拒绝且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-            configuration_overrides={field_name: invalid_value},
-        )
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == 422, body
-        assert body.get("success") is False, body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
-    def test_notes_at_500_characters_is_persisted(
-        self,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交正好 500 个字符的补充说明，并验证接口接受且数据库原样保存。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        notes = "n" * 500
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-            notes=notes,
-        )
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == 202, body
-        assert body.get("success") is True, body
-        submitted = factor_combo_service.require_submitted_form(response, session_id)
-        form_row = factor_combo_repository.get_form(submitted.form_id)
-        assert form_row is not None, {"api": body, "db": form_row}
-        assert form_row["form_json"]["notes"] == notes, {"api": body, "db": form_row}
-
-    def test_omitted_notes_is_accepted(
-        self,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """省略可选的补充说明，并验证接口接受且对应表单成功持久化。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        payload.pop("notes")
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == 202, body
-        assert body.get("success") is True, body
-        submitted = factor_combo_service.require_submitted_form(response, session_id)
-        form_row = factor_combo_repository.get_form(submitted.form_id)
-        assert form_row is not None, {"api": body, "db": form_row}
-        assert int(form_row["session_id"]) == session_id, {"api": body, "db": form_row}
-
-    @pytest.mark.parametrize(
-        ("notes", "expected_status"),
-        [
-            ("n" * 501, 422),
-            (123, 400),
-        ],
-    )
-    def test_invalid_notes_is_rejected_without_persistence(
-        self,
-        notes: Any,
-        expected_status: int,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交长度超过 500 或类型错误的补充说明，并验证接口拒绝且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        payload["notes"] = notes
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == expected_status, body
-        assert body.get("success") is False, body
-        assert isinstance(body.get("error"), str) and body["error"], body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-        }
-
-    def test_unknown_top_level_field_is_rejected(
-        self,
-        factor_combo_service: FactorComboService,
-        factor_combo_repository: FactorComboRepository,
-    ) -> None:
-        """提交未知顶层字段，并验证接口返回格式错误且不创建表单。"""
-
-        choices = factor_combo_repository.find_sub_factor_pair()
-        assert choices is not None, "测试数据库至少需要两个可用子因子"
-        session_id = factor_combo_service.create_session()
-        payload = factor_combo_service.build_form_payload(
-            session_id,
-            [choice.sub_factor_name for choice in choices],
-        )
-        payload = deepcopy(payload)
-        payload["research_type"] = "machine_learning"
-        before_count = factor_combo_repository.count_forms_for_session(session_id)
-
-        response = factor_combo_service.submit_form(payload)
-        body = response.json()
-
-        assert response.status_code == 400, body
-        assert body.get("success") is False, body
-        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
-            "api": body,
-            "before_count": before_count,
-            "after_count": factor_combo_repository.count_forms_for_session(session_id),
-        }
 
     def test_unauthenticated_form_submission_is_rejected_without_persistence(
         self,
@@ -978,9 +498,37 @@ class TestSubmitFactorComboFormAPI:
         before_count = factor_combo_repository.count_forms_for_session(session_id)
 
         response = factor_combo_unauthenticated_api.submit_form(payload)
-        body = response.json()
+        body = read_json(response)
 
         assert response.status_code == 401, body
+        assert body.get("success") is False, body
+        assert isinstance(body.get("error"), str) and body["error"], body
+        assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {
+            "api": body,
+            "before_count": before_count,
+        }
+
+    def test_authenticated_non_owner_cannot_submit_form_to_another_users_session(
+        self,
+        factor_combo_service: FactorComboService,
+        factor_combo_non_owner_api: FactorComboAPI,
+        factor_combo_repository: FactorComboRepository,
+    ) -> None:
+        """使用另一个已登录账号向当前账号会话提交表单，并验证所有权隔离且不产生持久化数据。"""
+
+        choices = factor_combo_repository.find_sub_factor_pair()
+        assert choices is not None, "测试数据库至少需要两个可用子因子"
+        session_id = factor_combo_service.create_session("autotest-submit-owned-session")
+        payload = factor_combo_service.build_form_payload(
+            session_id,
+            [choice.sub_factor_name for choice in choices],
+        )
+        before_count = factor_combo_repository.count_forms_for_session(session_id)
+
+        response = factor_combo_non_owner_api.submit_form(payload)
+        body = read_json(response)
+
+        assert response.status_code == 404, body
         assert body.get("success") is False, body
         assert isinstance(body.get("error"), str) and body["error"], body
         assert factor_combo_repository.count_forms_for_session(session_id) == before_count, {

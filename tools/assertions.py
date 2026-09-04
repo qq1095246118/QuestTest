@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from tools.http_response import read_json
+
 
 class JsonResponse(Protocol):
     """描述通用响应断言所需的最小响应接口。"""
@@ -42,7 +44,7 @@ class ResponseAssertions:
         返回已解析的 JSON 字典；响应不是对象或任一字段不匹配时抛出 ``AssertionError``。
         """
 
-        payload = response.json()
+        payload = read_json(response, "response assertion")
         assert isinstance(payload, dict), f"Expected JSON object, received {type(payload).__name__}"
         for field, expected_value in expected_fields.items():
             assert payload.get(field) == expected_value, (

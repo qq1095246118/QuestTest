@@ -63,8 +63,8 @@ class TestHTTPClientRetry:
             auth_token="test-token",
         )
 
-    def test_retryable_factor_combo_post_retries_ssl_eof_with_sixty_second_timeout(self) -> None:
-        """组合因子幂等 POST 首次发生 SSL 错误时重试，并在每次请求中使用 60 秒超时。"""
+    def test_factor_combo_submit_post_does_not_retry_ssl_eof(self) -> None:
+        """组合因子表单 POST 发生 SSL 错误时不自动重放，避免响应丢失造成重复表单。"""
 
         session = SequenceSession(
             [
@@ -74,14 +74,14 @@ class TestHTTPClientRetry:
         )
         api = FactorComboAPI(HTTPClient(self._settings(), session=session))
 
-        response = api.submit_form({"session_id": 1})
+        with pytest.raises(requests.exceptions.SSLError):
+            api.submit_form({"session_id": 1})
 
-        assert response.status_code == 202, response.json()
-        assert len(session.requests) == 2, session.requests
-        assert [request["timeout"] for request in session.requests] == [60, 60], session.requests
+        assert len(session.requests) == 1, session.requests
+        assert session.requests[0]["timeout"] == 60, session.requests
 
-    def test_retryable_factor_combo_post_retries_temporary_server_error(self) -> None:
-        """组合因子幂等 POST 收到 503 时按配置重试，并返回下一次成功响应。"""
+    def test_factor_combo_submit_post_does_not_retry_temporary_server_error(self) -> None:
+        """组合因子表单 POST 收到 503 时不自动重放，避免服务端已写入而客户端重复提交。"""
 
         session = SequenceSession(
             [
@@ -93,8 +93,8 @@ class TestHTTPClientRetry:
 
         response = api.submit_form({"session_id": 1})
 
-        assert response.status_code == 202, response.json()
-        assert len(session.requests) == 2, session.requests
+        assert response.status_code == 503, {"status": response.status_code}
+        assert len(session.requests) == 1, session.requests
 
     def test_force_fresh_run_post_does_not_retry_after_transport_error(self) -> None:
         """强制创建新 Run 的 POST 遇到网络错误时不得自动重放，避免服务端已创建后产生重复 Run。"""
@@ -117,6 +117,29 @@ class TestHTTPClientRetry:
             )
 
         assert len(session.requests) == 1, session.requests
+
+    def test_regular_start_run_post_does_not_retry_after_transport_error(self) -> None:
+        """普通创建 Run 的 POST 没有客户端幂等键时也不得自动重放，避免响应丢失造成重复任务。"""
+
+        session = SequenceSession(
+            [
+                requests.exceptions.SSLError("response lost after server accepted request"),
+                StubResponse(202, {"success": True, "data": {"pipeline_run_id": "unused"}}),
+            ]
+        )
+        api = FactorComboAPI(HTTPClient(self._settings(), session=session))
+
+        with pytest.raises(requests.exceptions.SSLError):
+            api.start_run(
+                22,
+                {
+                    "agent_uid": "agent-1",
+                    "force_fresh_pipeline_run": False,
+                },
+            )
+
+        assert len(session.requests) == 1, session.requests
+        assert session.requests[0]["timeout"] == 60, session.requests
 
     def test_non_idempotent_post_does_not_retry_network_error_by_default(self) -> None:
         """未显式声明可重放的普通 POST 遇到网络错误时立即抛出，避免重复创建业务数据。"""

@@ -13,10 +13,18 @@ from config.settings import SettingsLoader
 class TestRunner:
     """构造并运行项目统一的 pytest 命令。"""
 
-    def run(self, environment: str | None, marker: str | None, report_path: Path | None) -> int:
+    def run(
+        self,
+        environment: str | None,
+        marker: str | None,
+        report_path: Path | None,
+        live: bool = False,
+        test_path: str | None = None,
+    ) -> int:
         """运行测试并写入 JUnit XML 报告。
 
-        参数 ``environment`` 是可选的 ``config`` 环境名，``marker`` 是可选 pytest 标记表达式，``report_path`` 是可选报告路径。
+        参数 ``environment`` 是可选的 ``config`` 环境名，``marker`` 是可选 pytest 标记表达式，``report_path`` 是可选报告路径，
+        ``live`` 表示是否显式开启真实环境访问，``test_path`` 是可选的测试目录或文件。
         返回 pytest 进程退出码；未传报告路径时读取环境配置中的 ``reports.junit_path``，报告目录会在运行前自动创建。
         """
 
@@ -29,8 +37,12 @@ class TestRunner:
         command = [sys.executable, "-m", "pytest", "--junitxml", str(selected_report_path)]
         if environment:
             command.extend(["--env", environment])
+        if live:
+            command.append("--live")
         if marker:
             command.extend(["-m", marker])
+        if test_path:
+            command.append(test_path)
         return subprocess.run(command, cwd=project_root, check=False).returncode
 
 
@@ -38,13 +50,15 @@ def parse_arguments() -> argparse.Namespace:
     """解析测试脚本的命令行参数。
 
     不接收参数。
-    返回包含环境名、可选标记和报告路径的 ``argparse.Namespace``。
+    返回包含环境名、真实运行开关、可选测试路径、标记和报告路径的 ``argparse.Namespace``。
     """
 
     parser = argparse.ArgumentParser(description="Run API automation tests with a selected environment")
     parser.add_argument("--env", help="Configuration name under config/; defaults to AUTOMATION_ENV or test")
     parser.add_argument("--marker", help="Optional pytest marker expression")
     parser.add_argument("--report", help="JUnit XML output path; defaults to reports.junit_path in config")
+    parser.add_argument("--live", action="store_true", help="Enable configured external API and database tests")
+    parser.add_argument("--path", dest="test_path", help="Optional test file or directory")
     return parser.parse_args()
 
 
@@ -57,7 +71,7 @@ def main() -> int:
 
     arguments = parse_arguments()
     report_path = Path(arguments.report) if arguments.report else None
-    return TestRunner().run(arguments.env, arguments.marker, report_path)
+    return TestRunner().run(arguments.env, arguments.marker, report_path, arguments.live, arguments.test_path)
 
 
 if __name__ == "__main__":

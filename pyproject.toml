@@ -25,6 +25,7 @@ namespaces = true
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
+pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -36,4 +37,5 @@ markers = [
     "integration: cases that require a configured external API or database",
     "worker_contract: cases that call test-only Worker compatibility endpoints",
     "external_agent: cases that start or poll a real research Agent run",
+    "unit: offline framework and service/repository unit tests",
 ]

@@ -11,12 +11,13 @@ tests/cases -> tools
 api、db、service -> config
 ```
 
-- `tests/`：可执行场景、静态测试数据和 pytest Fixture。
+- `tests/cases/`：真实接口、Worker 合约和真实 Agent 场景。
+- `tests/unit/`：离线框架、Service 和 Repository 单元测试，不代表真实接口通过。
 - `service/`：可复用的业务流程编排，不放测试断言。
 - `api/`：资源或领域级 HTTP 请求封装，不放业务断言。
 - `db/`：连接、事务、参数化查询和按实体组织的 Repository。
 - `tools/`：无业务含义的断言、测试数据、时间和文件工具。
-- `config/`：默认、测试和预发环境配置；敏感信息只通过环境变量注入。
+- `config/`：默认、测试和预发环境配置；测试环境可以保留已授权的测试凭据，生产凭据仍只能通过环境变量或密钥服务注入。
 - `reports/`：运行生成的 JUnit XML，不提交报告内容。
 
 ## 安装
@@ -35,11 +36,13 @@ api、db、service -> config
 set -a
 source .env.example
 set +a
-export AUTOMATION_API_BASE_URL='https://test.example.com'
+export AUTOMATION_API_BASE_URL='https://test-factor-backend.questvector.ai/api/v1'
 export AUTOMATION_PRIVILEGED_EMAIL='replace-with-privileged-account'
 export AUTOMATION_PRIVILEGED_PASSWORD='replace-with-privileged-password'
 export AUTOMATION_RESTRICTED_EMAIL='replace-with-restricted-account'
 export AUTOMATION_RESTRICTED_PASSWORD='replace-with-restricted-password'
+export AUTOMATION_NON_OWNER_EMAIL='replace-with-non-owner-account'
+export AUTOMATION_NON_OWNER_PASSWORD='replace-with-non-owner-password'
 export AUTOMATION_DB_DRIVER='mysql'
 export AUTOMATION_DB_HOST='127.0.0.1'
 export AUTOMATION_DB_PORT='3306'
@@ -48,9 +51,11 @@ export AUTOMATION_DB_USERNAME='automation_user'
 export AUTOMATION_DB_PASSWORD='replace-with-secret'
 ```
 
-用户明确提供的测试环境密码、Token 和地址可以写入本地 `config/test.yaml`；生产凭据不得写入任何配置。包含真实凭据的测试配置不得提交到版本库。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
+当前项目只运行测试环境，`config/test.yaml` 保留已授权的测试地址、账号和数据库配置；不要把这些配置复制到生产环境。生产密码、Token 和数据库写入凭据只能通过环境变量或密钥服务注入。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
 
 运行真实用例时，框架会分别使用有权限和无权限账号调用 `POST /auth/login` 获取 JWT，再通过 `GET /me` 校验账号身份。JWT 只保存在当前 pytest 进程内；正常业务响应为 `401` 时不会自动重新登录。`AUTOMATION_API_AUTH_TOKEN` 仅保留为有权限账号的临时调试回退，不能替代无权限账号。
+
+所有权隔离用例还需要单独的、具备正常业务权限但不是资源所有者的账号，通过 `AUTOMATION_NON_OWNER_EMAIL` 和 `AUTOMATION_NON_OWNER_PASSWORD` 提供。未配置这两个参数时，相关用例会明确标记为跳过；框架不会使用无权限账号伪造所有权隔离场景，也不会把权限不足误判为资源不存在。
 
 ## 运行
 
@@ -58,6 +63,7 @@ export AUTOMATION_DB_PASSWORD='replace-with-secret'
 .venv/bin/python -m pytest --env test --junitxml reports/junit.xml
 .venv/bin/python scripts/run_tests.py --env test
 .venv/bin/python scripts/run_tests.py --env test --marker smoke
+.venv/bin/python scripts/run_tests.py --env test --marker unit
 ```
 
 默认命令不会访问真实接口或数据库。组合因子台用例必须显式使用 `--live`，并且基础地址必须包含 `/api/v1`：
