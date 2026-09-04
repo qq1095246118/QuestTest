@@ -1,0 +1,3676 @@
+"""组合因子真实登记与刷新编排的离线单元测试。"""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import replace
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+import pytest
+import requests
+
+from config.settings import FactorComboSettings
+from service.factor_combo_service import (
+    FactorComboFlowError,
+    FactorComboService,
+    FlowOutcome,
+    RealPipelineResult,
+    RealRun,
+    SubmittedForm,
+)
+from tests.resource_scope import TestResourceScope as ResourceScope
+from tools.http_response import read_json
+
+
+pytestmark = pytest.mark.unit
+
+
+class StubResponse:
+    """提供可控状态码和 JSON 正文的 HTTP 响应替身。"""
+
+    def __init__(self, status_code: int, payload: Any) -> None:
+        """保存响应状态和正文；参数分别对应 HTTP 状态码与 JSON 可序列化对象。"""
+
+        self.status_code = status_code
+        self._payload = payload
+        self.text = str(payload)
+
+    def json(self) -> Any:
+        """返回预置 JSON 正文。"""
+
+        return self._payload
+
+
+class StubFactorComboAPI:
+    """记录登记请求并按顺序返回预置响应。"""
+
+    def __init__(self, responses: list[StubResponse]) -> None:
+        """接收登记响应序列并初始化请求记录。"""
+
+        self.responses = list(responses)
+        self.register_payloads: list[dict[str, Any]] = []
+
+    def register_report(self, payload: dict[str, Any]) -> StubResponse:
+        """记录一次登记请求并返回下一个预置响应。"""
+
+        self.register_payloads.append(deepcopy(payload))
+        if not self.responses:
+            raise AssertionError("no registration response remains")
+        return self.responses.pop(0)
+
+
+class StubRepository:
+    """提供登记资源和刷新计算证据的可控仓储替身。"""
+
+    def __init__(
+        self,
+        registration: dict[str, Any],
+        form: dict[str, Any] | None = None,
+        *,
+        calculation_runs: list[dict[str, Any]] | None = None,
+        calculation_metrics: list[dict[str, Any]] | None = None,
+        refresh_validity_snapshots: list[dict[str, Any]] | None = None,
+        run_details: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """保存登记资源及可选刷新计算证据；显式空列表表示数据库没有对应证据。"""
+
+        registration_values = dict(registration)
+        legacy_business_combo_id = registration_values.pop("combo_id", None)
+        self.registration_lookup_combo_id = int(
+            registration_values.pop("business_combo_id", legacy_business_combo_id or 701)
+        )
+        version_id = int(registration_values.get("version_id", 702))
+        persisted_combo_id = int(
+            registration_values.pop("persisted_combo_id", self.registration_lookup_combo_id)
+        )
+        self.registration = {
+            "id": 901,
+            "combo_id": persisted_combo_id,
+            "sub_factor_id": 801,
+            "factor_id": None,
+            "combo_version_hash": "a" * 64,
+            "version_id": version_id,
+            **registration_values,
+        }
+        default_form = {
+            "id": 22,
+            "session_id": 11,
+            "factor_combo_pool_id": 33,
+            "factor_combo_id": self.registration.get("version_id", 702),
+            "pipeline_run_id": "combo-22-abcdef0123456789",
+            "status": "completed",
+        }
+        default_form.update(form or {})
+        self.form = default_form
+        self.version = {
+            "id": self.form.get("factor_combo_id"),
+            "combo_id": self.registration_lookup_combo_id,
+            "combo_version_hash": self.registration.get("combo_version_hash"),
+            "status": self.form.get("status", "completed"),
+        }
+        self.form_queries: list[int] = []
+        self.calculation_runs = (
+            [
+                {
+                    "factor_id": 801,
+                    "is_sub_factor_id": True,
+                    "run_id": "ic-refresh-801",
+                    "run_status": "completed",
+                    "summary_row_count": 4,
+                    "populated_metric_row_count": 4,
+                    "ic_scope_count": 2,
+                }
+            ]
+            if calculation_runs is None
+            else list(calculation_runs)
+        )
+        self.calculation_metrics = None if calculation_metrics is None else list(calculation_metrics)
+        self.run_details = None if run_details is None else list(run_details)
+        self.refresh_validity_snapshots = (
+            [
+                {
+                    "id": 904,
+                    "factor_id": 801,
+                    "is_sub_factor_id": True,
+                    "run_id": "ic-refresh-801",
+                    "time_series_summary_id": 1001,
+                    "time_series_summary_run_id": "ic-refresh-801",
+                    "time_series_summary_factor_id": 801,
+                    "time_series_summary_is_sub_factor_id": True,
+                    "cross_sectional_summary_id": 1002,
+                    "cross_sectional_summary_run_id": "ic-refresh-801",
+                    "cross_sectional_summary_factor_id": 801,
+                    "cross_sectional_summary_is_sub_factor_id": True,
+                    "time_series_is_valid": True,
+                    "cross_sectional_is_valid": None,
+                }
+            ]
+            if refresh_validity_snapshots is None
+            else list(refresh_validity_snapshots)
+        )
+        self.calculation_queries: list[int] = []
+        self.refresh_validity_queries: list[tuple[int, int]] = []
+        self.registered_sub_factor_queries: list[int] = []
+
+    def get_form(self, form_id: int) -> dict[str, Any] | None:
+        """记录表单查询并返回预置快照。"""
+
+        self.form_queries.append(int(form_id))
+        if int(form_id) != int(self.form.get("id", 0)):
+            return None
+        return dict(self.form)
+
+    def get_registration(
+        self,
+        combo_id: int,
+        version_id: int | None = None,
+        combo_version_hash: str | None = None,
+    ) -> dict[str, Any] | None:
+        """按业务组合及可选具体版本身份返回预置登记记录。"""
+
+        if int(combo_id) != self.registration_lookup_combo_id:
+            return None
+        if version_id is not None and int(version_id) != int(self.registration.get("version_id", 0)):
+            return None
+        if combo_version_hash is not None and str(combo_version_hash).strip().lower() != str(
+            self.registration.get("combo_version_hash", "")
+        ).strip().lower():
+            return None
+        return dict(self.registration)
+
+    def get_registered_sub_factor(self, sub_factor_id: int) -> dict[str, Any] | None:
+        """返回与登记响应一致的数据库子因子记录。"""
+
+        self.registered_sub_factor_queries.append(int(sub_factor_id))
+        if int(sub_factor_id) != int(self.registration["sub_factor_id"]):
+            return None
+        return {"id": int(sub_factor_id), "sub_factor_name": "composite-test-factor", "type": 1}
+
+    def get_registered_factor_detail(self, factor_detail_id: int) -> dict[str, Any] | None:
+        """返回登记接口创建的因子详情替身。"""
+
+        if int(factor_detail_id) != 902:
+            return None
+        return {"id": 902, "factor_id": 801, "is_sub_factor_id": True, "status": 1}
+
+    def get_registered_validity_status(self, validity_status_id: int) -> dict[str, Any] | None:
+        """返回登记接口创建的有效性快照替身。"""
+
+        if int(validity_status_id) != 903:
+            return None
+        return {"id": 903, "factor_id": 801, "is_sub_factor_id": True, "time_series_is_valid": True}
+
+    def get_factor_refresh_calculation_runs(self, sub_factor_id: int) -> list[dict[str, Any]]:
+        """记录子因子计算 Run 查询并返回预置的汇总指标证据。"""
+
+        self.calculation_queries.append(int(sub_factor_id))
+        return [dict(row) for row in self.calculation_runs]
+
+    def get_factor_refresh_calculation_metrics(self, sub_factor_id: int) -> list[dict[str, Any]]:
+        """记录新版计算明细查询，并把预置聚合证据展开成可关联的 summary 行。"""
+
+        self.calculation_queries.append(int(sub_factor_id))
+        if self.calculation_metrics is not None:
+            return [dict(row) for row in self.calculation_metrics]
+        rows: list[dict[str, Any]] = []
+        for aggregate in self.calculation_runs:
+            count = int(aggregate.get("summary_row_count", 0) or 0)
+            populated = int(aggregate.get("populated_metric_row_count", 0) or 0)
+            for offset in range(count):
+                rows.append(
+                    {
+                        "id": 1001 + offset,
+                        "summary_id": 1001 + offset,
+                        "factor_id": aggregate.get("factor_id"),
+                        "is_sub_factor_id": aggregate.get("is_sub_factor_id"),
+                        "run_id": aggregate.get("run_id"),
+                        "run_status": aggregate.get("run_status"),
+                        "ic_scope": "time_series" if offset % 2 == 0 else "cross_sectional",
+                        "window_scope": "rolling",
+                        "mean_ic": 0.1 if offset < populated else None,
+                    }
+                )
+        return rows
+
+    def get_factor_refresh_run_details(self, sub_factor_id: int) -> list[dict[str, Any]] | None:
+        """返回可选的完整 factor_ic_runs 主表替身；未配置时模拟旧离线仓储不提供该查询。"""
+
+        if self.run_details is None:
+            return None
+        return [dict(row) for row in self.run_details]
+
+    def get_factor_refresh_validity_snapshots(
+        self,
+        sub_factor_id: int,
+        registration_validity_status_id: int,
+    ) -> list[dict[str, Any]]:
+        """记录刷新有效性查询并返回已排除登记初始快照的预置结果。"""
+
+        self.refresh_validity_queries.append((int(sub_factor_id), int(registration_validity_status_id)))
+        return [dict(row) for row in self.refresh_validity_snapshots]
+
+    def get_combo_version(self, version_id: int) -> dict[str, Any] | None:
+        """返回与表单指针一致的组合版本快照。"""
+
+        if int(version_id) != int(self.version.get("id", 0)):
+            return None
+        return dict(self.version)
+
+
+class StubPerformanceAPI:
+    """记录刷新查询且按顺序返回任务状态。"""
+
+    def __init__(self, responses: list[Any]) -> None:
+        """接收刷新状态响应序列并初始化查询记录。"""
+
+        self.responses = list(responses)
+        self.task_ids: list[str] = []
+
+    def get_refresh_run(self, task_id: str) -> StubResponse:
+        """记录任务 ID 并返回下一个预置刷新响应。"""
+
+        self.task_ids.append(task_id)
+        if not self.responses:
+            raise AssertionError("no refresh response remains")
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+
+class StubSubFactorAPI:
+    """记录子因子回查参数并返回预置详情。"""
+
+    def __init__(self, response: StubResponse | list[StubResponse]) -> None:
+        """保存一个或按顺序排列的子因子详情响应并初始化查询记录。"""
+
+        self.responses = list(response) if isinstance(response, list) else [response]
+        self.calls: list[tuple[int, str]] = []
+
+    def get_sub_factor(self, sub_factor_id: int, *, ic_mode: str) -> StubResponse:
+        """记录子因子 ID 和 IC 模式，返回预置响应。"""
+
+        self.calls.append((sub_factor_id, ic_mode))
+        if not self.responses:
+            raise AssertionError("no sub-factor response remains")
+        return self.responses.pop(0)
+
+
+class StubStartConflictAPI:
+    """返回启动冲突响应并记录真实 Run 启动请求。"""
+
+    def __init__(self, response: StubResponse) -> None:
+        """保存启动接口响应并初始化请求记录。"""
+
+        self.response = response
+        self.calls: list[tuple[int, dict[str, Any]]] = []
+
+    def start_run(self, form_id: int, payload: dict[str, Any]) -> StubResponse:
+        """记录表单和启动参数，并返回预置响应。"""
+
+        self.calls.append((form_id, deepcopy(payload)))
+        return self.response
+
+
+class StubAgentAPI:
+    """返回当前账号唯一可见投研 Agent 的离线替身。"""
+
+    def __init__(self) -> None:
+        """初始化用户 ID 记录。"""
+
+        self.user_ids: list[int] = []
+
+    def list_agents(self, user_id: int) -> StubResponse:
+        """记录用户 ID 并返回唯一 Agent。"""
+
+        self.user_ids.append(user_id)
+        return StubResponse(200, [{"agent_uid": "agent-1", "name": "投研Agent", "enabled": True}])
+
+
+class StubRealFlowAPI:
+    """驱动真实研究流程分支的离线 API 替身。"""
+
+    def __init__(
+        self,
+        status_responses: list[StubResponse],
+        result_responses: list[StubResponse],
+        feedback_response: StubResponse | None = None,
+        repository: StubRepository | None = None,
+    ) -> None:
+        """接收按 Run 顺序排列的状态、结果和可选反馈响应及可选数据库替身。"""
+
+        self.status_responses = list(status_responses)
+        self.result_responses = list(result_responses)
+        self.feedback_response = feedback_response
+        self.repository = repository
+        self.start_calls: list[tuple[int, dict[str, Any]]] = []
+        self.status_calls: list[tuple[int, str]] = []
+        self.result_calls: list[tuple[int, str]] = []
+        self.feedback_payloads: list[dict[str, Any]] = []
+        self._run_ids = [
+            "combo-22-1111111111111111",
+            "combo-22-2222222222222222",
+            "combo-22-3333333333333333",
+        ]
+
+    def bind_repository(self, repository: StubRepository) -> None:
+        """绑定离线数据库替身，使启动接口成功后同步持久化当前 Run ID。"""
+
+        self.repository = repository
+
+    def start_run(self, form_id: int, payload: dict[str, Any]) -> StubResponse:
+        """记录启动参数并返回下一个合法 Run ID。"""
+
+        self.start_calls.append((form_id, deepcopy(payload)))
+        run_id = self._run_ids[len(self.start_calls) - 1]
+        if self.repository is not None:
+            self.repository.form["id"] = form_id
+            self.repository.form["pipeline_run_id"] = run_id
+        return StubResponse(
+            202,
+            {
+                "success": True,
+                "data": {
+                    "form_id": form_id,
+                    "pipeline_run_id": run_id,
+                    "agent_session_id": f"agent-session-{len(self.start_calls)}",
+                    "idempotent_replay": False,
+                },
+            },
+        )
+
+    def get_run_status(self, form_id: int, run_id: str) -> StubResponse:
+        """记录状态查询并返回预置状态。"""
+
+        self.status_calls.append((form_id, run_id))
+        if not self.status_responses:
+            raise AssertionError("no run status response remains")
+        response = self.status_responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+    def get_run_result(self, form_id: int, run_id: str) -> StubResponse:
+        """记录结果查询并返回预置结构化结果。"""
+
+        self.result_calls.append((form_id, run_id))
+        if not self.result_responses:
+            raise AssertionError("no run result response remains")
+        response = self.result_responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+    def submit_feedback(self, payload: dict[str, Any]) -> StubResponse:
+        """记录真实反馈请求并返回预置反馈响应。"""
+
+        self.feedback_payloads.append(deepcopy(payload))
+        if self.feedback_response is None:
+            raise AssertionError("feedback response was not configured")
+        return self.feedback_response
+
+
+def _settings() -> FactorComboSettings:
+    """构造不执行等待的离线组合流程配置。"""
+
+    return FactorComboSettings(
+        agent_uid=None,
+        poll_interval_seconds=0,
+        poll_timeout_seconds=1,
+        max_research_rounds=2,
+        worker_contracts_enabled=False,
+        cleanup_test_data=False,
+        agent_base_url="https://agent.example.test/api/v2",
+        refresh_poll_interval_seconds=0,
+        refresh_poll_timeout_seconds=1,
+        max_refresh_polls=5,
+        max_technical_retries=2,
+    )
+
+
+def _service(
+    factor_api: StubFactorComboAPI,
+    performance_api: StubPerformanceAPI,
+    sub_factor_api: StubSubFactorAPI,
+    *,
+    repository: StubRepository | None = None,
+) -> FactorComboService:
+    """构造只注入离线替身的组合流程服务。"""
+
+    registration = {"id": 901, "combo_id": 701, "sub_factor_id": 801}
+    return FactorComboService(
+        chat_api=None,  # type: ignore[arg-type]
+        factor_combo_api=factor_api,  # type: ignore[arg-type]
+        repository=repository or StubRepository(registration),  # type: ignore[arg-type]
+        settings=_settings(),
+        scope=ResourceScope(),
+        performance_api=performance_api,  # type: ignore[arg-type]
+        sub_factor_api=sub_factor_api,  # type: ignore[arg-type]
+    )
+
+
+def _real_flow_service(
+    factor_api: StubRealFlowAPI,
+    *,
+    max_rounds: int = 2,
+    max_technical_retries: int = 1,
+    poll_timeout_seconds: float = 1,
+    repository: StubRepository | None = None,
+) -> FactorComboService:
+    """构造注入 Agent 和真实流程替身的离线服务。"""
+
+    selected_repository = repository or StubRepository(
+        {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+        {"pipeline_run_id": None},
+    )
+    factor_api.bind_repository(selected_repository)
+
+    return FactorComboService(
+        chat_api=None,  # type: ignore[arg-type]
+        factor_combo_api=factor_api,  # type: ignore[arg-type]
+        repository=selected_repository,  # type: ignore[arg-type]
+        settings=replace(
+            _settings(),
+            max_research_rounds=max_rounds,
+            max_technical_retries=max_technical_retries,
+            poll_timeout_seconds=poll_timeout_seconds,
+        ),
+        scope=ResourceScope(),
+        agent_api=StubAgentAPI(),  # type: ignore[arg-type]
+    )
+
+
+def _run_status_response(run_id: str, status: str, action: str) -> StubResponse:
+    """构造带完整运行归属字段的状态响应。"""
+
+    return StubResponse(
+        200,
+        {
+            "success": True,
+            "data": {
+                "form_id": 22,
+                "pipeline_run_id": run_id,
+                "pipeline_status": status,
+                "recommended_action": action,
+            },
+        },
+    )
+
+
+def _run_result_response(run_id: str, *, valid: bool, continue_exploration: bool) -> StubResponse:
+    """构造符合真实结果契约的有效或无效报告。"""
+
+    return StubResponse(
+        200,
+        {
+            "success": True,
+            "data": {
+                "form_id": 22,
+                "pipeline_run_id": run_id,
+                "pipeline_status": "completed",
+                "result": {
+                    "factor_combo_report": {
+                        "report_no": "AUTOTEST-REPORT-001",
+                        "factor_name": "composite-test-factor",
+                        "conclusion": "autotest factor combo conclusion",
+                        "combo": {
+                            "research_methods": ["machine_learning"],
+                            "algorithms": ["ElasticNet"],
+                            "factor_code": "return 0.6 * factor_a - 0.4 * factor_b",
+                            "formula": "0.6*factor_a-0.4*factor_b",
+                        },
+                        "components": [
+                            {
+                                "factor_code": "factor_momentum",
+                                "sub_factor_code": "sf_mom_24h_rank",
+                                "name": "24h momentum rank",
+                                "direction": 1,
+                                "weight": 0.6,
+                            }
+                        ],
+                        "performance": {
+                            "metrics_status": "measured",
+                            "ts_ic": 0.08989,
+                            "return_rate": 0.3,
+                            "annualized_return": 0.42,
+                            "out_of_sample_icir": 3.21,
+                            "net_sharpe": 1.39,
+                            "benchmark_sharpe": 1.12,
+                            "max_drawdown": -0.099,
+                            "calmar": 4.24,
+                            "profit_loss_ratio": 1.45,
+                            "annual_turnover": 0.78,
+                            "positive_return_rate": 0.79,
+                            "observations": 694,
+                            "trade_observations": 350,
+                            "decay_ratio": 0.85,
+                            "metric_mode": "time_series",
+                            "cs_rank_ic": None,
+                            "cs_icir": None,
+                            "cs_score": None,
+                            "universe_key": "main",
+                            "symbols": ["BTCUSDT"],
+                        },
+                        "explanation": {"summary": "autotest factor combo explanation"},
+                    },
+                    "factor_combo_review": {
+                        "experiment_valid": valid,
+                        "registration_ready": valid,
+                        "search": {"continue_exploration_available": continue_exploration},
+                    },
+                    "factor_validity_status": {
+                        "time_series_is_valid": valid,
+                        "cross_sectional_is_valid": None,
+                    },
+                },
+            },
+        },
+    )
+
+
+def _result() -> RealPipelineResult:
+    """构造包含新版绩效契约的真实流程结果替身。"""
+
+    form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="completed")
+    run = RealRun(form=form, pipeline_run_id="combo-22-abcdef0123456789")
+    report = deepcopy(
+        read_json(_run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False))["data"]["result"][
+            "factor_combo_report"
+        ]
+    )
+    return RealPipelineResult(
+        run=run,
+        report=report,
+        review={"experiment_valid": True, "registration_ready": True},
+        validity={"time_series_is_valid": True, "cross_sectional_is_valid": None},
+        raw_data={"pipeline_run_id": run.pipeline_run_id},
+    )
+
+
+def _registration_response(
+    *,
+    replay: bool,
+    task_id: Any = "refresh-701",
+    refresh_status: str = "queued",
+    refresh_submit_error: str = "",
+) -> StubResponse:
+    """构造登记首次或幂等重放成功响应。"""
+
+    return StubResponse(
+        200 if replay else 201,
+        {
+            "success": True,
+            "data": {
+                "registered": True,
+                "idempotent_replay": replay,
+                "factor_combo_version_id": 702,
+                "combo_id": 701,
+                "combo_version_hash": "a" * 64,
+                "sub_factor_id": 801,
+                "factor_detail_id": 902,
+                "factor_validity_status_id": 903,
+                "registration_id": 901,
+                "sub_factor_type": 1,
+                "refresh_task_id": task_id,
+                "refresh_status": refresh_status,
+                "refresh_submit_error": refresh_submit_error,
+                "sub_factor": {"id": 801, "sub_factor_name": "composite-test-factor"},
+                "factor_detail": {"id": 902, "factor_id": 801, "is_sub_factor_id": True},
+                "factor_validity_status": {"id": 903, "factor_id": 801, "is_sub_factor_id": True},
+                "registration": {
+                    "id": 901,
+                    "combo_id": 702,
+                    "combo_version_hash": "a" * 64,
+                    "sub_factor_id": 801,
+                },
+            },
+        },
+    )
+
+
+def _completed_refresh_response(task_id: str = "refresh-701") -> StubResponse:
+    """构造所有刷新单元均完成的任务响应。"""
+
+    return StubResponse(
+        200,
+        {
+            "success": True,
+            "data": {
+                "task_id": task_id,
+                "status": "completed",
+                "completed_factors": ["composite-test-factor"],
+                "incomplete_factors": [],
+                "summary": {
+                    "total_units": 4,
+                    "completed_units": 4,
+                    "skipped_window_count": 0,
+                    "failed_unit_count": 0,
+                    "not_run_unit_count": 0,
+                },
+                "results": [
+                    {
+                        "factor_name": "composite-test-factor",
+                        "run_id": "ic-refresh-801",
+                    }
+                ],
+            },
+        },
+    )
+
+
+def _refreshed_time_series_metric(**overrides: Any) -> dict[str, Any]:
+    """构造能唯一定位到新版 summary 行的子因子详情指标。
+
+    参数 ``overrides`` 是需要覆盖的指标字段，例如 ``ic`` 或 ``mean_ic``；返回包含 summary ID、Run、
+    IC 范围和窗口身份的指标对象。该辅助数据模拟真实接口返回的可对账身份，避免用一个只有数值的聚合对象
+    在多条 summary 行之间猜测匹配目标。
+    """
+
+    metric: dict[str, Any] = {
+        "summary_id": 1001,
+        "run_id": "ic-refresh-801",
+        "ic_scope": "time_series",
+        "window_scope": "rolling",
+        "mean_ic": 0.1,
+    }
+    metric.update(overrides)
+    return metric
+
+
+def _active_refresh_response(status: str = "running", task_id: str = "refresh-701") -> StubResponse:
+    """构造仍在执行中的刷新任务响应。"""
+
+    return StubResponse(
+        200,
+        {
+            "success": True,
+            "data": {
+                "task_id": task_id,
+                "status": status,
+            },
+        },
+    )
+
+
+class TestRealRegistrationRefreshFlow:
+    """验证登记接口之后的刷新闭环和严格失败分类。"""
+
+    def test_completed_registration_conflict_queries_existing_mapping_without_reverse_action(self) -> None:
+        """登记返回“已完成”冲突时查询现有映射，并且不重复登记或创建刷新任务。"""
+
+        conflict = StubResponse(
+            409,
+            {
+                "success": False,
+                "error": "factor combo registration already completed",
+            },
+        )
+        factor_api = StubFactorComboAPI([conflict])
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "version_id": 702, "sub_factor_id": 801},
+            {
+                "id": 22,
+                "factor_combo_id": 702,
+                "pipeline_run_id": "combo-22-abcdef0123456789",
+                "status": "completed",
+            },
+        )
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=factor_api,  # type: ignore[arg-type]
+            repository=repository,  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert len(factor_api.register_payloads) == 1, factor_api.register_payloads
+        assert repository.form_queries == [22], repository.form_queries
+        assert error.value.details["existing_registration"]["version"]["combo_id"] == 701, error.value.details
+        assert error.value.details["existing_registration"]["registration"]["id"] == 901, error.value.details
+        assert "do_not_create_another_registration" in str(error.value), str(error.value)
+
+    def test_registration_replay_refresh_and_sub_factor_query_are_all_executed(self) -> None:
+        """验证同一登记请求实际发送两次，并继续查询刷新任务和子因子。"""
+
+        factor_api = StubFactorComboAPI([_registration_response(replay=False), _registration_response(replay=True)])
+        performance_api = StubPerformanceAPI([_completed_refresh_response()])
+        sub_factor_api = StubSubFactorAPI(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "id": 801,
+                        "sub_factor_name": "composite-test-factor",
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric()],
+                    },
+                },
+            )
+        )
+        result = _service(factor_api, performance_api, sub_factor_api).register_real_result_and_refresh(_result())
+
+        assert result.outcome == FlowOutcome.PASS_REGISTERED, result
+        assert len(factor_api.register_payloads) == 2, factor_api.register_payloads
+        assert factor_api.register_payloads[0] == factor_api.register_payloads[1], factor_api.register_payloads
+        assert performance_api.task_ids == ["refresh-701"], performance_api.task_ids
+        assert sub_factor_api.calls == [(801, "timeseries")], sub_factor_api.calls
+        assert result.database_sub_factor == {
+            "id": 801,
+            "sub_factor_name": "composite-test-factor",
+            "type": 1,
+        }, result
+        assert result.database_refresh.calculation_runs[0]["run_id"] == "ic-refresh-801", result.database_refresh
+        assert result.database_refresh.validity_snapshots[0]["id"] == 904, result.database_refresh
+        assert result.database_refresh.matched_run_ids == ("ic-refresh-801",), result.database_refresh
+
+    def test_database_sub_factor_is_queried_again_after_refresh(self) -> None:
+        """登记前后的数据库子因子读取必须各执行一次，最终结果使用刷新后的快照。"""
+
+        repository = StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801})
+        factor_api = StubFactorComboAPI([_registration_response(replay=False), _registration_response(replay=True)])
+        performance_api = StubPerformanceAPI([_completed_refresh_response()])
+        sub_factor_api = StubSubFactorAPI(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "id": 801,
+                        "sub_factor_name": "composite-test-factor",
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric()],
+                    },
+                },
+            )
+        )
+
+        result = _service(
+            factor_api,
+            performance_api,
+            sub_factor_api,
+            repository=repository,
+        ).register_real_result_and_refresh(_result())
+
+        assert repository.registered_sub_factor_queries == [801, 801], repository.registered_sub_factor_queries
+        assert result.database_sub_factor["id"] == 801, result.database_sub_factor
+
+    def test_registered_flow_requires_refresh_calculation_rows_in_database(self) -> None:
+        """刷新 API 已完成但数据库没有汇总指标时必须判定刷新失败。"""
+
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                calculation_runs=[],
+            ),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+        assert "factor_ic_summary_metrics" in str(error.value), str(error.value)
+
+    def test_registered_flow_rejects_summary_rows_with_only_null_metrics(self) -> None:
+        """数据库只有汇总占位行且所有指标为空时不得判定计算完成。"""
+
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                calculation_runs=[
+                    {
+                        "factor_id": 801,
+                        "is_sub_factor_id": True,
+                        "run_id": "ic-refresh-801",
+                        "run_status": "completed",
+                        "summary_row_count": 4,
+                        "populated_metric_row_count": 0,
+                        "ic_scope_count": 2,
+                    }
+                ],
+            ),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+        assert "non-null" in str(error.value), str(error.value)
+
+    def test_registered_flow_requires_refresh_validity_snapshot_linked_to_summary(self) -> None:
+        """数据库缺少引用计算汇总的刷新有效性快照时不得通过登记闭环。"""
+
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                refresh_validity_snapshots=[],
+            ),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+        assert "factor_validity_status" in str(error.value), str(error.value)
+
+    def test_registered_flow_accepts_in_place_update_of_registration_validity_snapshot(self) -> None:
+        """刷新原地更新登记快照、保留 factor_combo_register Run 前缀时仍应按 summary 外键验收。"""
+
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            refresh_validity_snapshots=[
+                {
+                    "id": 903,
+                    "factor_id": 801,
+                    "is_sub_factor_id": True,
+                    "run_id": "factor_combo_register:" + "a" * 64,
+                    "time_series_summary_id": 1001,
+                    "time_series_summary_run_id": "ic-refresh-801",
+                    "time_series_summary_factor_id": 801,
+                    "time_series_summary_is_sub_factor_id": True,
+                    "cross_sectional_summary_id": 1002,
+                    "cross_sectional_summary_run_id": "ic-refresh-801",
+                    "cross_sectional_summary_factor_id": 801,
+                    "cross_sectional_summary_is_sub_factor_id": True,
+                }
+            ],
+        )
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=repository,  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        result = service.register_real_result_and_refresh(_result())
+
+        assert result.outcome == FlowOutcome.PASS_REGISTERED, result
+        assert result.database_refresh.validity_snapshots[0]["run_id"].startswith(
+            "factor_combo_register:"
+        ), result.database_refresh
+
+    def test_registered_flow_ignores_historical_failed_run_not_linked_to_latest_refresh(self) -> None:
+        """同一子因子存在历史失败 Run 时，只要当前刷新快照引用的新 Run 完成，不应被历史行污染。"""
+
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            calculation_runs=[
+                {
+                    "factor_id": 801,
+                    "is_sub_factor_id": True,
+                    "run_id": "ic-old-failed",
+                    "run_status": "failed",
+                    "summary_row_count": 4,
+                    "populated_metric_row_count": 0,
+                    "ic_scope_count": 2,
+                },
+                {
+                    "factor_id": 801,
+                    "is_sub_factor_id": True,
+                    "run_id": "ic-refresh-801",
+                    "run_status": "completed",
+                    "summary_row_count": 4,
+                    "populated_metric_row_count": 4,
+                    "ic_scope_count": 2,
+                },
+            ],
+        )
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=repository,  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        result = service.register_real_result_and_refresh(_result())
+
+        assert [row["run_id"] for row in result.database_refresh.calculation_runs] == ["ic-refresh-801"], result
+
+    def test_api_metric_and_database_summary_mismatch_is_a_contract_failure(self) -> None:
+        """详情接口明确返回的 summary 指标与同一 DB summary 不一致时必须失败。"""
+
+        service = _service(
+            StubFactorComboAPI([_registration_response(replay=False), _registration_response(replay=True)]),
+            StubPerformanceAPI([_completed_refresh_response()]),
+            StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [{"id": 1001, "mean_ic": 0.2}],
+                        },
+                    },
+                )
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "mean_ic" in str(error.value), str(error.value)
+
+    def test_api_validity_and_database_snapshot_mismatch_is_a_contract_failure(self) -> None:
+        """详情接口明确返回的有效性结论与同一 DB 快照不一致时必须失败。"""
+
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            refresh_validity_snapshots=[
+                {
+                    "id": 904,
+                    "factor_id": 801,
+                    "is_sub_factor_id": True,
+                    "run_id": "ic-refresh-801",
+                    "time_series_summary_id": 1001,
+                    "time_series_summary_run_id": "ic-refresh-801",
+                    "time_series_summary_factor_id": 801,
+                    "time_series_summary_is_sub_factor_id": True,
+                    "time_series_is_valid": True,
+                }
+            ],
+        )
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=repository,  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [{"id": 1001, "mean_ic": 0.1}],
+                            "factor_validity_status": {"id": 904, "time_series_is_valid": False},
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "time_series_is_valid" in str(error.value), str(error.value)
+
+    def test_registered_flow_rejects_database_calculation_for_another_factor(self) -> None:
+        """数据库汇总指标属于其他因子时必须报告数据关联契约失败。"""
+
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                calculation_runs=[
+                    {
+                        "factor_id": 999,
+                        "is_sub_factor_id": True,
+                        "run_id": "ic-refresh-801",
+                        "run_status": "completed",
+                        "summary_row_count": 4,
+                        "populated_metric_row_count": 4,
+                        "ic_scope_count": 2,
+                    }
+                ],
+            ),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([_completed_refresh_response()]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "factor_id" in str(error.value), str(error.value)
+
+    def test_registered_flow_rejects_refresh_run_id_not_found_in_database(self) -> None:
+        """刷新响应明确给出计算 Run ID 但数据库未产生该 Run 时不得通过。"""
+
+        refresh = read_json(_completed_refresh_response())
+        refresh["data"]["results"][0]["run_id"] = "ic-refresh-missing"
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI(
+                [_registration_response(replay=False), _registration_response(replay=True)]
+            ),  # type: ignore[arg-type]
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801}
+            ),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([StubResponse(200, refresh)]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [{"ic": 0.1}],
+                        },
+                    },
+                )
+            ),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+        assert "run_id" in str(error.value), str(error.value)
+
+    def test_registration_status_and_replay_marker_must_be_consistent(self) -> None:
+        """登记返回 200 但声称不是幂等重放时，不得继续刷新验收。"""
+
+        body = read_json(_registration_response(replay=False))
+        factor_api = StubFactorComboAPI([StubResponse(200, body)])
+        performance_api = StubPerformanceAPI([])
+        service = _service(
+            factor_api,
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert performance_api.task_ids == [], performance_api.task_ids
+
+    def test_registration_can_recover_from_lost_created_response_and_still_replay(self) -> None:
+        """首次 201 响应丢失后以 200 幂等结果恢复，并继续执行显式重放、刷新和详情回查。"""
+
+        recovered_body = read_json(_registration_response(replay=True))
+        for field_name in ("sub_factor", "factor_detail", "factor_validity_status", "registration"):
+            recovered_body["data"][field_name] = {}
+        factor_api = StubFactorComboAPI(
+            [
+                StubResponse(200, recovered_body),
+                _registration_response(replay=True),
+            ]
+        )
+        performance_api = StubPerformanceAPI([_completed_refresh_response()])
+        sub_factor_api = StubSubFactorAPI(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_validity_status": {
+                                "id": 904,
+                                "factor_id": 801,
+                                "is_sub_factor_id": 1,
+                                "run_id": "ic-refresh-801",
+                                "time_series_summary_id": 1001,
+                                "cross_sectional_summary_id": 1002,
+                                "time_series_is_valid": True,
+                            },
+                        },
+                },
+            )
+        )
+
+        result = _service(factor_api, performance_api, sub_factor_api).register_real_result_and_refresh(_result())
+
+        assert result.outcome == FlowOutcome.PASS_REGISTERED, result
+        assert result.first_registration["idempotent_replay"] is True, result.first_registration
+        assert len(factor_api.register_payloads) == 2, factor_api.register_payloads
+        assert performance_api.task_ids == ["refresh-701"], performance_api.task_ids
+
+    def test_registration_factor_name_must_match_pipeline_report(self) -> None:
+        """登记接口和数据库即使彼此自洽，也不能把与 Pipeline 报告不同的因子名判为通过。"""
+
+        body = read_json(_registration_response(replay=False))
+        body["data"]["sub_factor"]["sub_factor_name"] = "different-factor-name"
+        factor_api = StubFactorComboAPI([StubResponse(201, body)])
+        performance_api = StubPerformanceAPI([])
+        service = _service(
+            factor_api,
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert performance_api.task_ids == [], performance_api.task_ids
+
+    def test_first_registration_requires_all_persisted_resource_objects(self) -> None:
+        """首次登记缺少因子详情、有效性快照或登记对象时不得被当作完整登记。"""
+
+        body = read_json(_registration_response(replay=False))
+        del body["data"]["factor_validity_status"]
+        factor_api = StubFactorComboAPI([StubResponse(201, body)])
+        performance_api = StubPerformanceAPI([])
+        service = _service(
+            factor_api,
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert performance_api.task_ids == [], performance_api.task_ids
+
+    def test_registration_nested_identity_must_match_top_level_ids(self) -> None:
+        """登记响应嵌套资源 ID 与顶层 ID 不一致时必须阻止后续刷新。"""
+
+        body = read_json(_registration_response(replay=False))
+        body["data"]["factor_detail"]["id"] = 999
+        factor_api = StubFactorComboAPI([StubResponse(201, body)])
+        performance_api = StubPerformanceAPI([])
+        service = _service(
+            factor_api,
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert performance_api.task_ids == [], performance_api.task_ids
+
+    def test_numeric_refresh_task_id_is_normalized_for_get_query(self) -> None:
+        """登记接口返回数字刷新任务 ID 时统一转为路径字符串并继续完成验收。"""
+
+        factor_api = StubFactorComboAPI(
+            [
+                _registration_response(replay=False, task_id=701),
+                _registration_response(replay=True, task_id=701),
+            ]
+        )
+        performance_api = StubPerformanceAPI([_completed_refresh_response(task_id="701")])
+        sub_factor_api = StubSubFactorAPI(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "id": 801,
+                        "sub_factor_name": "composite-test-factor",
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                    },
+                },
+            )
+        )
+
+        result = _service(factor_api, performance_api, sub_factor_api).register_real_result_and_refresh(_result())
+
+        assert result.refresh.task_id == "701", result.refresh
+        assert performance_api.task_ids == ["701"], performance_api.task_ids
+
+    def test_completed_refresh_with_problem_units_is_not_passed(self) -> None:
+        """顶层 completed 但存在失败单元时必须分类为刷新失败。"""
+
+        bad_refresh = read_json(_completed_refresh_response())
+        bad_refresh["data"]["summary"]["failed_unit_count"] = 1
+        performance_api = StubPerformanceAPI([StubResponse(200, bad_refresh)])
+        service = _service(
+            StubFactorComboAPI([]),
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.poll_performance_refresh("refresh-701", "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+
+    def test_refresh_summary_inconsistency_is_a_contract_failure(self) -> None:
+        """服务端返回不一致的派生计数时必须分类为契约失败。"""
+
+        payload = read_json(_completed_refresh_response())
+        payload["data"]["summary"]["problem_unit_count"] = 9
+        performance_api = StubPerformanceAPI([StubResponse(200, payload)])
+        service = _service(
+            StubFactorComboAPI([]),
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.poll_performance_refresh("refresh-701", "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_missing_refresh_task_id_is_a_contract_failure(self) -> None:
+        """登记成功但缺少刷新任务 ID 时不得继续或伪造通过。"""
+
+        response = read_json(_registration_response(replay=False))
+        del response["data"]["refresh_task_id"]
+        factor_api = StubFactorComboAPI([StubResponse(201, response)])
+        service = _service(
+            factor_api,
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert len(factor_api.register_payloads) == 1, factor_api.register_payloads
+
+    @pytest.mark.parametrize("refresh_status", ["not_configured", "submit_failed"])
+    def test_refresh_submission_failure_is_classified_as_refresh_failure(self, refresh_status: str) -> None:
+        """登记成功但后端提交刷新任务失败时保留刷新失败分类，不误报为契约错误。"""
+
+        factor_api = StubFactorComboAPI(
+            [
+                _registration_response(
+                    replay=False,
+                    refresh_status=refresh_status,
+                    refresh_submit_error="backtest unavailable" if refresh_status == "submit_failed" else "",
+                )
+            ]
+        )
+        service = _service(
+            factor_api,
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+
+    def test_malformed_database_registration_is_a_contract_failure_not_type_error(self) -> None:
+        """数据库登记记录字段类型异常时返回明确契约分类，而不是泄露底层 TypeError/ValueError。"""
+
+        factor_api = StubFactorComboAPI([_registration_response(replay=False)])
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=factor_api,  # type: ignore[arg-type]
+            repository=StubRepository(
+                {"id": "not-an-int", "combo_id": 701, "sub_factor_id": 801}
+            ),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_registration_replay_missing_identity_is_a_contract_failure(self) -> None:
+        """登记重放缺少资源 ID 时不得继续查询刷新任务或误判为幂等成功。"""
+
+        replay = read_json(_registration_response(replay=True))
+        del replay["data"]["registration_id"]
+        factor_api = StubFactorComboAPI(
+            [
+                _registration_response(replay=False),
+                StubResponse(200, replay),
+            ]
+        )
+        performance_api = StubPerformanceAPI([])
+        service = _service(
+            factor_api,
+            performance_api,
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.register_real_result_and_refresh(_result())
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert performance_api.task_ids == [], performance_api.task_ids
+        assert "registration_id" in str(error.value), str(error.value)
+
+    def test_registration_replay_normalizes_numeric_identity_types(self) -> None:
+        """登记重放以字符串返回资源 ID 时，按业务 ID 比较而不是误报幂等冲突。"""
+
+        replay = read_json(_registration_response(replay=True))
+        for field_name in ("sub_factor_id", "registration_id", "combo_id"):
+            replay["data"][field_name] = str(replay["data"][field_name])
+        factor_api = StubFactorComboAPI(
+            [
+                _registration_response(replay=False),
+                StubResponse(200, replay),
+            ]
+        )
+        performance_api = StubPerformanceAPI([_completed_refresh_response()])
+        sub_factor_api = StubSubFactorAPI(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "id": 801,
+                        "sub_factor_name": "composite-test-factor",
+                        "factor_ic_summary_metrics": [_refreshed_time_series_metric(ic=0.1)],
+                    },
+                },
+            )
+        )
+
+        result = _service(factor_api, performance_api, sub_factor_api).register_real_result_and_refresh(_result())
+
+        assert result.outcome == FlowOutcome.PASS_REGISTERED, result
+
+    def test_all_null_refresh_metrics_are_not_evidence(self) -> None:
+        """子因子详情只返回指标字段但全部为 null 时必须判定刷新证据缺失。"""
+
+        detail = {
+            "success": True,
+            "data": {
+                "id": 801,
+                "sub_factor_name": "composite-test-factor",
+                    "factor_ic_summary_metric": {
+                    "id": 1001,
+                    "ic": None,
+                    "icir": None,
+                    "score": None,
+                    "time_series_is_valid": None,
+                    "overall_status": "unknown",
+                },
+            },
+        }
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, detail)),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.verify_registered_sub_factor(801, "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+
+    def test_top_level_report_score_is_not_refresh_evidence(self) -> None:
+        """详情顶层普通报告 score 不能替代指标容器中的刷新计算证据。"""
+
+        detail = StubResponse(
+            200,
+            {
+                "success": True,
+                "data": {
+                    "id": 801,
+                    "sub_factor_name": "composite-test-factor",
+                    "score": 99,
+                    "metadata": {"report": {"score": 88}},
+                },
+            },
+        )
+        service = _service(StubFactorComboAPI([]), StubPerformanceAPI([]), StubSubFactorAPI(detail))
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.verify_registered_sub_factor(801, "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+
+    def test_false_validity_flag_is_valid_refresh_evidence(self) -> None:
+        """刷新后的 invalid 布尔结论也是有效证据，不能因值为 False 被当成缺失。"""
+
+        detail = StubResponse(
+            200,
+            {
+                "success": True,
+                "data": {
+                    "id": 801,
+                    "sub_factor_name": "composite-test-factor",
+                    "factor_ic_summary_metric": {"time_series_is_valid": False},
+                },
+            },
+        )
+        service = _service(StubFactorComboAPI([]), StubPerformanceAPI([]), StubSubFactorAPI(detail))
+
+        result = service.verify_registered_sub_factor(801, "composite-test-factor")
+
+        assert result["id"] == 801, result
+
+    def test_refresh_network_error_is_reported_as_technical_failure(self) -> None:
+        """刷新查询网络错误重试耗尽后分类为技术失败，并保留任务 ID 和异常类型。"""
+
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([requests.exceptions.SSLError("unexpected EOF") for _ in range(5)]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.poll_performance_refresh("refresh-701", "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+        assert "refresh-701" in str(error.value), str(error.value)
+        assert "SSLError" in str(error.value), str(error.value)
+
+    def test_refresh_poll_timeout_after_successful_status_is_refresh_failure(self) -> None:
+        """刷新任务持续可读但长期处于 running 时，应分类为刷新超时而不是技术失败。"""
+
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([_active_refresh_response() for _ in range(5)]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.poll_performance_refresh("refresh-701", "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+
+    def test_refresh_recovers_from_network_error_then_times_out_as_refresh_failure(self) -> None:
+        """刷新查询从网络错误恢复后若任务仍超时，以最后可读状态决定为刷新失败。"""
+
+        responses: list[Any] = [requests.exceptions.SSLError("temporary EOF")]
+        responses.extend(_active_refresh_response() for _ in range(4))
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI(responses),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.poll_performance_refresh("refresh-701", "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+        assert error.value.details["last"]["status"] == "running", error.value.details
+
+    def test_sub_factor_query_retries_eventual_consistency_404(self) -> None:
+        """刷新任务完成后子因子详情暂时 404 时有限重试，随后继续做指标证据校验。"""
+
+        sub_factor_api = StubSubFactorAPI(
+            [
+                StubResponse(404, {"success": False, "error": "sub-factor not visible yet"}),
+                StubResponse(
+                    200,
+                    {
+                        "success": True,
+                        "data": {
+                            "id": 801,
+                            "sub_factor_name": "composite-test-factor",
+                            "factor_ic_summary_metrics": [{"ic": 0.11}],
+                        },
+                    },
+                ),
+            ]
+        )
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            sub_factor_api,
+        )
+
+        result = service.verify_registered_sub_factor(801, "composite-test-factor", max_retries=1)
+
+        assert result["id"] == 801, result
+        assert sub_factor_api.calls == [(801, "timeseries"), (801, "timeseries")], sub_factor_api.calls
+
+    def test_result_404_checks_run_status_before_retrying_result(self) -> None:
+        """结构化结果暂时 404 时必须先查询 Run 状态，再继续读取同一 Run 的结果。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "running", "wait"),
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+            ],
+            result_responses=[
+                StubResponse(404, {"success": False, "error": "result not ready"}),
+                StubResponse(404, {"success": False, "error": "result still not ready"}),
+                _run_result_response("combo-22-1111111111111111", valid=False, continue_exploration=False),
+            ],
+        )
+        service = _real_flow_service(
+            api,
+            max_rounds=1,
+            max_technical_retries=2,
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": "combo-22-1111111111111111"},
+            ),
+        )
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-1111111111111111",
+        )
+
+        result = service.read_real_pipeline_result(run, max_retries=2)
+
+        assert result.review["experiment_valid"] is False, result
+        assert api.status_calls == [
+            (22, "combo-22-1111111111111111"),
+            (22, "combo-22-1111111111111111"),
+        ], api.status_calls
+        assert api.result_calls == [
+            (22, "combo-22-1111111111111111"),
+            (22, "combo-22-1111111111111111"),
+            (22, "combo-22-1111111111111111"),
+        ], api.result_calls
+
+    def test_result_404_followed_by_failed_run_is_technical_failure(self) -> None:
+        """结构化结果 404 后若 Run 已失败，不能把缺少结果判成业务无效。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[_run_status_response("combo-22-1111111111111111", "failed", "retry_run")],
+            result_responses=[StubResponse(404, {"success": False, "error": "result not ready"})],
+        )
+        service = _real_flow_service(
+            api,
+            max_rounds=1,
+            max_technical_retries=1,
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": "combo-22-1111111111111111"},
+            ),
+        )
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-1111111111111111",
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.read_real_pipeline_result(run, max_retries=1)
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+        assert "status_response" in error.value.details, error.value.details
+
+    def test_exhausted_status_network_errors_do_not_start_a_new_run(self) -> None:
+        """状态查询网络错误重试耗尽时保留原 Run，并明确禁止自动新建。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                requests.exceptions.SSLError("unexpected EOF"),
+                requests.exceptions.SSLError("unexpected EOF again"),
+            ],
+            result_responses=[],
+        )
+        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.run_real_research_flow(form, user_id=7)
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+        assert len(api.start_calls) == 1, api.start_calls
+        assert error.value.details.get("retry_pipeline") is False, error.value.details
+
+    def test_status_poll_timeout_does_not_start_a_new_run(self) -> None:
+        """状态轮询超时时不把未知状态当作 Pipeline 失败，也不创建第二个 Run。"""
+
+        api = StubRealFlowAPI(status_responses=[], result_responses=[])
+        service = _real_flow_service(
+            api,
+            max_rounds=1,
+            max_technical_retries=1,
+            poll_timeout_seconds=0,
+        )
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.run_real_research_flow(form, user_id=7)
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+        assert len(api.start_calls) == 1, api.start_calls
+        assert error.value.details.get("retry_pipeline") is False, error.value.details
+
+    def test_result_network_errors_do_not_start_a_new_run_after_same_run_retries(self) -> None:
+        """结果读取网络错误重试耗尽后不重新启动可能已完成的原 Run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[_run_status_response("combo-22-1111111111111111", "completed", "read_result")],
+            result_responses=[
+                requests.exceptions.SSLError("result connection lost"),
+                requests.exceptions.SSLError("result connection still unavailable"),
+            ],
+        )
+        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.run_real_research_flow(form, user_id=7)
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+        assert len(api.start_calls) == 1, api.start_calls
+        assert error.value.details.get("retry_pipeline") is False, error.value.details
+
+    def test_exhausted_result_404_does_not_start_duplicate_completed_run(self) -> None:
+        """已完成 Run 的结构化结果持续 404 时保留原 Run，不盲目创建第二个 Run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+            ],
+            result_responses=[
+                StubResponse(404, {"success": False, "error": "result not ready"}),
+                StubResponse(404, {"success": False, "error": "result still not ready"}),
+            ],
+        )
+        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.run_real_research_flow(form, user_id=7)
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+        assert len(api.start_calls) == 1, api.start_calls
+        assert error.value.details.get("retry_pipeline") is False, error.value.details
+
+
+class TestRefreshEvidenceReconciliation:
+    """验证刷新计算证据的身份、状态和 API/DB 严格对账规则。"""
+
+    @staticmethod
+    def _refresh_data() -> dict[str, Any]:
+        """构造带明确 IC 计算 Run 的刷新完成响应。"""
+
+        return {
+            "results": [{"run_id": "ic-refresh-801"}],
+        }
+
+    @staticmethod
+    def _validity_rows() -> list[dict[str, Any]]:
+        """构造同时引用时序和截面 summary 的有效性快照。"""
+
+        return [
+            {
+                "id": 904,
+                "factor_id": 801,
+                "is_sub_factor_id": 1,
+                "run_id": "factor-validity-refresh-801",
+                "time_series_summary_id": 1001,
+                "time_series_summary_run_id": "ic-refresh-801",
+                "time_series_summary_factor_id": 801,
+                "time_series_summary_is_sub_factor_id": 1,
+                "cross_sectional_summary_id": 1002,
+                "cross_sectional_summary_run_id": "ic-refresh-801",
+                "cross_sectional_summary_factor_id": 801,
+                "cross_sectional_summary_is_sub_factor_id": 1,
+            }
+        ]
+
+    @staticmethod
+    def _metric_rows(run_status: str = "completed") -> list[dict[str, Any]]:
+        """构造两条完整 summary 明细，分别代表时序和截面计算。"""
+
+        return [
+            {
+                "summary_id": 1001,
+                "factor_id": 801,
+                "is_sub_factor_id": 1,
+                "run_id": "ic-refresh-801",
+                "run_status": run_status,
+                "ic_scope": "time_series",
+                "window_scope": "rolling",
+                "mean_ic": Decimal("0.1"),
+                "median_ic": Decimal("0.09"),
+            },
+            {
+                "summary_id": 1002,
+                "factor_id": 801,
+                "is_sub_factor_id": 1,
+                "run_id": "ic-refresh-801",
+                "run_status": run_status,
+                "ic_scope": "cross_sectional",
+                "window_scope": "rolling",
+                "mean_rank_ic": Decimal("0.2"),
+            },
+        ]
+
+    @staticmethod
+    def _run_detail(
+        run_id: str = "ic-refresh-801",
+        *,
+        config_json: dict[str, Any] | None = None,
+        **overrides: Any,
+    ) -> dict[str, Any]:
+        """构造一条满足新版 ``factor_ic_runs`` 对账要求的主表记录。
+
+        参数 ``run_id`` 是指标计算 Run 标识，``config_json`` 是该 Run 保存的配置对象，``overrides`` 用于构造
+        某一个字段不一致的异常场景。返回可直接传给刷新证据校验方法的数据库行。
+        """
+
+        default_config = {
+            "calculation_mode": "time_series",
+            "factor_bar_interval": "1h",
+            "factor_window_bars": 24,
+            "return_bar_interval": "1h",
+            "forward_return_bars": 1,
+            "window_scope": "rolling",
+            "metric_window_bars": 168,
+            "metric_window_days": 7,
+            "period_start": "2026-08-01T00:00:00+08:00",
+            "period_end": "2026-08-08T00:00:00+08:00",
+            "interval_value": "1h",
+            "forward_return_horizon": 1,
+            "universe_key": "main",
+        }
+        row = {
+            "run_id": run_id,
+            "status": "completed",
+            "interval_value": "1h",
+            "forward_return_horizon": 1,
+            "universe_key": "main",
+            "config_hash": "a" * 64,
+            "config_json": dict(default_config if config_json is None else config_json),
+        }
+        row.update(overrides)
+        return row
+
+    @staticmethod
+    def _dimension_metric(
+        summary_id: int = 1001,
+        run_id: str = "ic-refresh-801",
+        **overrides: Any,
+    ) -> dict[str, Any]:
+        """构造一条带完整身份和计算维度的 summary 明细记录。"""
+
+        row = {
+            "summary_id": summary_id,
+            "factor_id": 801,
+            "is_sub_factor_id": 1,
+            "run_id": run_id,
+            "run_status": "completed",
+            "ic_scope": "time_series",
+            "interval_value": "1h",
+            "forward_return_horizon": 1,
+            "universe_key": "main",
+            "factor_bar_interval": "1h",
+            "factor_window_bars": 24,
+            "return_bar_interval": "1h",
+            "forward_return_bars": 1,
+            "window_scope": "rolling",
+            "metric_window_bars": 168,
+            "metric_window_days": 7,
+            "period_start": "2026-08-01T00:00:00+08:00",
+            "period_end": "2026-08-08T00:00:00+08:00",
+            "mean_ic": Decimal("0.1"),
+        }
+        row.update(overrides)
+        return row
+
+    def test_metric_summary_id_and_run_id_are_filtered_together(self) -> None:
+        """指标同时带错 summary_id 对应的 Run 时必须失败，不能因 ID 命中而跳过 Run 校验。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_ic_summary_metrics": [{"summary_id": 1001, "run_id": "ic-old", "mean_ic": 0.1}]},
+                [{"summary_id": 1001, "run_id": "ic-refresh-801", "mean_ic": 0.1}],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_metric_scope_mismatch_is_not_silently_ignored(self) -> None:
+        """指标明确声明错误的 IC 范围且无法匹配时必须报告契约失败。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_ic_summary_metrics": [{"summary_id": 1001, "ic_scope": "cross_sectional", "mean_ic": 0.1}]},
+                [{"summary_id": 1001, "ic_scope": "time_series", "mean_ic": 0.1}],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_explicit_metric_identity_matching_multiple_rows_is_contract_failure(self) -> None:
+        """明确给出 summary ID 但数据库存在多条候选时不得静默跳过。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": 0.1}]},
+                [
+                    {"summary_id": 1001, "run_id": "run-a", "mean_ic": 0.1},
+                    {"summary_id": 1001, "run_id": "run-b", "mean_ic": 0.1},
+                ],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_api_metric_factor_identity_must_match_target_sub_factor(self) -> None:
+        """API 指标返回其他因子 ID 时必须失败。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {
+                    "factor_ic_summary_metrics": [
+                        {"factor_id": 999, "is_sub_factor_id": True, "summary_id": 1001, "mean_ic": 0.1}
+                    ]
+                },
+                [{"factor_id": 801, "is_sub_factor_id": 1, "summary_id": 1001, "mean_ic": 0.1}],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_api_validity_identity_must_match_target_sub_factor(self) -> None:
+        """API 有效性对象返回错误因子或母因子标识时必须失败。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {
+                    "factor_validity_status": {
+                        "id": 904,
+                        "factor_id": 999,
+                        "is_sub_factor_id": False,
+                        "time_series_is_valid": True,
+                    }
+                },
+                [],
+                [{"id": 904, "factor_id": 801, "is_sub_factor_id": 1, "time_series_is_valid": True}],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    @pytest.mark.parametrize(
+        ("object_kind", "database_rows"),
+        [
+            (
+                "metric",
+                [{"summary_id": 1001, "factor_id": 999, "is_sub_factor_id": 1, "mean_ic": 0.1}],
+            ),
+            (
+                "metric",
+                [{"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 0, "mean_ic": 0.1}],
+            ),
+            (
+                "validity",
+                [{"id": 904, "factor_id": 999, "is_sub_factor_id": 1, "time_series_is_valid": True}],
+            ),
+            (
+                "validity",
+                [{"id": 904, "factor_id": 801, "is_sub_factor_id": 0, "time_series_is_valid": True}],
+            ),
+        ],
+    )
+    def test_database_refresh_identity_must_belong_to_target_sub_factor(
+        self,
+        object_kind: str,
+        database_rows: list[dict[str, Any]],
+    ) -> None:
+        """DB 命中行属于其他因子或母因子时，不能仅凭 summary/快照 ID 完成对账。"""
+
+        api_data: dict[str, Any]
+        if object_kind == "metric":
+            api_data = {
+                "factor_ic_summary_metrics": [
+                    {"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 1, "mean_ic": 0.1}
+                ]
+            }
+            metrics = database_rows
+            validity = []
+        else:
+            api_data = {
+                "factor_validity_status": {
+                    "id": 904,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "time_series_is_valid": True,
+                }
+            }
+            metrics = []
+            validity = database_rows
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                api_data,
+                metrics,
+                validity,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    @pytest.mark.parametrize(
+        ("object_kind", "database_rows"),
+        [
+            ("metric", [{"summary_id": 1001, "is_sub_factor_id": 1, "mean_ic": 0.1}]),
+            ("validity", [{"id": 904, "is_sub_factor_id": 1, "time_series_is_valid": True}]),
+        ],
+    )
+    def test_database_refresh_identity_fields_are_required(
+        self,
+        object_kind: str,
+        database_rows: list[dict[str, Any]],
+    ) -> None:
+        """DB 证据缺少 factor_id 时必须失败，不能依赖调用方查询条件代替行内身份。"""
+
+        api_data: dict[str, Any]
+        if object_kind == "metric":
+            api_data = {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": 0.1}]}
+            metrics = database_rows
+            validity = []
+        else:
+            api_data = {"factor_validity_status": {"id": 904, "time_series_is_valid": True}}
+            metrics = []
+            validity = database_rows
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                api_data,
+                metrics,
+                validity,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_explicit_null_metric_is_compared_with_database_null(self) -> None:
+        """API 明确返回 null 且 DB 同字段为 null 时应记录为一次成功对账。"""
+
+        matches = FactorComboService._compare_api_and_database_refresh_data(
+            801,
+            {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": None}]},
+            [{"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 1, "mean_ic": None}],
+            [],
+        )
+
+        assert matches[0]["fields"] == ("mean_ic",), matches
+
+    def test_explicit_null_metric_with_missing_database_field_is_contract_failure(self) -> None:
+        """API 明确返回 null 但 DB 缺少对应字段时不得跳过对账。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_ic_summary_metrics": [{"summary_id": 1001, "mean_ic": None}]},
+                [{"summary_id": 1001, "factor_id": 801, "is_sub_factor_id": 1}],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_explicit_null_validity_is_compared_with_database_null(self) -> None:
+        """API 明确返回 null 有效性且 DB 同字段为 null 时应通过该字段对账。"""
+
+        matches = FactorComboService._compare_api_and_database_refresh_data(
+            801,
+            {"factor_validity_status": {"id": 904, "time_series_is_valid": None}},
+            [],
+            [{"id": 904, "factor_id": 801, "is_sub_factor_id": 1, "time_series_is_valid": None}],
+        )
+
+        assert matches[0]["fields"] == ("time_series_is_valid",), matches
+
+    def test_explicit_null_validity_with_missing_database_field_is_contract_failure(self) -> None:
+        """API 明确返回 null 有效性但 DB 缺少字段时不得通过。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_validity_status": {"id": 904, "time_series_is_valid": None}},
+                [],
+                [{"id": 904, "factor_id": 801, "is_sub_factor_id": 1}],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_stratification_alias_is_compared_with_mean_stratification(self) -> None:
+        """API 使用 stratification 别名时，必须与 DB 的 mean_stratification 字段对账。"""
+
+        matches = FactorComboService._compare_api_and_database_refresh_data(
+            801,
+            {"factor_ic_summary_metrics": [{"summary_id": 1001, "stratification": Decimal("0.75")}]},
+            [
+                {
+                    "summary_id": 1001,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "mean_stratification": Decimal("0.75"),
+                }
+            ],
+            [],
+        )
+
+        assert matches[0]["fields"] == ("stratification",), matches
+
+    def test_stratification_alias_mismatch_is_contract_failure(self) -> None:
+        """API 的 stratification 与 DB 的 mean_stratification 不一致时必须失败。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_ic_summary_metrics": [{"summary_id": 1001, "stratification": 0.75}]},
+                [
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "mean_stratification": 0.5,
+                    }
+                ],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_equivalent_api_and_mysql_datetime_formats_match(self) -> None:
+        """带时区的 API 时间与无时区的 MySQL DATETIME 墙上时间相同，必须定位到同一指标行。"""
+
+        matches = FactorComboService._compare_api_and_database_refresh_data(
+            801,
+            {
+                "factor_ic_summary_metrics": [
+                    {
+                        "summary_id": 1001,
+                        "period_start": "2026-08-01T00:00:00+08:00",
+                        "period_end": "2026-08-02T00:00:00+08:00",
+                        "mean_ic": 0.1,
+                    }
+                ]
+            },
+            [
+                {
+                    "summary_id": 1001,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "period_start": datetime(2026, 8, 1, 0, 0, 0),
+                    "period_end": datetime(2026, 8, 2, 0, 0, 0),
+                    "mean_ic": 0.1,
+                }
+            ],
+            [],
+        )
+
+        assert matches[0]["db_summary_id"] == 1001, matches
+
+    def test_different_period_identity_is_contract_failure(self) -> None:
+        """API 与 DB 的统计区间不同，即使 summary ID 相同也不能被当作同一条结果。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {
+                    "factor_ic_summary_metrics": [
+                        {
+                            "summary_id": 1001,
+                            "period_start": "2026-08-01T00:00:00+08:00",
+                            "mean_ic": 0.1,
+                        }
+                    ]
+                },
+                [
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "period_start": "2026-08-02 00:00:00",
+                        "mean_ic": 0.1,
+                    }
+                ],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_same_instant_with_two_timezone_offsets_matches(self) -> None:
+        """双方都带时区但表示同一 UTC 时刻时，时间身份应判定一致。"""
+
+        assert FactorComboService._same_datetime_identity(
+            "2026-08-01T00:00:00+08:00",
+            "2026-07-31T16:00:00Z",
+        ) is True
+
+    def test_validity_period_is_part_of_database_row_identity(self) -> None:
+        """有效性快照的统计区间不同于 API 时，即使快照 ID 相同也必须拒绝对账。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {
+                    "factor_validity_status": {
+                        "id": 904,
+                        "period_start": "2026-08-01T00:00:00+08:00",
+                        "period_end": "2026-08-02T00:00:00+08:00",
+                        "time_series_is_valid": True,
+                    }
+                },
+                [],
+                [
+                    {
+                        "id": 904,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "period_start": "2026-08-01 00:00:00",
+                        "period_end": "2026-08-03 00:00:00",
+                        "time_series_is_valid": True,
+                    }
+                ],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_explicit_null_period_is_compared_instead_of_treated_as_absent(self) -> None:
+        """API 明确返回空统计区间时，DB 也必须明确保存空值。"""
+
+        matches = FactorComboService._compare_api_and_database_refresh_data(
+            801,
+            {
+                "factor_ic_summary_metrics": [
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "period_start": None,
+                        "period_end": None,
+                        "mean_ic": 0.1,
+                    }
+                ]
+            },
+            [
+                {
+                    "summary_id": 1001,
+                    "factor_id": 801,
+                    "is_sub_factor_id": 1,
+                    "period_start": None,
+                    "period_end": None,
+                    "mean_ic": 0.1,
+                }
+            ],
+            [],
+        )
+
+        assert "period_start" in matches[0]["fields"], matches
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_api_and_database_refresh_data(
+                801,
+                {"factor_ic_summary_metrics": [{"summary_id": 1001, "period_start": None, "mean_ic": 0.1}]},
+                [
+                    {
+                        "summary_id": 1001,
+                        "factor_id": 801,
+                        "is_sub_factor_id": 1,
+                        "period_start": "2026-08-01 00:00:00",
+                        "mean_ic": 0.1,
+                    }
+                ],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    @pytest.mark.parametrize(
+        ("left", "right"),
+        [(True, 1), (False, 0), ("true", 1), ("false", 0), (1, "1"), (0, "0")],
+    )
+    def test_boolean_and_mysql_tinyint_are_compared_by_business_value(self, left: Any, right: Any) -> None:
+        """API JSON 布尔与 MySQL tinyint 或其字符串表示应按同一业务值比较。"""
+
+        assert FactorComboService._same_scalar(left, right) is True
+
+    def test_new_summary_metric_field_counts_as_calculation_evidence(self) -> None:
+        """新版 summary 的中位数等扩展指标非空时也应被认定为真实计算结果。"""
+
+        assert FactorComboService._is_populated_calculation_metric({"median_ic": 0}) is True
+        assert FactorComboService._is_populated_calculation_metric({"positive_rank_ic_rate": 0}) is True
+        assert FactorComboService._is_populated_calculation_metric({"oos_icir": 0}) is True
+        assert FactorComboService._is_populated_calculation_metric({"mean_stratification": 0}) is True
+
+    def test_plain_numeric_zero_keeps_decimal_tolerance(self) -> None:
+        """普通数值零不能因为恰好是 0 而被强制走布尔比较。"""
+
+        assert FactorComboService._same_scalar(0, Decimal("0.000000001")) is True
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "run_id",
+            "pipeline_run_id",
+            "next_pipeline_run_id",
+            "time_series_summary_run_id",
+            "cross_sectional_summary_run_id",
+        ],
+    )
+    def test_string_run_ids_are_not_compared_as_numeric_database_ids(self, field_name: str) -> None:
+        """Run 标识即使以 ``_id`` 结尾也应按字符串身份比较，而不是按正整数主键比较。"""
+
+        assert FactorComboService._same_persisted_value(
+            "ic-refresh-801",
+            "ic-refresh-801",
+            field_name=field_name,
+        ) is True
+        assert FactorComboService._same_persisted_value(
+            "ic-refresh-801",
+            "ic-refresh-802",
+            field_name=field_name,
+        ) is False
+
+    @pytest.mark.parametrize(
+        ("run_status", "expected_outcome"),
+        [
+            ("failed", FlowOutcome.FAIL_REFRESH),
+            ("running", FlowOutcome.FAIL_REFRESH),
+            ("unknown", FlowOutcome.FAIL_CONTRACT),
+        ],
+    )
+    def test_calculation_run_status_is_classified_before_metric_acceptance(
+        self,
+        run_status: str,
+        expected_outcome: str,
+    ) -> None:
+        """计算 Run 失败、进行中和未知状态必须分别按刷新失败或契约失败分类。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                self._metric_rows(run_status),
+                self._validity_rows(),
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == expected_outcome, error.value
+
+    def test_validity_summary_id_missing_from_detail_rows_is_contract_failure(self) -> None:
+        """有效性快照引用的 summary ID 未出现在新版明细时必须失败。"""
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                [self._metric_rows()[0]],
+                self._validity_rows(),
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_validity_summary_run_id_mismatch_is_contract_failure(self) -> None:
+        """有效性快照记录的 summary Run 与实际 summary 行不一致时必须失败。"""
+
+        validity_rows = self._validity_rows()
+        validity_rows[0]["cross_sectional_summary_run_id"] = "ic-other-run"
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                self._metric_rows(),
+                validity_rows,
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_validity_summary_scope_must_match_time_or_cross_dimension(self) -> None:
+        """有效性快照的时序/截面外键不能互相指向错误 IC 范围。"""
+
+        metrics = self._metric_rows()
+        metrics[0]["ic_scope"] = "cross_sectional"
+        metrics[1]["ic_scope"] = "time_series"
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                metrics,
+                self._validity_rows(),
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "ic_scope" in str(error.value), str(error.value)
+
+    def test_validity_summary_window_dimension_must_match_linked_summary(self) -> None:
+        """有效性外键对应的评价窗口必须和实际 summary 行一致。"""
+
+        metrics = self._metric_rows()
+        metrics[0]["window_scope"] = "fixed"
+        validity_rows = self._validity_rows()
+        validity_rows[0]["time_series_summary_window_scope"] = "rolling"
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                metrics,
+                validity_rows,
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "window_scope" in str(error.value), str(error.value)
+
+    def test_validity_summary_scope_alias_must_match_linked_summary_scope(self) -> None:
+        """有效性快照显式返回的 summary 范围别名不能与外键对应的 summary 范围冲突。"""
+
+        validity_rows = self._validity_rows()
+        validity_rows[0]["time_series_summary_ic_scope"] = "cross_sectional"
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                self._metric_rows(),
+                validity_rows,
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "scope alias" in str(error.value), str(error.value)
+
+    def test_run_config_factor_window_must_match_summary_dimension(self) -> None:
+        """Run 配置中的因子窗口与 summary 窗口不一致时必须失败。"""
+
+        run = self._run_detail()
+        metric = self._dimension_metric(factor_window_bars=48)
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_refresh_run_details(
+                801,
+                ("ic-refresh-801",),
+                [run],
+                [metric],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "factor_window_bars" in str(error.value), str(error.value)
+
+    def test_run_config_calculation_mode_must_match_summary_dimension(self) -> None:
+        """Run 配置中的计算模式与 summary 计算模式不一致时必须失败。"""
+
+        run = self._run_detail()
+        metric = self._dimension_metric(calculation_mode="cross_sectional")
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_refresh_run_details(
+                801,
+                ("ic-refresh-801",),
+                [run],
+                [metric],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "calculation_mode" in str(error.value), str(error.value)
+
+    def test_run_config_sample_pool_and_period_must_match_run_and_summary(self) -> None:
+        """Run 配置中的样本池或统计周期与主表、summary 不一致时必须失败。"""
+
+        run = self._run_detail(
+            config_json={
+                "universe_key": "alt",
+                "data_start": "2026-08-01T00:00:00+08:00",
+                "data_end": "2026-08-08T00:00:00+08:00",
+            },
+            data_start="2026-08-01T00:00:00+08:00",
+            data_end="2026-08-08T00:00:00+08:00",
+        )
+        metric = self._dimension_metric(universe_key="main")
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_refresh_run_details(
+                801,
+                ("ic-refresh-801",),
+                [run],
+                [metric],
+                [],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "universe_key" in str(error.value), str(error.value)
+
+    def test_run_context_must_exist_for_every_returned_run(self) -> None:
+        """刷新响应返回多个计算 Run 时，每个 Run 都必须有可对账的上下文。"""
+
+        runs = [
+            self._run_detail("ic-run-a"),
+            self._run_detail("ic-run-b"),
+        ]
+        metrics = [
+            self._dimension_metric(summary_id=1001, run_id="ic-run-a"),
+            self._dimension_metric(summary_id=1002, run_id="ic-run-b"),
+        ]
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_refresh_run_details(
+                801,
+                ("ic-run-a", "ic-run-b"),
+                runs,
+                metrics,
+                [{"run_id": "ic-run-a", "status": "completed"}],
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert error.value.details["missing_context_run_ids"] == ["ic-run-b"], error.value.details
+
+    def test_valid_run_details_with_independent_validity_batch_id_pass(self) -> None:
+        """有效性快照使用独立批次标识时，只要 summary 外键一致仍应通过。"""
+
+        run = self._run_detail()
+        metric = self._dimension_metric()
+        normalized = FactorComboService._validate_refresh_run_details(
+            801,
+            ("ic-refresh-801",),
+            [run],
+            [metric],
+            [],
+        )
+
+        assert normalized[0]["run_id"] == "ic-refresh-801", normalized
+
+    def test_complete_summary_and_validity_identity_chain_passes(self) -> None:
+        """summary、有效性快照和刷新 Run 全部一致时应返回完整数据库证据。"""
+
+        evidence = FactorComboService._validate_database_refresh_evidence(
+            801,
+            self._metric_rows(),
+            self._validity_rows(),
+            self._refresh_data(),
+        )
+
+        assert evidence.matched_run_ids == ("ic-refresh-801",), evidence
+        assert {row["summary_id"] for row in evidence.calculation_metrics} == {1001, 1002}, evidence
+
+    def test_every_refresh_run_must_be_linked_by_validity_snapshot(self) -> None:
+        """刷新返回多个计算 Run 时，每个 Run 都必须被有效性快照的 summary 外键引用。"""
+
+        refresh_data = {"results": [{"run_id": "ic-run-a"}, {"run_id": "ic-run-b"}]}
+        validity_rows = self._validity_rows()
+        validity_rows[0]["time_series_summary_run_id"] = "ic-run-a"
+        validity_rows[0]["cross_sectional_summary_run_id"] = "ic-run-a"
+        calculation_rows = [
+            {
+                "summary_id": 1001,
+                "factor_id": 801,
+                "is_sub_factor_id": 1,
+                "run_id": "ic-run-a",
+                "run_status": "completed",
+                "mean_ic": 0.1,
+            },
+            {
+                "summary_id": 1002,
+                "factor_id": 801,
+                "is_sub_factor_id": 1,
+                "run_id": "ic-run-b",
+                "run_status": "completed",
+                "mean_ic": 0.2,
+            },
+        ]
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._validate_database_refresh_evidence(
+                801,
+                calculation_rows,
+                validity_rows,
+                refresh_data,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_REFRESH, error.value
+        assert error.value.details["missing_validity_run_ids"] == ["ic-run-b"], error.value
+
+    @pytest.mark.parametrize(
+        ("database_row", "expected_outcome"),
+        [
+            (None, FlowOutcome.FAIL_REFRESH),
+            ({"id": 999, "sub_factor_name": "composite-test-factor", "type": 1}, FlowOutcome.FAIL_CONTRACT),
+            ({"id": 801, "sub_factor_name": "different-factor", "type": 1}, FlowOutcome.FAIL_CONTRACT),
+            ({"id": 801, "sub_factor_name": "composite-test-factor", "type": 2}, FlowOutcome.FAIL_CONTRACT),
+        ],
+    )
+    def test_post_refresh_database_sub_factor_identity_is_validated(
+        self,
+        database_row: dict[str, Any] | None,
+        expected_outcome: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """刷新后数据库子因子缺失或 ID、名称、类型错误时必须明确分类。"""
+
+        repository = StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801})
+        monkeypatch.setattr(repository, "get_registered_sub_factor", lambda sub_factor_id: database_row)
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+            repository=repository,
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service._read_database_sub_factor_after_refresh(801, "composite-test-factor")
+
+        assert error.value.outcome == expected_outcome, error.value
+
+    def test_post_refresh_database_sub_factor_query_error_is_technical_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """刷新后数据库子因子查询异常必须分类为技术失败。"""
+
+        repository = StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801})
+
+        def raise_database_error(sub_factor_id: int) -> dict[str, Any] | None:
+            """模拟数据库连接异常。"""
+
+            raise RuntimeError("database connection lost")
+
+        monkeypatch.setattr(repository, "get_registered_sub_factor", raise_database_error)
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+            repository=repository,
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service._read_database_sub_factor_after_refresh(801, "composite-test-factor")
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+
+    def test_database_query_exception_is_technical_failure(self) -> None:
+        """刷新证据查询发生数据库异常时必须分类为技术失败。"""
+
+        class FailingRepository(StubRepository):
+            """在计算证据读取阶段抛出数据库异常的替身。"""
+
+            def get_factor_refresh_calculation_metrics(self, sub_factor_id: int) -> list[dict[str, Any]]:
+                """模拟数据库连接错误。"""
+
+                raise RuntimeError("database connection lost")
+
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI([]),  # type: ignore[arg-type]
+            repository=FailingRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801}),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=ResourceScope(),
+            performance_api=StubPerformanceAPI([]),  # type: ignore[arg-type]
+            sub_factor_api=StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.verify_database_refresh_evidence(
+                801,
+                903,
+                self._refresh_data(),
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_TECHNICAL, error.value
+
+
+class TestRegistrationCrossEntityValidation:
+    """验证登记链路只依赖最新版表结构中真实存在的跨表指针。"""
+
+    def test_registration_report_normalization_omits_only_optional_null_metrics(self) -> None:
+        """标准化登记报告时删除可省略空指标，同时保留 unavailable 模式的六个必填空指标。"""
+
+        report = {
+            "factor_name": "composite-test-factor",
+            "performance": {
+                "metrics_status": "unavailable",
+                "ts_ic": None,
+                "return_rate": None,
+                "annualized_return": None,
+                "out_of_sample_icir": None,
+                "net_sharpe": None,
+                "benchmark_sharpe": None,
+                "max_drawdown": None,
+                "calmar": None,
+                "profit_loss_ratio": None,
+                "annual_turnover": None,
+                "positive_return_rate": None,
+                "observations": None,
+                "trade_observations": None,
+                "decay_ratio": None,
+                "metric_mode": "time_series",
+                "cs_rank_ic": None,
+                "cs_icir": None,
+                "cs_score": None,
+                "universe_key": "main",
+                "symbols": ["BTCUSDT"],
+            },
+        }
+
+        normalized = FactorComboService._normalize_registration_report_for_persistence(report)
+
+        assert normalized["performance"] == {
+            "metrics_status": "unavailable",
+            "ts_ic": None,
+            "return_rate": None,
+            "out_of_sample_icir": None,
+            "net_sharpe": None,
+            "max_drawdown": None,
+            "annual_turnover": None,
+            "metric_mode": "time_series",
+            "universe_key": "main",
+            "symbols": ["BTCUSDT"],
+        }, normalized
+        assert "annualized_return" in report["performance"], report
+        assert report["performance"]["annualized_return"] is None, report
+
+    def test_experiment_row_does_not_require_form_or_pipeline_columns(self) -> None:
+        """实验表没有 form_id 和 pipeline_run_id 时，仍可通过表单、版本和实验指针证明同一链路。"""
+
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+        version_hash = "a" * 64
+        response_data = {
+            "form_id": 22,
+            "factor_combo_version_id": 33,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "sub_factor_id": 55,
+            "registration": {"id": 66},
+        }
+        request_payload = {
+            "session_id": 11,
+            "pipeline_run_id": "run-registration-001",
+        }
+        version_row = {
+            "id": 33,
+            "combo_id": 44,
+            "combo_version_hash": version_hash,
+            "experiment_id": 77,
+        }
+        form_row = {
+            "id": 22,
+            "session_id": 11,
+            "pipeline_run_id": "run-registration-001",
+            "factor_combo_id": 33,
+            "factor_combo_experiment_info_id": 77,
+        }
+        experiment_row = {
+            "id": 77,
+            "combo_id": 44,
+            "valid": 1,
+        }
+
+        service._validate_registration_cross_entity_pointers(
+            response_data,
+            request_payload,
+            version_row,
+            form_row,
+            experiment_row,
+            sub_factor_id=55,
+            registration_id=66,
+            response_combo_id=44,
+        )
+
+class TestWorkOrderReconciliation:
+    """验证工作单成员父级关系和快照来源不会被弱聚合结果掩盖。"""
+
+    @staticmethod
+    def _api_member() -> dict[str, Any]:
+        """构造一个可用于父级关系对账的工作单成员。"""
+
+        return {
+            "component_id": "1",
+            "factor_id": 10,
+            "sub_factor_id": 100,
+            "factor_code": "FACTOR-10",
+            "sub_factor_code": "SUB-100",
+            "name": "sub-factor-100",
+            "feature_column": "feature_100",
+            "factor_bar_interval": "1h",
+            "direction": 1,
+            "definition_snapshot": {"formula": "close"},
+            "metrics_snapshot": {"mean_ic": 0.1},
+            "validity_snapshot": {"overall_is_valid": True},
+        }
+
+    @staticmethod
+    def _database_member(**overrides: Any) -> dict[str, Any]:
+        """构造与工作单成员对应的数据库快照。"""
+
+        row: dict[str, Any] = {
+            "member_id": 1,
+            "sub_factor_id": 100,
+            "member_form_id": 22,
+            "member_pool_id": 33,
+            "factor_detail_record_id": 200,
+            "factor_detail_id": 200,
+            "factor_detail_factor_id": 100,
+            "factor_detail_is_sub_factor_id": 1,
+            "parent_factor_ids": [10, 11],
+            "parent_factor_names": ["factor-10", "factor-11"],
+            "parent_factor_serial_numbers": ["FACTOR-10", "FACTOR-11"],
+            "parent_factor_relation_count": 2,
+            "parent_factor_distinct_count": 2,
+            "sub_factor_name": "sub-factor-100",
+            "sub_factor_serial_number": "SUB-100",
+            "sub_factor_bar_interval": "1h",
+            "feature_column": "feature_100",
+            "direction": 1,
+            "definition_snapshot_json": {"formula": "close"},
+            "metrics_snapshot_json": {"mean_ic": 0.1},
+            "validity_snapshot_json": {"overall_is_valid": True},
+        }
+        row.update(overrides)
+        return row
+
+    def test_work_order_rejects_duplicate_parent_relation_sources(self) -> None:
+        """数据库父级关系存在重复行时不能由 DISTINCT 聚合后伪装成合法关系。"""
+
+        row = self._database_member(
+            parent_factor_ids=[10, 10],
+            parent_factor_names=["factor-10"],
+            parent_factor_serial_numbers=["FACTOR-10"],
+            parent_factor_relation_count=2,
+            parent_factor_distinct_count=1,
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_work_order_members(
+                [self._api_member()],
+                [row],
+                expected_form_id=22,
+                expected_pool_id=33,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "parent" in str(error.value), str(error.value)
+
+    def test_work_order_rejects_conflicting_snapshot_values(self) -> None:
+        """同一成员多个快照对 feature 或 direction 给出不同值时必须失败。"""
+
+        row = self._database_member(
+            feature_column=None,
+            direction=None,
+            definition_snapshot_json={"feature_column": "feature_100", "direction": 1},
+            metrics_snapshot_json={"feature_column": "feature_other", "direction": -1},
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService._compare_work_order_members(
+                [self._api_member()],
+                [row],
+                expected_form_id=22,
+                expected_pool_id=33,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "conflict" in str(error.value).lower(), str(error.value)
+
+
+class TestFeedbackPersistenceReconciliation:
+    """验证反馈接口字段与新版反馈表 source 字段准确对账。"""
+
+    def test_feedback_uses_source_columns_and_form_session(self) -> None:
+        """反馈正文、Run、实验和版本应映射到 source 列，session 与 reply 按业务实体单独核对。"""
+
+        response_data = {
+            "feedback_recorded": True,
+            "idempotent_replay": False,
+            "feedback_id": 900,
+            "feedback_round": 1,
+            "feedback_status": "pending",
+            "reply": 2,
+            "form_id": 22,
+            "form_status": "processing",
+            "factor_combo_experiment_info_id": 800,
+            "rejected_factor_combo_version_id": 702,
+            "experiment_valid": False,
+        }
+        request_payload = {
+            "session_id": 11,
+            "form_id": 22,
+            "pipeline_run_id": "combo-22-abcdef0123456789",
+            "reply": 2,
+            "feedback": "autotest improve drawdown",
+        }
+        feedback_row = {
+            "id": 900,
+            "form_id": 22,
+            "feedback_round": 1,
+            "status": "pending",
+            "source_factor_combo_version_id": 702,
+            "source_experiment_info_id": 800,
+            "source_pipeline_run_id": "combo-22-abcdef0123456789",
+            "feedback_text": "autotest improve drawdown",
+            "next_factor_combo_version_id": None,
+            "next_pipeline_run_id": None,
+            "next_experiment_info_id": None,
+        }
+        form_row = {
+            "id": 22,
+            "session_id": 11,
+            "status": "processing",
+            "pipeline_run_id": None,
+            "factor_combo_id": None,
+            "factor_combo_experiment_info_id": None,
+        }
+        experiment_row = {
+            "id": 800,
+            "valid": False,
+            "failure_reason": "autotest improve drawdown",
+        }
+        version_row = {"id": 702, "experiment_id": 800, "status": "rejected"}
+
+        compared = FactorComboService.validate_feedback_persistence(
+            FactorComboService.__new__(FactorComboService),
+            response_data,
+            request_payload,
+            feedback_row,
+            form_row,
+            experiment_row,
+            version_row,
+        )
+
+        assert set(compared["request_fields"]) == {"form_id", "pipeline_run_id", "feedback"}, compared
+        assert "factor_combo_experiment_info_id" in compared["response_fields"], compared
+
+
+class TestNextVersionReconciliation:
+    """验证下一版本不会静默复用上一版本的完整组件内容。"""
+
+    def test_next_version_feedback_uses_source_experiment_column(self) -> None:
+        """下一版本应通过反馈表 source_experiment_info_id 核对来源实验。"""
+
+        response_data = {
+            "form_id": 22,
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_version_id": 703,
+            "combo_version_hash": "b" * 64,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "feedback_id": 900,
+            "feedback_round": 2,
+            "feedback_status": "processing",
+        }
+        feedback_row = {
+            "id": 900,
+            "form_id": 22,
+            "feedback_round": 2,
+            "status": "processing",
+            "source_factor_combo_version_id": 702,
+            "source_experiment_info_id": 800,
+            "next_factor_combo_version_id": 703,
+            "next_pipeline_run_id": "combo-22-newrun00000001",
+            "next_experiment_info_id": None,
+        }
+        version_row = {"id": 703, "initial_form_id": None}
+        source_version_row = {
+            "id": 702,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "combo_version_hash": "a" * 64,
+            "status": "rejected",
+            "initial_form_id": 22,
+            "experiment_id": 800,
+        }
+        form_row = {
+            "id": 22,
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_id": 703,
+        }
+
+        FactorComboService._validate_next_version_feedback_links(
+            FactorComboService.__new__(FactorComboService),
+            response_data,
+            feedback_row,
+            version_row,
+            source_version_row,
+            form_row,
+        )
+
+    def test_next_version_rejects_reused_component_content(self) -> None:
+        """新版本哈希即使被伪造为不同值，也不能复用旧版本全部组件内容。"""
+
+        source_components = [
+            {
+                "id": 1,
+                "combo_id": 702,
+                "component_factor_id": 10,
+                "component_sub_factor_id": 100,
+                "direction": 1,
+                "transform_json": {"normalization": "zscore"},
+                "weight": 0.4,
+            },
+            {
+                "id": 2,
+                "combo_id": 702,
+                "component_factor_id": 11,
+                "component_sub_factor_id": 101,
+                "direction": -1,
+                "transform_json": {"normalization": "zscore"},
+                "weight": -0.2,
+            },
+        ]
+        request_payload = {
+            "generation_method": "ml",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "components": [
+                {
+                    "component_factor_id": 10,
+                    "component_sub_factor_id": 100,
+                    "direction": 1,
+                    "transform": {"normalization": "zscore"},
+                    "weight": 0.4,
+                },
+                {
+                    "component_factor_id": 11,
+                    "component_sub_factor_id": 101,
+                    "direction": -1,
+                    "transform": {"normalization": "zscore"},
+                    "weight": -0.2,
+                },
+            ],
+        }
+        response_data = {
+            "form_id": 22,
+            "form_status": "processing",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_version_id": 703,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "combo_version_hash": "b" * 64,
+            "combo_status": "candidate",
+            "component_count": 2,
+            "idempotent_replay": False,
+            "feedback_id": 900,
+            "feedback_round": 2,
+            "feedback_status": "processing",
+        }
+        form_row = {
+            "id": 22,
+            "status": "processing",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "factor_combo_id": 703,
+            "factor_combo_pool_id": 33,
+        }
+        version_row = {
+            "id": 703,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "generation_method": "ml",
+            "pipeline_run_id": "combo-22-newrun00000001",
+            "combo_version_hash": "b" * 64,
+            "status": "candidate",
+            "initial_form_id": None,
+            "experiment_id": None,
+        }
+        source_version_row = {
+            "id": 702,
+            "combo_id": 701,
+            "combo_family_key": "factor-combo-form:22",
+            "pool_id": 33,
+            "combo_version_hash": "a" * 64,
+            "status": "rejected",
+            "initial_form_id": 22,
+            "experiment_id": 800,
+        }
+        feedback_row = {
+            "id": 900,
+            "form_id": 22,
+            "feedback_round": 2,
+            "status": "processing",
+            "source_factor_combo_version_id": 702,
+            "source_experiment_info_id": 800,
+            "next_factor_combo_version_id": 703,
+            "next_pipeline_run_id": "combo-22-newrun00000001",
+            "next_experiment_info_id": None,
+        }
+
+        new_components = [
+            {**row, "combo_id": 703}
+            for row in source_components
+        ]
+
+        with pytest.raises(FactorComboFlowError) as error:
+            FactorComboService.validate_combo_version_persistence(
+                FactorComboService.__new__(FactorComboService),
+                response_data,
+                request_payload,
+                form_row,
+                version_row,
+                new_components,
+                feedback_row=feedback_row,
+                source_version_row=source_version_row,
+                source_component_rows=source_components,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "reuses the complete source component content" in str(error.value), str(error.value)
+        assert "missing_fields" not in error.value.details, error.value
+
+
+class TestRealResearchFlowBranches:
+    """验证真实研究主流程的技术重试、反馈续轮和结果契约。"""
+
+    def test_run_start_conflict_reuses_database_pipeline_run_and_protects_form(self) -> None:
+        """启动接口 409 且表单已有合法 Run 时复用该 Run，不再发起第二次启动。"""
+
+        api = StubStartConflictAPI(
+            StubResponse(
+                409,
+                {
+                    "success": False,
+                    "error": "run already exists for this form",
+                },
+            )
+        )
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "version_id": 702, "sub_factor_id": 801},
+            {
+                "id": 22,
+                "factor_combo_id": 702,
+                "pipeline_run_id": "combo-22-abcdef0123456789",
+                "status": "processing",
+            },
+        )
+        scope = ResourceScope()
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=api,  # type: ignore[arg-type]
+            repository=repository,  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=scope,
+        )
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing")
+
+        run = service.start_real_run(form, agent_uid="agent-1")
+
+        assert run.pipeline_run_id == "combo-22-abcdef0123456789", run
+        assert run.reused_existing is True, run
+        assert 22 in scope.protected_form_ids, scope.protected_form_ids
+        assert len(api.calls) == 1, api.calls
+
+    def test_terminal_form_can_be_released_for_fixture_cleanup(self) -> None:
+        """真实 Run 进入安全终态后，Scope 允许 Fixture 在结束时清理表单。"""
+
+        scope = ResourceScope()
+        scope.track_session(11)
+        scope.track_form(11, 22)
+        scope.protect_form(22)
+
+        scope.release_form(22)
+
+        assert scope.cleanable_form_ids() == {22}, scope.cleanable_form_ids()
+        assert scope.cleanable_session_ids() == {11}, scope.cleanable_session_ids()
+
+    def test_unowned_form_does_not_make_external_session_cleanable(self) -> None:
+        """未由当前 Scope 创建的会话和表单不能进入自动清理集合。"""
+
+        scope = ResourceScope()
+        scope.track_form(999, 888)
+
+        assert scope.cleanable_form_ids() == set(), scope.cleanable_form_ids()
+        assert scope.cleanable_session_ids() == set(), scope.cleanable_session_ids()
+
+    def test_definitive_start_client_error_releases_form_protection(self) -> None:
+        """真实 Run 启动明确返回客户端错误时，不应永久阻塞测试数据清理。"""
+
+        scope = ResourceScope()
+        scope.track_session(11)
+        scope.track_form(11, 22)
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubStartConflictAPI(StubResponse(403, {"success": False, "error": "forbidden"})),  # type: ignore[arg-type]
+            repository=StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801}),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=scope,
+        )
+
+        response = service.start_real_run_request(
+            SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted"),
+            agent_uid="agent-1",
+        )
+
+        assert response.status_code == 403, response
+        assert scope.protected_form_ids == set(), scope.protected_form_ids
+
+    def test_initial_form_replay_in_owned_session_is_marked_for_cleanup(self) -> None:
+        """当前测试会话中的幂等重放表单也必须纳入清理范围，避免 POST 重试造成数据泄漏。"""
+
+        scope = ResourceScope()
+        scope.track_session(11)
+        service = FactorComboService(
+            chat_api=None,  # type: ignore[arg-type]
+            factor_combo_api=StubFactorComboAPI([]),  # type: ignore[arg-type]
+            repository=StubRepository({"id": 901, "combo_id": 701, "sub_factor_id": 801}),  # type: ignore[arg-type]
+            settings=_settings(),
+            scope=scope,
+        )
+
+        service.require_submitted_form(
+            StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "form_id": 22,
+                        "form_no": "FCF-TEST-22",
+                        "factor_combo_pool_id": 33,
+                        "status": "submitted",
+                    },
+                },
+            ),
+            11,
+        )
+
+        assert scope.cleanable_form_ids() == {22}, scope.cleanable_form_ids()
+
+    def test_missing_review_decision_is_a_contract_failure(self) -> None:
+        """结果缺少评审决策字段时不得被误判为业务无效。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=False, continue_exploration=False)
+        body = read_json(response)
+        del body["data"]["result"]["factor_combo_review"]["experiment_valid"]
+
+        service = _service(
+            StubFactorComboAPI([]),
+            StubPerformanceAPI([]),
+            StubSubFactorAPI(StubResponse(200, {"success": True, "data": {}})),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+
+    def test_run_status_rejects_database_form_run_mismatch(self) -> None:
+        """状态接口返回前，数据库表单必须属于同一个 pipeline run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result")
+            ],
+            result_responses=[],
+        )
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            {"pipeline_run_id": "combo-22-9999999999999999"},
+        )
+        service = _real_flow_service(api, repository=repository)
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-1111111111111111",
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.read_real_run_status(run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "pipeline_run_id" in str(error.value), str(error.value)
+        assert api.status_calls == [], api.status_calls
+
+    def test_run_result_rejects_database_form_run_mismatch(self) -> None:
+        """结果接口返回成功时，数据库表单仍必须指向同一个 pipeline run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[],
+            result_responses=[
+                _run_result_response(
+                    "combo-22-1111111111111111",
+                    valid=True,
+                    continue_exploration=False,
+                )
+            ],
+        )
+        repository = StubRepository(
+            {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+            {"pipeline_run_id": "combo-22-9999999999999999"},
+        )
+        service = _real_flow_service(api, repository=repository)
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-1111111111111111",
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(
+                api.result_responses[0],  # type: ignore[arg-type]
+                run,
+            )
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "pipeline_run_id" in str(error.value), str(error.value)
+
+    def test_result_report_requires_non_empty_factor_name(self) -> None:
+        """结构化结果必须提供非空因子名，不能把空白结果继续送入登记。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(
+            run.pipeline_run_id,
+            valid=True,
+            continue_exploration=False,
+        )
+        body = read_json(response)
+        body["data"]["result"]["factor_combo_report"]["factor_name"] = "   "
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert "factor_name" in str(error.value), str(error.value)
+
+    def test_real_result_preserves_complete_new_performance_contract(self) -> None:
+        """读取完整新版绩效结果，并验证真实登记请求不补造、不改写或丢失任何指标字段。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = read_json(response)
+        expected_performance = deepcopy(body["data"]["result"]["factor_combo_report"]["performance"])
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        result = service.require_real_pipeline_result(StubResponse(200, body), run)
+        payload = service.build_real_register_payload(result)
+
+        assert result.report["performance"] == expected_performance, result.report
+        assert payload["report"]["performance"] == expected_performance, payload
+        assert set(payload["report"]["performance"]) == {
+            "metrics_status",
+            "ts_ic",
+            "return_rate",
+            "annualized_return",
+            "out_of_sample_icir",
+            "net_sharpe",
+            "benchmark_sharpe",
+            "max_drawdown",
+            "calmar",
+            "profit_loss_ratio",
+            "annual_turnover",
+            "positive_return_rate",
+            "observations",
+            "trade_observations",
+            "decay_ratio",
+            "metric_mode",
+            "cs_rank_ic",
+            "cs_icir",
+            "cs_score",
+            "universe_key",
+            "symbols",
+        }, payload
+
+    def test_real_result_accepts_and_preserves_rolling_oos_win_rate_alias(self) -> None:
+        """仅返回兼容正收益率字段时允许登记，并确保 Service 不改名或补造主字段。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = read_json(response)
+        performance = body["data"]["result"]["factor_combo_report"]["performance"]
+        del performance["positive_return_rate"]
+        performance["rolling_oos_win_rate"] = 0.79
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        result = service.require_real_pipeline_result(StubResponse(200, body), run)
+        payload = service.build_real_register_payload(result)
+
+        assert result.report["performance"] == performance, result.report
+        assert payload["report"]["performance"] == performance, payload
+        assert payload["report"]["performance"]["rolling_oos_win_rate"] == 0.79, payload
+        assert "positive_return_rate" not in payload["report"]["performance"], payload
+
+    def test_real_cross_sectional_result_requires_and_preserves_cross_sectional_context(self) -> None:
+        """读取截面模式结果，并验证截面 IC、币池和币种上下文通过校验且原样进入登记请求。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = read_json(response)
+        performance = body["data"]["result"]["factor_combo_report"]["performance"]
+        performance["metric_mode"] = "cross_sectional"
+        performance["ts_ic"] = None
+        performance["cs_rank_ic"] = 0.08
+        performance["cs_icir"] = 1.92
+        performance["cs_score"] = 68.4
+        performance["symbols"] = ["BTCUSDT", "ETHUSDT"]
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        result = service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert result.report["performance"] == performance, result.report
+        assert result.report["performance"]["ts_ic"] is None, result.report
+        assert result.report["performance"]["cs_rank_ic"] == 0.08, result.report
+        assert result.report["performance"]["symbols"] == ["BTCUSDT", "ETHUSDT"], result.report
+
+    @pytest.mark.parametrize("missing_field", ["cs_rank_ic", "cs_icir", "universe_key", "symbols"])
+    def test_real_cross_sectional_result_rejects_missing_mode_specific_field(self, missing_field: str) -> None:
+        """逐一删除真实截面结果的条件必填字段，并验证结果在登记前被识别为契约失败。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = read_json(response)
+        performance = body["data"]["result"]["factor_combo_report"]["performance"]
+        performance["metric_mode"] = "cross_sectional"
+        performance["ts_ic"] = None
+        performance["cs_rank_ic"] = 0.08
+        performance["cs_icir"] = 1.92
+        del performance[missing_field]
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert missing_field in str(error.value.details), error.value.details
+
+    @pytest.mark.parametrize(
+        ("field", "invalid_value"),
+        [
+            ("positive_return_rate", 1.01),
+            ("decay_ratio", -0.01),
+            ("metric_mode", "hybrid"),
+        ],
+    )
+    def test_real_result_rejects_invalid_new_performance_value(
+        self,
+        field: str,
+        invalid_value: object,
+    ) -> None:
+        """修改真实结果中的新增绩效字段为非法范围或枚举值，并验证不会继续构造登记流程。"""
+
+        run = RealRun(
+            form=SubmittedForm(session_id=11, form_id=22, pool_id=33, status="processing"),
+            pipeline_run_id="combo-22-abcdef0123456789",
+        )
+        response = _run_result_response(run.pipeline_run_id, valid=True, continue_exploration=False)
+        body = read_json(response)
+        body["data"]["result"]["factor_combo_report"]["performance"][field] = invalid_value
+        service = _real_flow_service(
+            StubRealFlowAPI(status_responses=[], result_responses=[]),
+            repository=StubRepository(
+                {"id": 901, "combo_id": 701, "sub_factor_id": 801},
+                {"pipeline_run_id": run.pipeline_run_id},
+            ),
+        )
+
+        with pytest.raises(FactorComboFlowError) as error:
+            service.require_real_pipeline_result(StubResponse(200, body), run)
+
+        assert error.value.outcome == FlowOutcome.FAIL_CONTRACT, error.value
+        assert field in str(error.value), error.value
+
+    def test_technical_pipeline_failure_uses_fresh_run_before_business_decision(self) -> None:
+        """首轮 Pipeline 技术失败时使用 force_fresh_pipeline_run 重试，再处理真实结果。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "failed", "retry_run"),
+                _run_status_response("combo-22-2222222222222222", "completed", "read_result"),
+            ],
+            result_responses=[
+                _run_result_response("combo-22-2222222222222222", valid=False, continue_exploration=False),
+            ],
+        )
+        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        flow = service.run_real_research_flow(form, user_id=7)
+
+        assert flow.outcome == FlowOutcome.PASS_INVALID, flow
+        assert [payload["force_fresh_pipeline_run"] for _, payload in api.start_calls] == [False, True], api.start_calls
+        assert all(payload["agent_uid"] == "agent-1" for _, payload in api.start_calls), api.start_calls
+        assert api.result_calls == [(22, "combo-22-2222222222222222")], api.result_calls
+
+    def test_pipeline_status_network_error_retries_same_run_without_starting_another(self) -> None:
+        """状态查询网络错误恢复时只重试同一个 Run，不应创建第二个 Run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                requests.exceptions.SSLError("unexpected EOF"),
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+            ],
+            result_responses=[
+                _run_result_response("combo-22-1111111111111111", valid=False, continue_exploration=False),
+            ],
+        )
+        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        flow = service.run_real_research_flow(form, user_id=7)
+
+        assert flow.outcome == FlowOutcome.PASS_INVALID, flow
+        assert [payload["force_fresh_pipeline_run"] for _, payload in api.start_calls] == [False], api.start_calls
+        assert api.status_calls == [
+            (22, "combo-22-1111111111111111"),
+            (22, "combo-22-1111111111111111"),
+        ], api.status_calls
+
+    def test_result_not_ready_is_retried_without_restarting_completed_pipeline(self) -> None:
+        """Pipeline 已完成但结构化结果暂时 404 时只重试结果读取，不重新启动 Run。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+            ],
+            result_responses=[
+                StubResponse(404, {"success": False, "error": "result not ready"}),
+                _run_result_response("combo-22-1111111111111111", valid=False, continue_exploration=False),
+            ],
+        )
+        service = _real_flow_service(api, max_rounds=1, max_technical_retries=1)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        flow = service.run_real_research_flow(form, user_id=7)
+
+        assert flow.outcome == FlowOutcome.PASS_INVALID, flow
+        assert len(api.start_calls) == 1, api.start_calls
+        assert api.result_calls == [
+            (22, "combo-22-1111111111111111"),
+            (22, "combo-22-1111111111111111"),
+        ], api.result_calls
+        assert api.status_calls == [
+            (22, "combo-22-1111111111111111"),
+            (22, "combo-22-1111111111111111"),
+        ], api.status_calls
+
+    def test_invalid_result_submits_feedback_and_starts_next_research_round(self) -> None:
+        """首轮业务无效且仍可探索时提交回复 2，并把反馈 ID 传入下一轮启动。"""
+
+        api = StubRealFlowAPI(
+            status_responses=[
+                _run_status_response("combo-22-1111111111111111", "completed", "read_result"),
+                _run_status_response("combo-22-2222222222222222", "completed", "read_result"),
+            ],
+            result_responses=[
+                _run_result_response("combo-22-1111111111111111", valid=False, continue_exploration=True),
+                _run_result_response("combo-22-2222222222222222", valid=False, continue_exploration=False),
+            ],
+            feedback_response=StubResponse(
+                200,
+                {
+                    "success": True,
+                    "data": {
+                        "feedback_recorded": True,
+                        "idempotent_replay": False,
+                        "feedback_id": 991,
+                        "feedback_round": 2,
+                        "feedback_status": "pending",
+                        "reply": 2,
+                        "form_id": 22,
+                        "form_status": "processing",
+                        "factor_combo_experiment_info_id": 1,
+                        "rejected_factor_combo_version_id": 702,
+                        "experiment_valid": False,
+                    },
+                },
+            ),
+        )
+        service = _real_flow_service(api, max_rounds=2, max_technical_retries=0)
+        form = SubmittedForm(session_id=11, form_id=22, pool_id=33, status="submitted")
+
+        flow = service.run_real_research_flow(form, user_id=7)
+
+        assert flow.outcome == FlowOutcome.PASS_INVALID, flow
+        assert len(flow.rounds) == 2, flow.rounds
+        assert len(api.feedback_payloads) == 1, api.feedback_payloads
+        assert api.feedback_payloads[0]["reply"] == 2, api.feedback_payloads
+        assert api.start_calls[0][1].get("feedback_id") is None, api.start_calls
+        assert api.start_calls[1][1].get("feedback_id") == 991, api.start_calls
