@@ -2,6 +2,12 @@
 
 本文件是 Factor 4.0 测试问题的唯一命名登记表。登记时间：2026-09-04（Asia/Shanghai）。
 
+2026-09-06 迁移说明：以下状态、数量和历史数据仍是登记日的记录，不代表本次迁移回归结果。
+本次只更新已删除脚本的复现入口，保留固定中文标题及历史证据；当前执行结果见 `docs/factor4-script-migration.md`。
+新版命令读取现有测试配置并动态发现数据库样本，不依赖历史报告中的固定 Run。
+
+2026-09-07 全区间历史补齐新增一项 `CANDIDATE`：“环境快照缺失日期与当时可用环境记录不一致”。下方历史数量表不据此当作全量最新验收统计；新项详情单独保留真实证据和未确认的选择契约。
+
 ## 命名规则
 
 1. **固定中文标题**是对外唯一 Bug 名称。问题再次出现、回归测试或验收复测时必须逐字使用同一个标题。
@@ -33,6 +39,34 @@
 | 发布摘要路由数量与实际有效路由数量不一致 | `F4-PUBLISHED-ROUTE-COUNT` | `DB-613` |
 | 论文候选与注册因子语义映射错误 | `F4-KB-MAPPING-SEMANTIC-MISMATCH` | 论文/KB 专项 |
 | IV/RV 因子定义与实际执行公式及输入字段不一致 | `F4-IV-RV-DEFINITION-RUNTIME-MISMATCH` | IV/RV 专项 |
+| 公式已更新但 normalized_formula 元数据仍保留旧表达式 | `F4-NORMALIZED-FORMULA-STALE` | `CALC-510-A`，当前元数据专项 |
+| 环境快照缺失日期与当时可用环境记录不一致 | `F4-FROZEN-MISSING-DATE-VISIBLE` | 环境全区间历史核验 |
+
+### 环境快照缺失日期与当时可用环境记录不一致
+
+- **英文索引**：`F4-FROZEN-MISSING-DATE-VISIBLE`
+- **当前状态**：`CANDIDATE`，2026-09-07。按可见 ready 环境日期应进入快照的规则，用例失败；额外筛选契约尚待确认，不提前计为确认产品 Bug。
+- **已确认事实**：批次 `6`、`7` 的冻结区间为 `2024-09-02` 至 `2026-09-01`，`missing_dates` 明确包含 `2024-09-02`。同一测试库日历记录 `1341` 对应该日 `fact / CHOPPY_UP / ready / revision=1`；`available_at=2026-08-31 15:43:44.121786`、`created_at=2026-08-31 15:43:50.999883`，均早于批次 6 的冻结时点。批次 7 复用了相同快照，不能算第二次独立计算复现。
+- **时间口径**：批次列 `as_of_time=2026-09-02 01:17:17.390102`，冻结 JSON 为 `2026-09-01T17:17:17.390102Z`。这两种表示尚未作契约确认；本条日历记录早于两者超过一天，不能以一次常见的 8 小时时区转换消除此事实差异。
+- **预期 / 实际**：若缺失定义为 as_of 时没有可用 ready 日历，则该日不应列为缺失；实际已声明缺失。没有证据证明这次差异已经改变因子数值或最终排名。
+- **复现命令**：
+
+  ```bash
+  python3 -m pytest tests/cases/factor4/test_environment_closure_business.py::test_frozen_missing_dates_match_full_range_daily_history_at_batch_as_of --live --env test -v --tb=short
+  ```
+
+- **验证步骤**：在同一只读事务读取批次的冻结日期区间、as_of、members、missing_dates；独立查询该完整日期区间内同 label_kind 的所有 daily 修订，不按成员 ID、is_current 或 available_at 预过滤；按 as_of 选可见的最高修订，核对 ready 日期是否被列为 missing；另查创建时间排除事后回填。
+- **证据**：`reports/factor4-closure-range-history-final-live-20260907.xml`。失败码为 `ENV_FROZEN_MISSING_DATE_HAS_VISIBLE_ENVIRONMENT`。
+- **根因边界**：不能断定是开始日期边界或时区代码错误；当前公开日期字段未说明额外选择条件。`2026-08-30` 的 latest 日历为 not_ready，该日只记录选择规则不明，不当作同类失败。
+
+### 公式已更新但 normalized_formula 元数据仍保留旧表达式
+
+- **英文索引**：`F4-NORMALIZED-FORMULA-STALE`
+- **当前状态**：`CANDIDATE`，2026-09-06 本地判定器修正后尚未进行独立线上复核，不计入本轮确认数量。
+- **历史事实**：2026-09-05 保存的报告中，`sub_factor:161104/161106/161108` 的 `calc_logic` 和精确公式 evidence 已使用正确 DPO，但 `metadata.normalized_formula` 仍保留位移均线的表达式。
+- **根因边界**：这是元数据一致性问题，不能沿用「DPO 公式错误地位移均线而非价格序列」来断言实际运行错误。归一化前后仅周期参数不同且没有实际输入 cadence/单位转换证据时，只记录 `BLOCKED_DOC`；不得直接判为错误或通过。
+- **测试判定修正**：家族回归只读取可执行 detail 与精确 Run evidence。当前详情静态审计独立核验归一化元数据，同层输入字段分别对账，禁止把逻辑输入与 raw dependency closure 合并后比较。
+- **历史证据**：`reports/factor4-formula-regression/20260905T034346Z/adjudicated-results.json`、`reports/factor4-deep/20260905T110208Z-dpo-formula-recheck/report.json`。
 
 ## 确认的产品 Bug
 
@@ -47,8 +81,7 @@
 - **复现命令**：
 
   ```bash
-  export FACTOR4_MCP_TOKEN='<test token>'
-  python tmp/calc508_env_met_reconcile.py
+  python3 -m pytest tests/cases/factor4/test_backend_three_way_business.py::test_backend_daily_exact_date_and_pit_match_mcp_database --live --env test -v
   ```
 
 - **核心请求**：
@@ -72,8 +105,7 @@
 - **复现命令**：
 
   ```bash
-  export FACTOR4_MCP_TOKEN='<test token>'
-  python tmp/calc508_env_met_reconcile.py
+  python3 -m pytest tests/cases/factor4/test_backend_three_way_business.py::test_backend_summary_identity_values_and_period_instants_match_mcp_database --live --env test -v
   ```
 
 - **复现步骤**：对同一 `factor_ref`、metric ID 和 run，分别读取 Backend、MCP 和数据库 `metrics_json` 的 `period_start/period_end`，先统一为 UTC 再比较；Backend 两个端点各出现 `-08:00` 偏移。
@@ -91,8 +123,7 @@
 - **复现命令**：
 
   ```bash
-  export FACTOR4_MCP_TOKEN='<test token>'
-  python tmp/dpo_formula_recheck.py
+  python3 -m pytest tests/cases/factor4/test_formula_catalog_business.py -k dpo --live --env test -v
   ```
 
 - **复现步骤**：读取每个因子的 detail、immutable formula evidence 和最新 completed run；用独立序列 `close[i] = 100 + i^2/17 + 0.13*(i mod 7)` 重算两种公式并比较 warmup 后输出。
@@ -113,8 +144,7 @@
 - **复现命令**：
 
   ```bash
-  export FACTOR4_MCP_TOKEN='<test token>'
-  python tmp/fixed_horizon_adjudication.py
+  python3 -m pytest tests/cases/factor4/test_formula_catalog_business.py::test_fixed_horizon_declared_and_completed_formula_candidates --live --env test -v
   ```
 
 - **复现步骤**：读取 detail 声明窗口、immutable formula evidence 和最新 completed run 的原始依赖 offsets；比较声明 bars 与最大依赖跨度，并按同一公式家族生成独立 oracle。
@@ -131,12 +161,12 @@
 - **复现命令**：
 
   ```bash
-  python tmp/db613_targeted_closure.py
+  python3 -m pytest tests/cases/factor4/test_final_results.py::test_each_environment_summary_matches_final_routes --live --env test -v
   ```
 
 - **复现步骤**：在 `START TRANSACTION READ ONLY` 中读取 batch 的 `environment_status.WIDE_RANGE.route_count`；再用同一 `batch/publication_uid/publish_version/market_scope/label_code` 查询 `market_environment_factor_route` 的 active eligible 数量；重复读取一次并回滚。
 - **预期 / 实际**：预期摘要数量等于精确 route 数量；实际 `0 != 86`。
-- **最新证据**：`reports/factor4-resume/20260904T151150+0800-db613-targeted-closure/adjudicated-summary.json`。
+- **最新证据**：2026-09-07 新增闭环用例真实只读复核，`reports/factor4-closure-final-live-20260907.xml`；同名问题仍复现 `WIDE_RANGE route_count=0`、实际 active eligible route 为 `86`。本次入口为 `test_environment_closure_business.py::test_each_label_metrics_routes_and_summary_share_full_publication_identity[WIDE_RANGE]`，其余五种 label 的该项对账通过；这不是全量历史 Bug 重新验收。历史证据继续保留在 `reports/factor4-resume/20260904T151150+0800-db613-targeted-closure/adjudicated-summary.json`。
 - **边界**：不要把 `DB-605` 单独登记；它只是 `F4-ENV-BACKEND-EXACT-FILTER` 与 `F4-METRIC-PERIOD-TZ` 的汇总失败。
 
 ### 论文候选与注册因子语义映射错误
@@ -171,8 +201,7 @@
 - **复现命令**：
 
   ```bash
-  export FACTOR4_MCP_TOKEN='<test token>'
-  python tmp/iv_rv_definition_recheck.py
+  python3 -m pytest tests/cases/factor4/test_formula_catalog_business.py -k iv_rv --live --env test -v
   ```
 
 - **复现步骤**：分别读取 detail summary、definition、executable formula、raw schema 和 metrics；核对定义字段集合与执行字段集合，并检查 active route 是否仍指向该定义。

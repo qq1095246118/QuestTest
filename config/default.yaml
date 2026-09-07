@@ -19,6 +19,9 @@ database:
   username: ""
   password: ""
   dsn: ""
+  connect_timeout_seconds: 10
+  read_timeout_seconds: 60
+  write_timeout_seconds: 60
 factor_combo:
   agent_uid: ""
   agent_base_url: ""
@@ -31,5 +34,12 @@ factor_combo:
   refresh_poll_timeout_seconds: 10800
   max_refresh_polls: 1080
   max_technical_retries: 2
+factor_data:
+  mcp_url: ""
+  auth_token: ""
+  protocol_version: "2025-06-18"
+environment_safety:
+  allowed_hosts: []
+  allowed_database_hosts: []
 reports:
   junit_path: reports/junit.xml

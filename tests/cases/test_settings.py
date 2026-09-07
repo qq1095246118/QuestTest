@@ -40,24 +40,28 @@ class TestAuthenticationSettings:
         project_root = Path(__file__).resolve().parents[2]
         raw_config = yaml.safe_load((project_root / "config" / "test.yaml").read_text(encoding="utf-8"))
 
-        assert isinstance(raw_config, dict), raw_config
-        assert raw_config["environment"] == "test", raw_config
-        assert raw_config["api"]["base_url"] == "https://test-factor-backend.questvector.ai/api/v1", raw_config["api"]
+        assert isinstance(raw_config, dict)
+        assert raw_config["environment"] == "test"
+        assert raw_config["api"]["base_url"] == "https://test-factor-backend.questvector.ai/api/v1"
         assert raw_config["factor_combo"]["agent_base_url"] == (
             "https://test-factor-frontend.questvector.ai/api/v2"
-        ), raw_config["factor_combo"]
+        )
+        assert raw_config["factor_data"]["mcp_url"] == (
+            "https://test-factor-frontend.questvector.ai/mcp/factor-data"
+        )
+        assert raw_config["factor_data"]["auth_token"]
         authentication = raw_config["authentication"]
-        assert authentication["privileged_email"] == "haoran@gmail.com", authentication
-        assert authentication["restricted_email"] == "wuquanxian@qq.com", authentication
-        assert authentication["privileged_password"], authentication
-        assert authentication["restricted_password"], authentication
+        assert authentication["privileged_email"] == "haoran@gmail.com"
+        assert authentication["restricted_email"] == "wuquanxian@qq.com"
+        assert authentication["privileged_password"]
+        assert authentication["restricted_password"]
         database = raw_config["database"]
-        assert database["driver"] == "mysql", database
-        assert database["host"] == "43.167.190.122", database
-        assert database["port"] == 3306, database
-        assert database["name"] == "factor_db", database
-        assert database["username"] == "factor_app", database
-        assert database["password"], database
+        assert database["driver"] == "mysql"
+        assert database["host"] == "43.167.190.122"
+        assert database["port"] == 3306
+        assert database["name"] == "factor_db"
+        assert database["username"] == "factor_app"
+        assert database["password"]
 
     def test_real_connection_settings_are_loaded_from_environment_variables(
         self,
@@ -67,6 +71,8 @@ class TestAuthenticationSettings:
 
         monkeypatch.setenv("AUTOMATION_API_BASE_URL", "https://factor.example.test/api/v1")
         monkeypatch.setenv("AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL", "https://agent.example.test/api/v2")
+        monkeypatch.setenv("AUTOMATION_FACTOR_DATA_MCP_URL", "https://mcp.example.test/mcp/factor-data")
+        monkeypatch.setenv("AUTOMATION_FACTOR_DATA_MCP_TOKEN", "factor-data-test-token")
         monkeypatch.setenv("AUTOMATION_DB_HOST", "db.example.test")
         monkeypatch.setenv("AUTOMATION_DB_NAME", "factor_test")
         monkeypatch.setenv("AUTOMATION_DB_USERNAME", "factor_user")
@@ -79,10 +85,59 @@ class TestAuthenticationSettings:
 
         assert settings.api.base_url == "https://factor.example.test/api/v1"
         assert settings.factor_combo.agent_base_url == "https://agent.example.test/api/v2"
+        assert settings.factor_data.mcp_url == "https://mcp.example.test/mcp/factor-data"
+        mcp_token_matches = settings.factor_data.auth_token == "factor-data-test-token"
+        assert mcp_token_matches
+        assert "factor-data-test-token" not in repr(settings.factor_data)
         assert settings.database.host == "db.example.test"
         assert settings.database.name == "factor_test"
         assert settings.database.username == "factor_user"
-        assert settings.database.password == "database-test-password"
+        database_password_matches = settings.database.password == "database-test-password"
+        assert database_password_matches
+        assert "database-test-password" not in repr(settings.database)
+
+    def test_test_host_allowlists_are_loaded_and_can_be_overridden(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """测试服务和数据库主机白名单应支持 YAML 与运行时覆盖。"""
+
+        monkeypatch.setenv(
+            "AUTOMATION_TEST_ALLOWED_HOSTS",
+            "mcp.example.test, api.example.test, mcp.example.test",
+        )
+        monkeypatch.setenv(
+            "AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS",
+            "db.example.test",
+        )
+
+        settings = SettingsLoader.load(
+            environment="test",
+            project_root=Path(__file__).resolve().parents[2],
+        )
+
+        assert settings.environment_safety.allowed_hosts == (
+            "mcp.example.test",
+            "api.example.test",
+        )
+        assert settings.environment_safety.allowed_database_hosts == ("db.example.test",)
+
+    def test_test_host_allowlists_reject_url_and_wildcard_values(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """allowlist 必须是裸主机名，不能用 URL 或通配符扩大边界。"""
+
+        monkeypatch.setenv(
+            "AUTOMATION_TEST_ALLOWED_HOSTS",
+            "https://api.example.test/*",
+        )
+
+        with pytest.raises(ValueError, match="bare host names"):
+            SettingsLoader.load(
+                environment="test",
+                project_root=Path(__file__).resolve().parents[2],
+            )
 
 
 class TestFactorComboSettings:

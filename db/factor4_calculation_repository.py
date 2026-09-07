@@ -6,7 +6,7 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, NoReturn
@@ -15,6 +15,106 @@ from db.client import DatabaseClient, DatabaseTransaction
 
 
 JsonObject = dict[str, Any]
+
+_FORMULA_LINK_CONTAINERS = ("formula", "formula_identity", "formula_evidence")
+_FORMULA_LINK_FIELDS = (
+    "formula_evidence_id",
+    "evidence_id",
+    "run_id",
+    "formula_hash",
+    "formula_version",
+)
+
+
+def _safe_metric_formula_link_values(
+    identity: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return only unambiguous, schema-compatible formula link values.
+
+    ``metric_identity`` is persisted JSON and may contain either scalar
+    strings/numbers or nested compatibility objects.  This helper is used
+    solely while constructing parameterized SQL; it never decides whether a
+    link is trustworthy for business assertions.  Invalid or conflicting
+    values are omitted so the database driver cannot receive a list, NaN, or
+    an arbitrary object, while the Service can still classify the original
+    identity precisely.
+    """
+
+    occurrences: dict[str, list[Any]] = {
+        "formula_evidence_id": [],
+        "run_id": [],
+        "formula_hash": [],
+        "formula_version": [],
+    }
+
+    def collect(container: Mapping[str, Any]) -> None:
+        for name in _FORMULA_LINK_FIELDS:
+            if name in container:
+                canonical = "formula_evidence_id" if name == "evidence_id" else name
+                occurrences[canonical].append(container[name])
+
+    collect(identity)
+    for container_name in _FORMULA_LINK_CONTAINERS:
+        nested = identity.get(container_name)
+        if isinstance(nested, Mapping):
+            collect(nested)
+
+    result: dict[str, Any] = {}
+    for name, raw_values in occurrences.items():
+        normalized: list[Any] = []
+        invalid = False
+        for value in raw_values:
+            if value is None or (isinstance(value, str) and not value.strip()):
+                continue
+            if name == "formula_evidence_id":
+                parsed = _positive_formula_link_int(value)
+                if parsed is None:
+                    invalid = True
+                    break
+                normalized.append(parsed)
+            elif not isinstance(value, str):
+                invalid = True
+                break
+            else:
+                normalized.append(value.strip())
+        if invalid or not normalized:
+            continue
+        first = normalized[0]
+        if any(not _formula_link_values_equal(first, value) for value in normalized[1:]):
+            continue
+        result[name] = first
+    return result
+
+
+def _positive_formula_link_int(value: Any) -> int | None:
+    """Parse a positive integral formula evidence ID without truncation."""
+
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        if isinstance(value, str):
+            text = value.strip()
+            if not re.fullmatch(r"\+?\d+", text):
+                return None
+            parsed = int(text)
+        elif isinstance(value, (int, float, Decimal)):
+            decimal_value = Decimal(str(value))
+            if not decimal_value.is_finite() or decimal_value != decimal_value.to_integral_value():
+                return None
+            parsed = int(decimal_value)
+        else:
+            return None
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _formula_link_values_equal(left: Any, right: Any) -> bool:
+    """Compare normalized formula link values without numeric coercion bugs."""
+
+    if isinstance(left, int) and isinstance(right, int):
+        return left == right
+    return str(left).strip().casefold() == str(right).strip().casefold()
 
 
 class CalculationRepositoryError(RuntimeError):
@@ -67,6 +167,49 @@ class PublishedEvaluationBatch:
     factor_set_snapshot: JsonObject
     evaluation_config: JsonObject
     environment_status: JsonObject
+    environment_snapshot: JsonObject | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class ActivePublishedPartition:
+    """Identify one active, successful, published calculation partition.
+
+    A partition is keyed by ``market_scope`` and ``route_profile_key``.  The
+    identity fields are included so a caller can pass the exact publication to
+    a subsequent audit and detect duplicate active rows instead of silently
+    selecting an arbitrary profile.  This record contains no metric payloads.
+    """
+
+    id: int
+    market_scope: str
+    route_profile_key: str
+    publication_uid: str
+    publish_version: str
+    published_at: datetime
+
+
+@dataclass(frozen=True)
+class EnvironmentDailyRecord:
+    """Expose the immutable fields needed to verify a frozen environment member.
+
+    The record deliberately contains only identity and point-in-time fields.
+    Large feature/payload JSON values are not needed for CALC-513 and are not
+    loaded into the calculation snapshot.
+    """
+
+    id: int
+    environment_date: date
+    label_kind: str
+    # ``market_environment_daily.label_code`` is nullable for ``not_ready``
+    # and ``invalid`` rows.  Keep that database shape intact so a malformed
+    # snapshot can be classified by the Service instead of aborting the
+    # entire repository read while coercing the row.
+    label_code: str | None
+    revision: int
+    is_current: bool
+    available_at: datetime
+    schema_version: str
+    label_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -223,6 +366,17 @@ class EvaluationMetric:
     aggregation: JsonObject | None
     error_code: str | None
     error_message: str | None
+    # Raw score inputs are kept as a narrow typed projection so an independent
+    # env-score-v1 audit does not have to trust a denormalized JSON payload.
+    coverage_rate: Decimal | None = None
+    effective_sample_size: Decimal | None = None
+    t_stat: Decimal | None = None
+    oos_retention: Decimal | None = None
+    oos_sign_consistency: Decimal | None = None
+    sharpe: Decimal | None = None
+    max_drawdown: Decimal | None = None
+    turnover_rate: Decimal | None = None
+    net_return: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +457,13 @@ class CalculationAuditSnapshot:
     formula_evidence: tuple[FormulaEvidence, ...]
     evaluation_metrics: tuple[EvaluationMetric, ...]
     routes: tuple[PublishedRoute, ...]
+    environment_daily: tuple[EnvironmentDailyRecord, ...] = ()
+    # The default path loads history for versioned frozen member dates only.
+    # Full-range audits opt in explicitly; the range marker proves that even
+    # dates omitted by the frozen JSON were included in the database query.
+    environment_daily_history: tuple[EnvironmentDailyRecord, ...] = ()
+    environment_daily_history_loaded: bool = False
+    environment_daily_history_range: tuple[date, date, str] | None = None
 
 
 class Factor4CalculationRepository:
@@ -317,10 +478,52 @@ class Factor4CalculationRepository:
 
         self._client = client
 
+    @property
+    def database_client(self) -> DatabaseClient:
+        """返回同一测试数据库客户端，供其它只读 Repository 组合使用。
+
+        该属性不打开连接、不执行查询；调用方仍须通过各 Repository 的语义化入口访问数据库。
+        """
+        return self._client
+
+    def list_active_published_partitions(self) -> tuple[ActivePublishedPartition, ...]:
+        """List all active successful published calculation partitions.
+
+        The result is a lightweight, read-only discovery projection ordered by
+        market scope/profile and newest publication first.  Each row is
+        returned, including duplicate active rows for the same selector; a
+        later :meth:`read_calculation_snapshot` call remains responsible for
+        enforcing the one-batch invariant.  A
+        :class:`CalculationRepositoryError` is raised for malformed rows or a
+        database failure.  No database writes occur.
+        """
+
+        stage = "begin_active_partition_discovery"
+        try:
+            with self._client.transaction() as transaction:
+                self._begin_read_only_snapshot(transaction)
+                stage = "active_partition_discovery"
+                rows = transaction.fetch_all(
+                    self._active_published_partitions_query()
+                )
+                return tuple(
+                    self._to_active_published_partition(row, stage)
+                    for row in rows
+                )
+        except CalculationRepositoryError:
+            raise
+        except Exception as exc:
+            raise CalculationRepositoryError(
+                stage,
+                f"database read failed with {type(exc).__name__}",
+            ) from exc
+
     def read_calculation_snapshot(
         self,
         market_scope: str = "all",
         route_profile_key: str = "default",
+        *,
+        include_full_environment_history: bool = False,
     ) -> CalculationAuditSnapshot:
         """Read the latest active published calculation evidence atomically.
 
@@ -331,7 +534,14 @@ class Factor4CalculationRepository:
         routes. Generic IC summary/validity history is intentionally excluded:
         it has no evaluation-batch foreign key and is not an exact batch result.
 
-        ``ValueError`` is raised for blank selectors. A
+        ``include_full_environment_history=True`` additionally reads every
+        daily revision in the selected batch's inclusive date/kind interval,
+        including dates absent from its frozen members. The default keeps the
+        existing referenced-member history read. No current/as-of filter is
+        applied to history; Services judge PIT visibility without guessing
+        the timezone of MySQL DATETIME columns.
+
+        ``ValueError`` is raised for blank selectors or a non-boolean history flag. A
         ``CalculationRepositoryError`` is raised when no unique active,
         successful, published batch exists, a required row/JSON shape is
         invalid, or a driver/schema query fails. No database writes occur.
@@ -341,6 +551,8 @@ class Factor4CalculationRepository:
             market_scope,
             route_profile_key,
         )
+        if not isinstance(include_full_environment_history, bool):
+            raise ValueError("include_full_environment_history must be a boolean")
 
         stage = "begin_read_only_snapshot"
         try:
@@ -350,20 +562,13 @@ class Factor4CalculationRepository:
                 identity = transaction.fetch_one("SELECT NOW(6) AS captured_at")
                 captured_at = self._required_datetime(identity, "captured_at", stage)
 
-                stage = "latest_published_batch"
-                batch_rows = transaction.fetch_all(
+                # Sort only the narrow identity projection.  Sorting a row that
+                # contains the (potentially very large) environment snapshot
+                # JSON can exhaust MySQL's sort buffer before the audit starts.
+                stage = "latest_published_batch_candidates"
+                batch_candidates = transaction.fetch_all(
                     """
-                    SELECT
-                        id, batch_uid, market_scope, label_kind,
-                        route_profile_key, start_date, end_date, as_of_time,
-                        published_at, publication_uid, publish_version,
-                        evaluation_config_version, score_rule_version,
-                        code_version, status, publish_status, is_active,
-                        expected_metric_count, completed_metric_count,
-                        insufficient_metric_count, failed_metric_count,
-                        factor_set_snapshot_hash, environment_snapshot_hash,
-                        release_manifest_hash, factor_set_snapshot,
-                        evaluation_config, environment_status
+                    SELECT id
                     FROM market_environment_eval_batch
                     WHERE market_scope = %s
                       AND route_profile_key = %s
@@ -375,14 +580,97 @@ class Factor4CalculationRepository:
                     """,
                     (scope, profile),
                 )
-                if len(batch_rows) != 1:
+                if len(batch_candidates) != 1:
                     raise CalculationRepositoryError(
                         stage,
                         "expected exactly one active successful published batch "
-                        f"but found {len(batch_rows)}",
+                        f"but found {len(batch_candidates)}",
+                    )
+
+                selected_batch_id = self._required_int(
+                    batch_candidates[0],
+                    "id",
+                    stage,
+                )
+
+                stage = "latest_published_batch"
+                candidate_row = batch_candidates[0]
+                # A few repository doubles (and older compatible drivers)
+                # return the complete row for the candidate query.  Reuse it
+                # when it already contains the required projection; the live
+                # SQL returns only ``id`` and therefore takes the primary-key
+                # lookup below.
+                if "batch_uid" in candidate_row:
+                    batch_rows = [candidate_row]
+                else:
+                    batch_rows = transaction.fetch_all(
+                        """
+                        SELECT
+                            id, batch_uid, market_scope, label_kind,
+                            route_profile_key, start_date, end_date, as_of_time,
+                            published_at, publication_uid, publish_version,
+                            evaluation_config_version, score_rule_version,
+                            code_version, status, publish_status, is_active,
+                            expected_metric_count, completed_metric_count,
+                            insufficient_metric_count, failed_metric_count,
+                            factor_set_snapshot_hash, environment_snapshot_hash,
+                            release_manifest_hash, factor_set_snapshot,
+                            evaluation_config, environment_status, environment_snapshot
+                        FROM market_environment_eval_batch
+                        WHERE id = %s
+                          AND market_scope = %s
+                          AND route_profile_key = %s
+                          AND status = 'success'
+                          AND publish_status = 'published'
+                          AND is_active = 1
+                        """,
+                        (selected_batch_id, scope, profile),
+                    )
+                if len(batch_rows) != 1:
+                    raise CalculationRepositoryError(
+                        stage,
+                        "selected active published batch disappeared or changed "
+                        f"during snapshot read (rows={len(batch_rows)})",
                     )
                 batch = self._to_batch(batch_rows[0], stage)
                 batch_id = batch.id
+
+                stage = "environment_daily"
+                environment_daily_rows = self._read_environment_daily_rows(
+                    transaction,
+                    batch.environment_snapshot,
+                )
+                environment_daily = tuple(
+                    self._to_environment_daily(row, stage)
+                    for row in environment_daily_rows
+                )
+                environment_daily_history: tuple[EnvironmentDailyRecord, ...] = ()
+                environment_daily_history_loaded = False
+                environment_daily_history_range = None
+                history_keys = self._environment_daily_history_keys(
+                    batch.environment_snapshot,
+                    environment_daily_rows,
+                )
+                if include_full_environment_history:
+                    stage = "environment_daily_history"
+                    environment_daily_history = tuple(
+                        self._to_environment_daily(row, stage)
+                        for row in self._read_environment_daily_range_history_rows(
+                            transaction, batch.start_date, batch.end_date, batch.label_kind,
+                        )
+                    )
+                    environment_daily_history_loaded = True
+                    environment_daily_history_range = (batch.start_date, batch.end_date, batch.label_kind)
+                elif history_keys:
+                    stage = "environment_daily_history"
+                    environment_daily_history = tuple(
+                        self._to_environment_daily(row, stage)
+                        for row in self._read_environment_daily_history_rows(
+                            transaction,
+                            history_keys,
+                        )
+                    )
+                    environment_daily_history_loaded = True
 
                 stage = "batch_factor_identities"
                 factor_rows = transaction.fetch_all(
@@ -473,6 +761,10 @@ class Factor4CalculationRepository:
             formula_evidence=formula_evidence,
             evaluation_metrics=evaluation_metrics,
             routes=routes,
+            environment_daily=environment_daily,
+            environment_daily_history=environment_daily_history,
+            environment_daily_history_loaded=environment_daily_history_loaded,
+            environment_daily_history_range=environment_daily_history_range,
         )
 
     def read_published_route_snapshot(
@@ -869,7 +1161,12 @@ class Factor4CalculationRepository:
                 ORDER BY id
             """
             for row in transaction.fetch_all(query, sub_ids):
-                catalog[(True, int(row["factor_id"]))] = row
+                factor_id = cls._required_int(
+                    row,
+                    "factor_id",
+                    "factor_definitions",
+                )
+                catalog[(True, factor_id)] = row
         factor_ids = cls._ids_for_type(identities, False)
         if factor_ids:
             query = f"""
@@ -882,7 +1179,12 @@ class Factor4CalculationRepository:
                 ORDER BY id
             """
             for row in transaction.fetch_all(query, factor_ids):
-                catalog[(False, int(row["factor_id"]))] = row
+                factor_id = cls._required_int(
+                    row,
+                    "factor_id",
+                    "factor_definitions",
+                )
+                catalog[(False, factor_id)] = row
         results: list[dict[str, Any]] = []
         for key, identity in identities.items():
             current = catalog.get(key) or {
@@ -895,6 +1197,168 @@ class Factor4CalculationRepository:
             }
             results.append({**current, **identity})
         return results
+
+    @classmethod
+    def _read_environment_daily_rows(
+        cls,
+        transaction: DatabaseTransaction,
+        environment_snapshot: Mapping[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Read daily rows referenced by a frozen environment snapshot.
+
+        Only positive integer ``daily_id`` values are used to build the bound
+        ``IN`` predicate.  Malformed or missing member IDs are left for the
+        Service to classify as a data precondition; this method never embeds
+        snapshot content in SQL.  An absent/invalid snapshot produces no rows
+        so callers can distinguish missing evidence from a database error.
+        """
+
+        if not isinstance(environment_snapshot, Mapping):
+            return []
+        raw_members = environment_snapshot.get("members")
+        if not isinstance(raw_members, Sequence) or isinstance(raw_members, (str, bytes)):
+            return []
+        daily_ids: list[int] = []
+        for member in raw_members:
+            if not isinstance(member, Mapping):
+                continue
+            daily_id = member.get("daily_id")
+            if (
+                isinstance(daily_id, int)
+                and not isinstance(daily_id, bool)
+                and daily_id > 0
+            ):
+                daily_ids.append(daily_id)
+        unique_ids = tuple(dict.fromkeys(daily_ids))
+        if not unique_ids:
+            return []
+        return transaction.fetch_all(
+            f"""
+            SELECT id, environment_date, label_kind, label_code,
+                   revision, is_current, available_at, schema_version
+            FROM market_environment_daily
+            WHERE id IN ({cls._placeholders(unique_ids)})
+            """,
+            unique_ids,
+        )
+
+    @classmethod
+    def _environment_daily_history_keys(
+        cls,
+        environment_snapshot: Mapping[str, Any] | None,
+        selected_rows: Sequence[Mapping[str, Any]],
+    ) -> tuple[tuple[date, str], ...]:
+        """Return business keys whose frozen members explicitly declare revision.
+
+        PIT history is expensive and is not needed for legacy snapshots that
+        identify a daily row only by ``daily_id``.  A key is requested only
+        when its member has a valid positive ``revision`` and the selected DB
+        row supplies a valid calendar date/label kind.  Invalid declarations
+        remain visible to the Service as data-precondition findings instead of
+        being converted into SQL parameters here.
+        """
+
+        if not isinstance(environment_snapshot, Mapping):
+            return ()
+        raw_members = environment_snapshot.get("members")
+        if not isinstance(raw_members, Sequence) or isinstance(raw_members, (str, bytes)):
+            return ()
+        rows_by_id: dict[int, Mapping[str, Any]] = {}
+        for row in selected_rows:
+            raw_id = row.get("id")
+            if isinstance(raw_id, int) and not isinstance(raw_id, bool) and raw_id > 0:
+                rows_by_id[raw_id] = row
+        keys: set[tuple[date, str]] = set()
+        for member in raw_members:
+            if not isinstance(member, Mapping):
+                continue
+            raw_revision = member.get("revision")
+            if (
+                isinstance(raw_revision, bool)
+                or not isinstance(raw_revision, int)
+                or raw_revision < 1
+            ):
+                continue
+            raw_id = member.get("daily_id")
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int) or raw_id < 1:
+                continue
+            row = rows_by_id.get(raw_id)
+            if row is None:
+                continue
+            raw_date = row.get("environment_date")
+            if isinstance(raw_date, datetime) or not isinstance(raw_date, date):
+                continue
+            raw_kind = member.get("label_kind", row.get("label_kind"))
+            if not isinstance(raw_kind, str) or not raw_kind.strip():
+                continue
+            keys.add((raw_date, raw_kind.strip()))
+        return tuple(sorted(keys, key=lambda value: (value[0], value[1])))
+
+    @classmethod
+    def _read_environment_daily_history_rows(
+        cls,
+        transaction: DatabaseTransaction,
+        keys: Sequence[tuple[date, str]],
+    ) -> list[dict[str, Any]]:
+        """Read all revisions for explicitly versioned daily business keys.
+
+        Dates and label kinds are always bound parameters.  Keys are grouped
+        by label kind and rendered only as placeholder clauses, avoiding both
+        a Cartesian superset and interpolation of snapshot values.  The query
+        projects narrow scalar fields so even a large snapshot does not sort
+        JSON payloads.
+        """
+
+        if not keys:
+            return []
+        dates_by_kind: dict[str, list[date]] = {}
+        for environment_date, label_kind in keys:
+            dates_by_kind.setdefault(label_kind, []).append(environment_date)
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        for label_kind in sorted(dates_by_kind):
+            dates = tuple(dict.fromkeys(dates_by_kind[label_kind]))
+            clauses.append(
+                f"(label_kind = %s AND environment_date IN ({cls._placeholders(dates)}))"
+            )
+            parameters.append(label_kind)
+            parameters.extend(dates)
+        return transaction.fetch_all(
+            f"""
+            SELECT id, environment_date, label_kind, label_code,
+                   revision, is_current, available_at, schema_version
+            FROM market_environment_daily
+            WHERE {" OR ".join(clauses)}
+            ORDER BY environment_date, label_kind, revision, id
+            """,
+            tuple(parameters),
+        )
+
+    @staticmethod
+    def _read_environment_daily_range_history_rows(
+        transaction: DatabaseTransaction,
+        start_date: date,
+        end_date: date,
+        label_kind: str,
+    ) -> list[dict[str, Any]]:
+        """Read all revisions in one already validated batch calendar interval.
+
+        Dates/kind are bound values; no current flag, frozen-member IDs or
+        visibility filter can remove the evidence needed to audit omitted
+        dates. Returns scalar rows, including label status, and propagates DB
+        errors to the enclosing read-only snapshot error boundary.
+        """
+        return transaction.fetch_all(
+            """
+            SELECT id, environment_date, label_kind, label_code, label_status,
+                   revision, is_current, available_at, schema_version
+            FROM market_environment_daily
+            WHERE label_kind = %s
+              AND environment_date >= %s AND environment_date <= %s
+            ORDER BY environment_date, revision, id
+            """,
+            (label_kind, start_date, end_date),
+        )
 
     @classmethod
     def _factor_filter(
@@ -1074,28 +1538,22 @@ class Factor4CalculationRepository:
     def _metric_formula_link_specs(
         metrics: Sequence[EvaluationMetric],
     ) -> tuple[tuple[int, bool, tuple[tuple[str, Any], ...]], ...]:
-        """Extract deduplicated immutable-link predicates from batch metrics."""
+        """Extract safe, deduplicated immutable-link predicates from metrics.
+
+        A metric identity may expose the same link at the top level or inside
+        a compatibility container.  Only one unambiguous, schema-compatible
+        value is turned into a bound SQL predicate.  Conflicting or malformed
+        values are deliberately omitted here; the Service sees the original
+        identity and reports ``METRIC_FORMULA_LINK_INVALID`` instead of this
+        read silently choosing one representation or binding an unsafe value.
+        """
 
         specs: set[tuple[int, bool, tuple[tuple[str, Any], ...]]] = set()
         for metric in metrics:
             identity = metric.metric_identity
             if not isinstance(identity, Mapping):
                 continue
-            flattened = dict(identity)
-            for container_name in ("formula", "formula_identity", "formula_evidence"):
-                nested = identity.get(container_name)
-                if not isinstance(nested, Mapping):
-                    continue
-                for name in (
-                    "formula_hash",
-                    "formula_version",
-                    "run_id",
-                    "formula_evidence_id",
-                ):
-                    if name not in flattened and name in nested:
-                        flattened[name] = nested[name]
-            if "formula_evidence_id" not in flattened and "evidence_id" in flattened:
-                flattened["formula_evidence_id"] = flattened["evidence_id"]
+            flattened = _safe_metric_formula_link_values(identity)
             links: list[tuple[str, Any]] = []
             for identity_name, column_name in (
                 ("formula_evidence_id", "id"),
@@ -1104,12 +1562,7 @@ class Factor4CalculationRepository:
                 ("formula_version", "formula_version"),
             ):
                 value = flattened.get(identity_name)
-                if value is None or (isinstance(value, str) and not value.strip()):
-                    continue
-                if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
-                    # Structured values cannot be bound to an identity column;
-                    # leave them for the Service to classify as an invalid
-                    # link instead of crashing the read transaction.
+                if value is None:
                     continue
                 links.append((column_name, value))
             if links:
@@ -1138,6 +1591,17 @@ class Factor4CalculationRepository:
                 sample_end_date, mean_ic, mean_rank_ic, icir, rank_icir,
                 time_series_score, cross_sectional_score,
                 routing_score, confidence,
+                coverage_rate, t_stat, sharpe, max_drawdown,
+                turnover_rate, net_return,
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                    metric_payload, '$.effective_sample_size'
+                )), 'null') AS effective_sample_size,
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                    metric_payload, '$.oos.retention'
+                )), 'null') AS oos_retention,
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                    metric_payload, '$.oos.sign_consistency'
+                )), 'null') AS oos_sign_consistency,
                 metric_status, is_valid, scoring_version,
                 JSON_EXTRACT(metric_payload, '$.metric_identity') AS metric_identity,
                 SHA2(
@@ -1183,6 +1647,11 @@ class Factor4CalculationRepository:
         return """
             SELECT
                 id,
+                JSON_REMOVE(
+                    metric_payload,
+                    '$.oos.folds',
+                    '$.data_diagnostics.artifact_fingerprints'
+                ) AS metric_payload,
                 JSON_EXTRACT(
                     metric_payload,
                     '$.metric_identity'
@@ -1212,10 +1681,17 @@ class Factor4CalculationRepository:
                 NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
                     metric_payload,
                     '$.directed_rank_icir'
-                )), 'null') AS directed_rank_icir
+                )), 'null') AS directed_rank_icir,
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                    metric_payload,
+                    '$.directed_t_stat'
+                )), 'null') AS directed_t_stat,
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                    metric_payload,
+                    '$.score_penalty'
+                )), 'null') AS score_penalty
             FROM market_environment_factor_metric
             WHERE eval_batch_id = %s
-              AND routing_score IS NOT NULL
             ORDER BY id
         """
 
@@ -1231,6 +1707,7 @@ class Factor4CalculationRepository:
             (batch_id,),
         )
         evidence_by_metric_id: dict[int, dict[str, Any | None]] = {}
+        lossless_payload_ids: set[int] = set()
         evidence_object_names = (
             "metric_identity",
             "score_components",
@@ -1243,6 +1720,8 @@ class Factor4CalculationRepository:
             "directed_mean_rank_ic",
             "directed_icir",
             "directed_rank_icir",
+            "directed_t_stat",
+            "score_penalty",
         )
         for evidence_row in evidence_rows:
             metric_id = cls._required_int(
@@ -1255,6 +1734,14 @@ class Factor4CalculationRepository:
                     "evaluation_metrics",
                     "routing evidence contains a duplicate metric id",
                 )
+            if "metric_payload" in evidence_row:
+                # JSON objects preserve absent keys versus explicit null, including
+                # invalid/unscored metrics which still require admission auditing.
+                evidence_by_metric_id[metric_id] = cls._optional_json_object(
+                    evidence_row, "metric_payload", "evaluation_metrics"
+                ) or {}
+                lossless_payload_ids.add(metric_id)
+                continue
             evidence = {
                 name: cls._optional_json_object(
                     evidence_row,
@@ -1271,13 +1758,21 @@ class Factor4CalculationRepository:
                         "evaluation_metrics",
                     )
                     for name in directed_value_names
+                    if name in evidence_row
                 }
             )
             evidence_by_metric_id[metric_id] = evidence
 
         enriched: list[dict[str, Any]] = []
+        seen_metric_ids: set[int] = set()
         for row in rows:
             metric_id = cls._required_int(row, "id", "evaluation_metrics")
+            if metric_id in seen_metric_ids:
+                raise CalculationRepositoryError(
+                    "evaluation_metrics",
+                    "metric query contains a duplicate metric id",
+                )
+            seen_metric_ids.add(metric_id)
             compact_identity = (
                 cls._optional_json_object(row, "metric_identity", "evaluation_metrics")
                 if "metric_identity" in row
@@ -1309,13 +1804,15 @@ class Factor4CalculationRepository:
             if route_eligibility is not None:
                 payload["route_eligibility"] = route_eligibility
             if routing_evidence is not None:
-                payload.update(
-                    {
+                if metric_id in lossless_payload_ids:
+                    payload = dict(routing_evidence)
+                    route_eligibility = payload.get("route_eligibility")
+                else:
+                    payload.update({
                         name: value
                         for name, value in routing_evidence.items()
                         if value is not None
-                    }
-                )
+                    })
             enriched.append(
                 {
                     **row,
@@ -1424,6 +1921,39 @@ class Factor4CalculationRepository:
         """
 
     @staticmethod
+    def _active_published_partitions_query() -> str:
+        """Return the narrow selector projection for active publications."""
+
+        return """
+            SELECT
+                id, market_scope, route_profile_key, publication_uid,
+                publish_version, published_at
+            FROM market_environment_eval_batch
+            WHERE status = 'success'
+              AND publish_status = 'published'
+              AND is_active = 1
+            ORDER BY market_scope, route_profile_key,
+                     published_at DESC, id DESC
+        """
+
+    @classmethod
+    def _to_active_published_partition(
+        cls,
+        row: Mapping[str, Any],
+        stage: str,
+    ) -> ActivePublishedPartition:
+        """Convert one discovery row to a typed publication selector."""
+
+        return ActivePublishedPartition(
+            id=cls._required_int(row, "id", stage),
+            market_scope=cls._required_str(row, "market_scope", stage),
+            route_profile_key=cls._required_str(row, "route_profile_key", stage),
+            publication_uid=cls._required_str(row, "publication_uid", stage),
+            publish_version=cls._required_str(row, "publish_version", stage),
+            published_at=cls._required_datetime(row, "published_at", stage),
+        )
+
+    @staticmethod
     def _route_rankings_query() -> str:
         return """
             SELECT
@@ -1470,6 +2000,31 @@ class Factor4CalculationRepository:
             factor_set_snapshot=cls._required_json_object(row, "factor_set_snapshot", stage),
             evaluation_config=cls._required_json_object(row, "evaluation_config", stage),
             environment_status=cls._required_json_object(row, "environment_status", stage),
+            environment_snapshot=(
+                cls._optional_json_object(row, "environment_snapshot", stage)
+                if "environment_snapshot" in row
+                else None
+            ),
+        )
+
+    @classmethod
+    def _to_environment_daily(
+        cls,
+        row: Mapping[str, Any],
+        stage: str,
+    ) -> EnvironmentDailyRecord:
+        """Convert one selected daily row to its typed audit representation."""
+
+        return EnvironmentDailyRecord(
+            id=cls._required_int(row, "id", stage),
+            environment_date=cls._required_date(row, "environment_date", stage),
+            label_kind=cls._required_str(row, "label_kind", stage),
+            label_code=cls._optional_str(row, "label_code", stage),
+            revision=cls._required_int(row, "revision", stage),
+            is_current=cls._required_bool(row, "is_current", stage),
+            available_at=cls._required_datetime(row, "available_at", stage),
+            schema_version=cls._required_str(row, "schema_version", stage),
+            label_status=cls._optional_str(row, "label_status", stage) if "label_status" in row else None,
         )
 
     @classmethod
@@ -1568,6 +2123,24 @@ class Factor4CalculationRepository:
             "confidence",
         )
         decimals = {name: cls._optional_decimal(row, name, stage) for name in decimal_names}
+        extended_decimal_names = (
+            "coverage_rate",
+            "effective_sample_size",
+            "t_stat",
+            "oos_retention",
+            "oos_sign_consistency",
+            "sharpe",
+            "max_drawdown",
+            "turnover_rate",
+            "net_return",
+        )
+        decimals.update(
+            {
+                name: cls._optional_decimal(row, name, stage)
+                for name in extended_decimal_names
+                if name in row
+            }
+        )
         return EvaluationMetric(
             id=cls._required_int(row, "id", stage),
             eval_batch_id=cls._required_int(row, "eval_batch_id", stage),
@@ -1748,9 +2321,12 @@ class Factor4CalculationRepository:
     def _required_decimal(cls, row: Mapping[str, Any], name: str, stage: str) -> Decimal:
         value = cls._value(row, name, stage)
         try:
-            return Decimal(str(value))
+            decimal_value = Decimal(str(value))
         except (InvalidOperation, TypeError, ValueError):
             cls._invalid_value(stage, name, "a decimal")
+        if not decimal_value.is_finite():
+            cls._invalid_value(stage, name, "a finite decimal")
+        return decimal_value
 
     @classmethod
     def _optional_decimal(
@@ -1793,7 +2369,9 @@ class Factor4CalculationRepository:
     @classmethod
     def _required_date(cls, row: Mapping[str, Any], name: str, stage: str) -> date:
         value = cls._value(row, name, stage)
-        if not isinstance(value, date):
+        # ``datetime`` subclasses ``date`` in Python, but accepting it here
+        # would silently mix calendar-day fields with timestamp identities.
+        if isinstance(value, datetime) or not isinstance(value, date):
             cls._invalid_value(stage, name, "a date")
         return value
 

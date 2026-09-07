@@ -38,4 +38,7 @@ markers = [
     "worker_contract: cases that call test-only Worker compatibility endpoints",
     "external_agent: cases that start or poll a real research Agent run",
     "unit: offline framework and service/repository unit tests",
+    "factor4_calculation: Factor 4.0 calculation logic checks against the configured test MCP and database",
+    "factor4_internal_calculation: formula mathematics and independent calculations; explicitly opt in",
+    "factor4_technical: protocol/security/storage specialist checks; explicitly opt in",
 ]

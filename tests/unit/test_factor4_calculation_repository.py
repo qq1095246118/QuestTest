@@ -14,8 +14,11 @@ import pytest
 
 from db.client import ExecutionResult
 from db.factor4_calculation_repository import (
+    ActivePublishedPartition,
     CalculationRepositoryError,
+    EnvironmentDailyRecord,
     Factor4CalculationRepository,
+    _safe_metric_formula_link_values,
 )
 
 
@@ -126,6 +129,76 @@ def _batch_row() -> dict[str, Any]:
         "evaluation_config": '{"minimum_route_score": 60}',
         "environment_status": '{"WIDE_RANGE": {"status": "success"}}',
     }
+
+
+def test_list_active_published_partitions_discovers_all_profiles_read_only() -> None:
+    """Discovery returns every active profile and uses no write SQL."""
+
+    rows = [
+        {
+            "id": 7,
+            "market_scope": "all",
+            "route_profile_key": "qa_six_labels_20260905",
+            "publication_uid": "pub-7",
+            "publish_version": "v7",
+            "published_at": datetime(2026, 9, 5, 2, 0),
+        },
+        {
+            "id": 6,
+            "market_scope": "all",
+            "route_profile_key": "default",
+            "publication_uid": "pub-6",
+            "publish_version": "v6",
+            "published_at": datetime(2026, 9, 4, 2, 0),
+        },
+    ]
+    transaction = StubTransaction(one_responses=[], all_responses=[rows])
+    repository = Factor4CalculationRepository(StubDatabaseClient(transaction))
+
+    result = repository.list_active_published_partitions()
+
+    assert result == (
+        ActivePublishedPartition(
+            id=7,
+            market_scope="all",
+            route_profile_key="qa_six_labels_20260905",
+            publication_uid="pub-7",
+            publish_version="v7",
+            published_at=datetime(2026, 9, 5, 2, 0),
+        ),
+        ActivePublishedPartition(
+            id=6,
+            market_scope="all",
+            route_profile_key="default",
+            publication_uid="pub-6",
+            publish_version="v6",
+            published_at=datetime(2026, 9, 4, 2, 0),
+        ),
+    )
+    assert transaction.operations[0][0] == "execute"
+    assert all(op[0] != "execute" or "INSERT" not in op[1].upper() for op in transaction.operations)
+
+
+def test_list_active_published_partitions_rejects_malformed_row() -> None:
+    """Malformed discovery identity fails closed instead of selecting a profile."""
+
+    transaction = StubTransaction(
+        one_responses=[],
+        all_responses=[
+            [{
+                "id": 7,
+                "market_scope": "all",
+                "route_profile_key": "default",
+                "publication_uid": "pub-7",
+                "publish_version": "v7",
+                "published_at": "not-a-datetime",
+            }],
+        ],
+    )
+    repository = Factor4CalculationRepository(StubDatabaseClient(transaction))
+
+    with pytest.raises(CalculationRepositoryError, match="published_at"):
+        repository.list_active_published_partitions()
 
 
 def _definition_row() -> dict[str, Any]:
@@ -456,7 +529,8 @@ def test_read_calculation_snapshot_returns_typed_atomic_evidence() -> None:
     assert "$.metric_identity.definition_factor_version" in membership_query
     assert "'$.route_eligibility'" not in compact_query
     assert "AS metric_payload" not in compact_query
-    assert "routing_score IS NOT NULL" in evidence_query
+    assert "routing_score IS NOT NULL" not in evidence_query
+    assert "AS metric_payload" in evidence_query
     assert "'$.directed_mean_ic'" in evidence_query
     assert "'$.directed_rank_icir'" in evidence_query
     formula_query = next(
@@ -470,6 +544,32 @@ def test_read_calculation_snapshot_returns_typed_atomic_evidence() -> None:
 
     mutation = re.compile(r"\b(?:INSERT|UPDATE|DELETE|REPLACE|TRUNCATE|DROP|ALTER)\b", re.I)
     assert all(not mutation.search(query) for _, query, _ in transaction.operations)
+
+
+def test_metric_payload_preserves_unscored_rejections_and_explicit_null() -> None:
+    """Unscored metrics retain null/absent distinctions and rejection evidence."""
+
+    row = _evaluation_metric_row()
+    row["routing_score"] = None
+    row["is_valid"] = 0
+    payload = {
+        "metric_identity": {"factor_window_bars": "24H"},
+        "directed_mean_rank_ic": None,
+        "reject_reasons": ["NET_RETURN_NOT_POSITIVE"],
+        "is_valid": False,
+        "oos": {"valid_fold_count": 0, "retention": None},
+        "route_eligibility": {"is_eligible": False, "routing_score": None},
+    }
+    transaction = StubTransaction(one_responses=[], all_responses=[
+        [row], [{"id": row["id"], "metric_payload": payload}],
+    ])
+
+    stored = Factor4CalculationRepository._read_evaluation_metric_rows(transaction, 6)[0]
+
+    assert stored["metric_payload"] == payload
+    assert stored["metric_payload"]["directed_mean_rank_ic"] is None
+    assert "directed_mean_ic" not in stored["metric_payload"]
+    assert stored["route_eligibility"]["routing_score"] is None
 
 
 def test_read_calculation_snapshot_reports_metric_membership_drift() -> None:
@@ -525,6 +625,27 @@ def test_read_calculation_snapshot_requires_evidence_for_scored_metrics() -> Non
         Factor4CalculationRepository(
             StubDatabaseClient(transaction)
         ).read_calculation_snapshot()
+
+
+def test_read_evaluation_metric_rows_rejects_duplicate_metric_ids() -> None:
+    """Duplicate primary-key rows must not be admitted into one calculation snapshot."""
+
+    first = _evaluation_metric_row()
+    duplicate = dict(first)
+    duplicate["evaluation_type"] = "cross_sectional"
+    transaction = StubTransaction(
+        one_responses=[],
+        all_responses=[
+            [first, duplicate],
+            [_routing_metric_evidence_row()],
+        ],
+    )
+
+    with pytest.raises(
+        CalculationRepositoryError,
+        match="duplicate metric id",
+    ):
+        Factor4CalculationRepository._read_evaluation_metric_rows(transaction, 6)
 
 
 def test_unscored_metric_keeps_pair_hash_without_full_identity() -> None:
@@ -688,6 +809,334 @@ def test_read_calculation_snapshot_reports_invalid_json_without_leaking_value() 
     assert "not-json-secret-value" not in str(captured.value)
 
 
+def test_read_calculation_snapshot_preserves_optional_environment_snapshot() -> None:
+    """CALC-513 can inspect the frozen environment members when the column exists."""
+
+    batch = _batch_row()
+    batch["environment_snapshot"] = {
+        "members": [{"environment_date": "2026-09-01"}],
+        "missing_dates": [],
+        "as_of_time": "2026-09-02T01:17:00",
+    }
+    # Exercise the row conversion directly so this test stays independent of
+    # the many subsequent queries in a complete snapshot read.
+    parsed = Factor4CalculationRepository._to_batch(batch, "unit")
+
+    assert parsed.environment_snapshot == batch["environment_snapshot"]
+
+
+def test_read_calculation_snapshot_reads_referenced_daily_rows_by_bound_ids() -> None:
+    """The calculation snapshot includes only daily rows named by the frozen JSON."""
+
+    batch = _batch_row()
+    batch["environment_snapshot"] = {
+        "members": [{"daily_id": 17, "environment_date": "2026-09-01"}],
+        "missing_dates": [],
+        "as_of_time": "2026-09-02T01:17:00",
+    }
+    daily = {
+        "id": 17,
+        "environment_date": date(2026, 9, 1),
+        "label_kind": "fact",
+        "label_code": "WIDE_RANGE",
+        "revision": 1,
+        "is_current": 1,
+        "available_at": datetime(2026, 9, 1, 12),
+        "schema_version": "market-env-v1",
+    }
+    transaction = StubTransaction(
+        one_responses=[{"captured_at": datetime(2026, 9, 4, 12)}],
+        all_responses=[
+            [batch],
+            [daily],
+            [_identity_row()],
+            [_definition_row()],
+            [_detail_row()],
+            [_evaluation_metric_row()],
+            [_routing_metric_evidence_row()],
+            [_formula_row()],
+            [_route_row()],
+        ],
+    )
+
+    snapshot = Factor4CalculationRepository(
+        StubDatabaseClient(transaction)
+    ).read_calculation_snapshot()
+
+    assert snapshot.environment_daily == (
+        EnvironmentDailyRecord(
+            id=17,
+            environment_date=date(2026, 9, 1),
+            label_kind="fact",
+            label_code="WIDE_RANGE",
+            revision=1,
+            is_current=True,
+            available_at=datetime(2026, 9, 1, 12),
+            schema_version="market-env-v1",
+        ),
+    )
+    daily_operation = next(
+        operation
+        for operation in transaction.operations
+        if operation[0] == "fetch_all" and "market_environment_daily" in operation[1]
+    )
+    assert daily_operation[2] == (17,)
+    assert "IN (%s)" in daily_operation[1]
+
+
+def test_read_calculation_snapshot_loads_history_only_for_versioned_members() -> None:
+    """Explicit member revisions request a narrow all-revision PIT projection."""
+
+    batch = _batch_row()
+    batch["environment_snapshot"] = {
+        "members": [
+            {
+                "daily_id": 17,
+                "environment_date": "2026-09-01",
+                "label_kind": "fact",
+                "revision": 2,
+            }
+        ],
+        "missing_dates": [],
+        "as_of_time": "2026-09-02T01:17:00",
+    }
+    selected = {
+        "id": 17,
+        "environment_date": date(2026, 9, 1),
+        "label_kind": "fact",
+        "label_code": "WIDE_RANGE",
+        "revision": 2,
+        "is_current": 1,
+        "available_at": datetime(2026, 9, 1, 12),
+        "schema_version": "market-env-v1",
+    }
+    history = [
+        {**selected, "revision": 1, "is_current": 0},
+        selected,
+    ]
+    transaction = StubTransaction(
+        one_responses=[{"captured_at": datetime(2026, 9, 4, 12)}],
+        all_responses=[
+            [batch],
+            [selected],
+            history,
+            [_identity_row()],
+            [_definition_row()],
+            [_detail_row()],
+            [_evaluation_metric_row()],
+            [_routing_metric_evidence_row()],
+            [_formula_row()],
+            [_route_row()],
+        ],
+    )
+
+    snapshot = Factor4CalculationRepository(
+        StubDatabaseClient(transaction)
+    ).read_calculation_snapshot()
+
+    assert snapshot.environment_daily_history_loaded is True
+    assert tuple(row.revision for row in snapshot.environment_daily_history) == (1, 2)
+    history_operation = next(
+        operation
+        for operation in transaction.operations
+        if operation[0] == "fetch_all" and "ORDER BY environment_date" in operation[1]
+    )
+    assert "label_kind = %s" in history_operation[1]
+    assert "environment_date IN (%s)" in history_operation[1]
+    assert history_operation[2] == ("fact", date(2026, 9, 1))
+
+
+def test_read_calculation_snapshot_does_not_query_history_without_revision() -> None:
+    """Legacy daily_id-only snapshots retain the lightweight read path."""
+
+    batch = _batch_row()
+    batch["environment_snapshot"] = {
+        "members": [{"daily_id": 17, "environment_date": "2026-09-01"}],
+        "missing_dates": [],
+        "as_of_time": "2026-09-02T01:17:00",
+    }
+    daily = {
+        "id": 17,
+        "environment_date": date(2026, 9, 1),
+        "label_kind": "fact",
+        "label_code": "WIDE_RANGE",
+        "revision": 1,
+        "is_current": 1,
+        "available_at": datetime(2026, 9, 1, 12),
+        "schema_version": "market-env-v1",
+    }
+    transaction = StubTransaction(
+        one_responses=[{"captured_at": datetime(2026, 9, 4, 12)}],
+        all_responses=[
+            [batch],
+            [daily],
+            [_identity_row()],
+            [_definition_row()],
+            [_detail_row()],
+            [_evaluation_metric_row()],
+            [_routing_metric_evidence_row()],
+            [_formula_row()],
+            [_route_row()],
+        ],
+    )
+
+    snapshot = Factor4CalculationRepository(
+        StubDatabaseClient(transaction)
+    ).read_calculation_snapshot()
+
+    assert snapshot.environment_daily_history_loaded is False
+    assert snapshot.environment_daily_history == ()
+    assert not any(
+        operation[0] == "fetch_all" and "ORDER BY environment_date" in operation[1]
+        for operation in transaction.operations
+    )
+
+
+def test_environment_history_query_groups_exact_keys_with_bound_parameters() -> None:
+    """Several label kinds do not create an unintended date/kind cross product."""
+
+    transaction = StubTransaction(one_responses=[], all_responses=[[]])
+    keys = (
+        (date(2026, 9, 1), "fact"),
+        (date(2026, 9, 2), "fact"),
+        (date(2026, 9, 3), "forecast"),
+    )
+
+    rows = Factor4CalculationRepository._read_environment_daily_history_rows(
+        transaction,
+        keys,
+    )
+
+    assert rows == []
+    operation = transaction.operations[0]
+    assert operation[0] == "fetch_all"
+    assert operation[1].count("label_kind = %s") == 2
+    assert operation[1].count("environment_date IN") == 2
+    assert operation[2] == (
+        "fact",
+        date(2026, 9, 1),
+        date(2026, 9, 2),
+        "forecast",
+        date(2026, 9, 3),
+    )
+
+
+@pytest.mark.parametrize("history_present", [False, True])
+def test_full_calendar_history_is_read_even_without_any_frozen_members(history_present: bool) -> None:
+    """An empty frozen declaration cannot hide daily rows from the independent read."""
+    transaction = _happy_transaction()
+    batch = transaction.all_responses[0][0]
+    batch["environment_snapshot"] = {"members": [], "missing_dates": ["2026-09-01"]}
+    history = [{"id": 17, "environment_date": date(2026, 9, 1), "label_kind": "fact",
+                "label_code": "CHOPPY_UP", "label_status": "ready", "revision": 1,
+                "is_current": 0, "available_at": datetime(2026, 9, 1), "schema_version": "v1"}] if history_present else []
+    transaction.all_responses.insert(1, history)
+    snapshot = Factor4CalculationRepository(StubDatabaseClient(transaction)).read_calculation_snapshot(
+        include_full_environment_history=True,
+    )
+    assert snapshot.environment_daily_history_loaded is True
+    assert snapshot.environment_daily_history_range == (batch["start_date"], batch["end_date"], batch["label_kind"])
+    assert len(snapshot.environment_daily_history) == int(history_present)
+    assert snapshot.environment_daily == ()
+    operations = [operation for operation in transaction.operations if "FROM market_environment_daily" in operation[1]]
+    assert len(operations) == 1
+    query, parameters = operations[0][1:]
+    assert parameters == ("fact", date(2024, 9, 2), date(2026, 9, 1))
+    where = query.split("WHERE", 1)[1]
+    assert "environment_date >= %s AND environment_date <= %s" in where
+    assert "is_current" not in where and "available_at" not in where and " IN " not in where
+    assert "label_status" in query
+    if history_present:
+        assert snapshot.environment_daily_history[0].label_status == "ready"
+
+
+def test_full_range_history_replaces_member_history_query_without_changing_selected_rows() -> None:
+    """Opt-in performs one full history query while retaining exact member-ID evidence."""
+    transaction = _happy_transaction()
+    batch = transaction.all_responses[0][0]
+    batch["environment_snapshot"] = {"members": [{"daily_id": 17, "environment_date": "2026-09-01", "revision": 1}]}
+    selected = {"id": 17, "environment_date": date(2026, 9, 1), "label_kind": "fact",
+                "label_code": "WIDE_RANGE", "revision": 1, "is_current": 1,
+                "available_at": datetime(2026, 9, 1), "schema_version": "v1"}
+    omitted = {**selected, "id": 18, "environment_date": date(2026, 8, 31), "label_status": "ready"}
+    transaction.all_responses[1:1] = [[selected], [{**selected, "label_status": "ready"}, omitted]]
+    snapshot = Factor4CalculationRepository(StubDatabaseClient(transaction)).read_calculation_snapshot(
+        include_full_environment_history=True,
+    )
+    assert [row.id for row in snapshot.environment_daily] == [17]
+    assert [row.id for row in snapshot.environment_daily_history] == [17, 18]
+    history_queries = [query for _operation, query, _parameters in transaction.operations if "ORDER BY environment_date" in query]
+    assert len(history_queries) == 1
+    assert "environment_date IN" not in history_queries[0]
+
+
+@pytest.mark.parametrize("value", [1, None, "true"])
+def test_full_history_flag_rejects_nonboolean_before_database_access(value: object) -> None:
+    """Only an explicit boolean may widen the history query."""
+    transaction = _happy_transaction()
+    client = StubDatabaseClient(transaction)
+    with pytest.raises(ValueError, match="must be a boolean"):
+        Factor4CalculationRepository(client).read_calculation_snapshot(include_full_environment_history=value)
+    assert client.transaction_count == 0
+
+
+def test_full_range_query_binds_kind_instead_of_interpolating_it() -> None:
+    """Query syntax is independent of values, including unusual kind strings."""
+    transaction = StubTransaction(one_responses=[], all_responses=[[]])
+    kind = "fact' OR 1=1 --"
+    Factor4CalculationRepository._read_environment_daily_range_history_rows(transaction, date(2026, 1, 1), date(2026, 1, 2), kind)
+    query, parameters = transaction.operations[0][1:]
+    assert kind not in query
+    assert parameters == (kind, date(2026, 1, 1), date(2026, 1, 2))
+
+
+def test_environment_daily_nullable_label_code_is_preserved() -> None:
+    """not_ready/invalid daily rows may have a NULL label_code in MySQL."""
+
+    row = {
+        "id": 17,
+        "environment_date": date(2026, 9, 1),
+        "label_kind": "fact",
+        "label_code": None,
+        "revision": 1,
+        "is_current": 0,
+        "available_at": datetime(2026, 9, 1, 12),
+        "schema_version": "market-env-v1",
+    }
+
+    parsed = Factor4CalculationRepository._to_environment_daily(row, "unit")
+
+    assert parsed.label_code is None
+
+
+def test_batch_selection_sorts_without_large_json_payload() -> None:
+    """Batch identity ordering must not filesort the environment snapshot JSON."""
+
+    transaction = StubTransaction(
+        one_responses=[{"captured_at": datetime(2026, 9, 4, 12)}],
+        all_responses=[
+            [{"id": 6}],
+            [_batch_row()],
+            [_identity_row()],
+            [_definition_row()],
+            [_detail_row()],
+            [_evaluation_metric_row()],
+            [_routing_metric_evidence_row()],
+            [_formula_row()],
+            [_route_row()],
+        ],
+    )
+
+    Factor4CalculationRepository(StubDatabaseClient(transaction)).read_calculation_snapshot()
+
+    candidate_query = next(
+        operation[1]
+        for operation in transaction.operations
+        if operation[0] == "fetch_all" and "LIMIT 2" in operation[1]
+    )
+    assert "environment_snapshot" not in candidate_query
+
+
 def test_read_calculation_snapshot_rejects_blank_partition_selectors() -> None:
     """Blank selectors should fail before a database transaction is opened."""
 
@@ -766,3 +1215,114 @@ def test_optional_int_rejects_non_integral_or_non_finite_values(raw_value: Any) 
 
     with pytest.raises(CalculationRepositoryError, match="column 'value' must be an integer"):
         Factor4CalculationRepository._optional_int({"value": raw_value}, "value", "unit")
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        Decimal("NaN"),
+        Decimal("Infinity"),
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+    ],
+)
+def test_required_decimal_rejects_non_finite_values(raw_value: Any) -> None:
+    """Non-finite numeric values must fail before route quantization can crash."""
+
+    with pytest.raises(
+        CalculationRepositoryError,
+        match="column 'value' must be a finite decimal",
+    ):
+        Factor4CalculationRepository._required_decimal(
+            {"value": raw_value},
+            "value",
+            "unit",
+        )
+
+
+def test_formula_link_values_normalize_nested_ids_and_reject_conflicts() -> None:
+    """SQL link predicates use canonical scalar values only."""
+
+    valid = _safe_metric_formula_link_values(
+        {
+            "formula_identity": {
+                "formula_evidence_id": "001",
+                "run_id": "run-1",
+                "formula_hash": "hash-1",
+                "formula_version": "version-1",
+            }
+        }
+    )
+    assert valid == {
+        "formula_evidence_id": 1,
+        "run_id": "run-1",
+        "formula_hash": "hash-1",
+        "formula_version": "version-1",
+    }
+
+    conflicted = _safe_metric_formula_link_values(
+        {
+            "formula_hash": "hash-top",
+            "formula": {"formula_hash": "hash-nested"},
+            "run_id": ["run-1"],
+            "formula_evidence_id": 1.5,
+        }
+    )
+    assert conflicted == {}
+
+
+@pytest.mark.parametrize("raw_factor_id", [1.9, "1.9", Decimal("1.9")])
+def test_definition_rows_reject_non_integral_factor_id(raw_factor_id: Any) -> None:
+    """Catalog factor IDs must not be silently truncated during enrichment."""
+
+    transaction = StubTransaction(
+        one_responses=[],
+        all_responses=[
+            [
+                {
+                    "factor_id": raw_factor_id,
+                    "serial_number": "SF10",
+                    "name": "factor-ten",
+                    "window": "24H",
+                    "factor_bar_interval": "1h",
+                    "formula_summary": "rolling mean",
+                    "definition_updated_at": datetime(2026, 8, 1),
+                }
+            ]
+        ],
+    )
+    identities = {
+        (True, 10): {
+            "factor_ref": "sub_factor:10",
+            "factor_type": "sub_factor",
+            "factor_id": 10,
+            "batch_factor_version": "updated_at:2026-08-01T00:00:00Z",
+        }
+    }
+
+    with pytest.raises(
+        CalculationRepositoryError,
+        match="column 'factor_id' must be an integer",
+    ):
+        Factor4CalculationRepository._read_definition_rows(
+            transaction,
+            identities,
+        )
+
+
+def test_required_date_rejects_datetime_subclass() -> None:
+    """Calendar-day fields must not accept timestamp values."""
+
+    with pytest.raises(
+        CalculationRepositoryError,
+        match="column 'value' must be a date",
+    ):
+        Factor4CalculationRepository._required_date(
+            {"value": datetime(2026, 9, 4, 12)},
+            "value",
+            "unit",
+        )

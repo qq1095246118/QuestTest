@@ -206,6 +206,12 @@ api、db、service ──> config
 7. 清理测试数据
 8. 输出日志和测试报告
 
+### 7.1 真实测试环境边界
+
+需要访问外部测试服务的用例必须在请求前校验环境边界。配置应同时声明测试环境名称、目标服务地址和对应的裸主机白名单；MCP、Backend、Agent 与数据库分别使用适用的白名单，不得以通配符、URL、路径或生产域名代替。测试 URL 不得包含 userinfo（用户名或密码）。
+
+测试配置中的 Token、密码、Authorization 和 Session 只用于构造客户端，不得出现在配置对象的默认表示、日志、异常文本或 JUnit 报告；诊断应仅保留脱敏后的状态码、错误码和有限的结构化证据。未满足显式 live/test 门禁或白名单时，应在发出请求前阻断。
+
 典型 Case 示例：
 
 ```python
@@ -217,7 +223,7 @@ def test_business_action_returns_expected_status():
     assert repository.find_by_id(entity.id) is not None
 ```
 
-### 7.1 组合因子真实链路的额外约束
+### 7.2 组合因子真实链路的额外约束
 
 组合因子台的 Worker 回调合约测试和真实 Agent 端到端测试必须分开标记、分开准备数据：
 

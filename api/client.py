@@ -45,6 +45,16 @@ class HTTPClient:
         self._session = session or requests.Session()
         self._logger = logger or logging.getLogger(__name__)
 
+    def new_session_client(self) -> HTTPClient:
+        """返回配置相同但使用独立 HTTP Session 的客户端；无请求，不复制现有 Cookie 或连接状态。"""
+        return HTTPClient(self._settings, logger=self._logger)
+
+    def close(self) -> None:
+        """释放本客户端 Session；不发送业务请求，底层 close 异常原样透传。"""
+        close = getattr(self._session, "close", None)
+        if close is not None:
+            close()
+
     def request(
         self,
         method: str,
@@ -52,24 +62,33 @@ class HTTPClient:
         *,
         params: Mapping[str, Any] | None = None,
         json_body: Any | None = None,
+        raw_body: bytes | None = None,
         headers: Mapping[str, str] | None = None,
         timeout_seconds: float | None = None,
         retryable: bool | None = None,
+        include_authentication: bool = True,
     ) -> requests.Response:
         """发送一个 JSON HTTP 请求并按配置重试可安全重放的请求。
 
         参数 ``method`` 是 HTTP 方法，``path`` 是相对路径，``params`` 是查询参数，``json_body`` 是任意 JSON 请求体，
-        ``headers`` 是附加请求头，``timeout_seconds`` 可覆盖默认超时；``retryable`` 可显式声明业务请求是否可安全重放，
+        ``raw_body`` 可发送原始协议字节且与 ``json_body`` 互斥；``headers`` 是附加请求头，
+        ``timeout_seconds`` 可覆盖默认超时；``retryable`` 可显式声明业务请求是否可安全重放，
         未传时按照 HTTP 幂等方法判断。
+        ``include_authentication=False`` 明确移除 Authorization，仅用于独立未授权协议请求。
         返回服务端的原始 ``requests.Response``，由上层 API、Service 或 Case 判断业务结果；网络错误在不可重试或重试耗尽时抛出。
         """
 
+        if raw_body is not None and json_body is not None:
+            raise ValueError("raw_body and json_body are mutually exclusive")
+        body_options = {"data": raw_body} if raw_body is not None else {}
         url = self._build_url(path)
         normalized_method = method.upper()
         request_is_retryable = (
             normalized_method in self._IDEMPOTENT_METHODS if retryable is None else retryable
         )
         request_headers = self._build_headers(headers)
+        if not include_authentication:
+            request_headers = {key: value for key, value in request_headers.items() if key.casefold() != "authorization"}
         attempts = max(self._settings.retry_attempts, 0) + 1
         for attempt in range(attempts):
             started_at = time.monotonic()
@@ -81,6 +100,7 @@ class HTTPClient:
                     json=json_body,
                     headers=request_headers,
                     timeout=timeout_seconds or self._settings.timeout_seconds,
+                    **body_options,
                 )
             except requests.RequestException as error:
                 elapsed_seconds = time.monotonic() - started_at

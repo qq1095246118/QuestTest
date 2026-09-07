@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -22,7 +23,7 @@ class ApiSettings:
     timeout_seconds: float
     retry_attempts: int
     retry_backoff_seconds: float
-    auth_token: str | None
+    auth_token: str | None = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class AccountCredentials:
     """
 
     email: str | None
-    password: str | None
+    password: str | None = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,8 @@ class AuthenticationSettings:
 class DatabaseSettings:
     """保存关系型数据库连接所需的配置。
 
-    参数来自 YAML 配置和环境变量；支持 SQLite 的 ``dsn`` 以及 MySQL 的 host、port、name、username、password。
+    参数来自 YAML 配置和环境变量；支持 SQLite 的 ``dsn`` 以及 MySQL 的 host、port、name、username、password 和
+    连接、读取、写入超时。三个超时单位均为秒，未显式配置时使用兼容默认值。
     返回值由 ``SettingsLoader.load`` 创建，供 DB 层按驱动建立连接使用。
     """
 
@@ -64,8 +66,11 @@ class DatabaseSettings:
     port: int
     name: str
     username: str
-    password: str | None
+    password: str | None = field(repr=False)
     dsn: str | None
+    connect_timeout_seconds: float = 10.0
+    read_timeout_seconds: float = 60.0
+    write_timeout_seconds: float = 60.0
 
 
 @dataclass(frozen=True)
@@ -101,10 +106,37 @@ class FactorComboSettings:
 
 
 @dataclass(frozen=True)
+class FactorDataSettings:
+    """保存 Factor Data MCP 真实测试所需的连接参数。
+
+    参数来自 YAML 配置和环境变量；包含完整 MCP URL、Bearer Token 和协议版本。
+    返回值由 ``SettingsLoader.load`` 创建；Token 只用于构造协议客户端，不得写入日志或测试报告。
+    """
+
+    mcp_url: str
+    auth_token: str | None = field(repr=False)
+    protocol_version: str
+
+
+@dataclass(frozen=True)
+class EnvironmentSafetySettings:
+    """保存真实测试允许访问的主机白名单。
+
+    参数 ``allowed_hosts`` 是 API、MCP 和 Agent 等 HTTP 服务的主机名集合，
+    ``allowed_database_hosts`` 是测试数据库主机名或 IP 集合。两者只用于 live
+    测试启动前的边界校验，不包含端口、路径或凭据。返回值由
+    ``SettingsLoader.load`` 创建；空白或非字符串项会在配置加载时被拒绝。
+    """
+
+    allowed_hosts: tuple[str, ...]
+    allowed_database_hosts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Settings:
     """聚合当前测试环境的全部类型化配置。
 
-    参数包括环境名称以及 API、认证账号、数据库、组合因子、报告子配置。
+    参数包括环境名称以及 API、认证账号、数据库、组合因子、Factor Data、测试边界和报告子配置。
     返回值由 ``SettingsLoader.load`` 返回，供 Fixture、API、DB 和 Service 使用。
     """
 
@@ -113,6 +145,8 @@ class Settings:
     authentication: AuthenticationSettings
     database: DatabaseSettings
     factor_combo: FactorComboSettings
+    factor_data: FactorDataSettings
+    environment_safety: EnvironmentSafetySettings
     reports: ReportSettings
 
 
@@ -138,6 +172,9 @@ class SettingsLoader:
         "AUTOMATION_DB_USERNAME": ("database", "username"),
         "AUTOMATION_DB_PASSWORD": ("database", "password"),
         "AUTOMATION_DB_DSN": ("database", "dsn"),
+        "AUTOMATION_DB_CONNECT_TIMEOUT_SECONDS": ("database", "connect_timeout_seconds"),
+        "AUTOMATION_DB_READ_TIMEOUT_SECONDS": ("database", "read_timeout_seconds"),
+        "AUTOMATION_DB_WRITE_TIMEOUT_SECONDS": ("database", "write_timeout_seconds"),
         "AUTOMATION_FACTOR_COMBO_AGENT_UID": ("factor_combo", "agent_uid"),
         "AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL": ("factor_combo", "agent_base_url"),
         "AUTOMATION_FACTOR_COMBO_POLL_INTERVAL_SECONDS": ("factor_combo", "poll_interval_seconds"),
@@ -155,6 +192,14 @@ class SettingsLoader:
         ),
         "AUTOMATION_FACTOR_COMBO_MAX_REFRESH_POLLS": ("factor_combo", "max_refresh_polls"),
         "AUTOMATION_FACTOR_COMBO_MAX_TECHNICAL_RETRIES": ("factor_combo", "max_technical_retries"),
+        "AUTOMATION_FACTOR_DATA_MCP_URL": ("factor_data", "mcp_url"),
+        "AUTOMATION_FACTOR_DATA_MCP_TOKEN": ("factor_data", "auth_token"),
+        "AUTOMATION_FACTOR_DATA_MCP_PROTOCOL_VERSION": ("factor_data", "protocol_version"),
+        "AUTOMATION_TEST_ALLOWED_HOSTS": ("environment_safety", "allowed_hosts"),
+        "AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS": (
+            "environment_safety",
+            "allowed_database_hosts",
+        ),
     }
 
     @classmethod
@@ -231,6 +276,8 @@ class SettingsLoader:
         authentication = SettingsLoader._section(data, "authentication")
         database = SettingsLoader._section(data, "database")
         factor_combo = SettingsLoader._section(data, "factor_combo")
+        factor_data = SettingsLoader._section(data, "factor_data")
+        environment_safety = SettingsLoader._section(data, "environment_safety")
         reports = SettingsLoader._section(data, "reports")
         return Settings(
             environment=str(data.get("environment", "test")),
@@ -263,6 +310,18 @@ class SettingsLoader:
                 username=str(database.get("username", "")),
                 password=SettingsLoader._optional_string(database.get("password")),
                 dsn=SettingsLoader._optional_string(database.get("dsn")),
+                connect_timeout_seconds=SettingsLoader._positive_float(
+                    database.get("connect_timeout_seconds", 10),
+                    "database.connect_timeout_seconds",
+                ),
+                read_timeout_seconds=SettingsLoader._positive_float(
+                    database.get("read_timeout_seconds", 60),
+                    "database.read_timeout_seconds",
+                ),
+                write_timeout_seconds=SettingsLoader._positive_float(
+                    database.get("write_timeout_seconds", 60),
+                    "database.write_timeout_seconds",
+                ),
             ),
             factor_combo=FactorComboSettings(
                 agent_uid=SettingsLoader._optional_string(factor_combo.get("agent_uid")),
@@ -278,6 +337,21 @@ class SettingsLoader:
                 refresh_poll_timeout_seconds=float(factor_combo.get("refresh_poll_timeout_seconds", 10800)),
                 max_refresh_polls=int(factor_combo.get("max_refresh_polls", 1080)),
                 max_technical_retries=int(factor_combo.get("max_technical_retries", 2)),
+            ),
+            factor_data=FactorDataSettings(
+                mcp_url=str(factor_data.get("mcp_url", "")).rstrip("/"),
+                auth_token=SettingsLoader._normalize_auth_token(factor_data.get("auth_token")),
+                protocol_version=str(factor_data.get("protocol_version", "2025-06-18")),
+            ),
+            environment_safety=EnvironmentSafetySettings(
+                allowed_hosts=SettingsLoader._host_list(
+                    environment_safety.get("allowed_hosts", ()),
+                    "environment_safety.allowed_hosts",
+                ),
+                allowed_database_hosts=SettingsLoader._host_list(
+                    environment_safety.get("allowed_database_hosts", ()),
+                    "environment_safety.allowed_database_hosts",
+                ),
             ),
             reports=ReportSettings(junit_path=str(reports.get("junit_path", "reports/junit.xml"))),
         )
@@ -307,6 +381,40 @@ class SettingsLoader:
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    @staticmethod
+    def _host_list(value: Any, name: str) -> tuple[str, ...]:
+        """标准化一个只含主机名的 allowlist。
+
+        参数 ``value`` 可以是 YAML 字符串列表或逗号分隔字符串，``name`` 用于错误诊断。
+        返回去重且小写的主机名元组；空列表合法，非字符串项、URL、路径和通配符会抛出
+        ``ValueError``，避免把宽泛配置误当成安全边界。
+        """
+
+        if value is None:
+            return ()
+        if isinstance(value, str):
+            raw_values: list[Any] = value.split(",")
+        elif isinstance(value, (list, tuple)):
+            raw_values = list(value)
+        else:
+            raise ValueError(f"Configuration value must be a host list: {name}")
+
+        normalized_values: list[str] = []
+        for raw_value in raw_values:
+            if not isinstance(raw_value, str):
+                raise ValueError(f"Configuration value must contain host strings: {name}")
+            host = raw_value.strip().lower().rstrip(".")
+            if not host:
+                continue
+            if (
+                "://" in host
+                or any(character in host for character in "/?#*[]:")
+            ):
+                raise ValueError(f"Configuration value must contain bare host names: {name}")
+            if host not in normalized_values:
+                normalized_values.append(host)
+        return tuple(normalized_values)
 
     @staticmethod
     def _normalize_auth_token(value: Any) -> str | None:
@@ -341,3 +449,19 @@ class SettingsLoader:
         if normalized in {"", "0", "false", "no", "off", "none", "null"}:
             return False
         raise ValueError(f"Configuration value must be boolean-like: {value!r}")
+
+    @staticmethod
+    def _positive_float(value: Any, name: str) -> float:
+        """将配置值转换为正浮点数。
+
+        参数 ``value`` 是 YAML 或环境变量中的原始值，``name`` 是用于错误诊断的配置键。
+        返回大于零的秒数；值无法转换、不是有限数或不大于零时抛出 ``ValueError``。
+        """
+
+        try:
+            normalized = float(value)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Configuration value must be a positive number: {name}") from error
+        if not isfinite(normalized) or normalized <= 0:
+            raise ValueError(f"Configuration value must be a positive finite number: {name}")
+        return normalized

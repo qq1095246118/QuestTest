@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import replace
-from typing import Any
-from urllib.parse import urlparse
+import os
+from typing import TYPE_CHECKING, Any
+from urllib.parse import ParseResult, urlparse
 
 import pytest
 
@@ -13,15 +14,22 @@ from api.agent_api import AgentAPI
 from api.auth_api import AuthAPI, AuthResponsePayload, AuthenticatedAccount
 from api.chat_api import ChatAPI
 from api.client import HTTPClient
+from api.factor_data_mcp_api import FactorDataMCPAPI
 from api.factor_combo_api import FactorComboAPI
 from api.performance_api import PerformanceAPI
 from api.sub_factor_api import SubFactorAPI
 from config.settings import AccountCredentials, ApiSettings, Settings, SettingsLoader
 from db.client import DatabaseClient
+from db.factor4_calculation_repository import Factor4CalculationRepository
+from db.factor4_read_repository import Factor4ReadRepository
 from db.factor_combo_repository import FactorComboRepository
 from service.factor_combo_service import FactorComboService
 from tests.resource_scope import TestResourceScope
 from tools.http_response import read_json_object, read_json_or_diagnostic
+
+if TYPE_CHECKING:
+    from service.factor4_calculation_service import Factor4CalculationService
+    from service.factor4_read_service import Factor4ReadService
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -43,6 +51,47 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Enable tests that call a configured external API or database.",
     )
+    parser.addoption(
+        "--include-factor4-deferred", action="store_true", default=False,
+        help="Explicitly include migrated Factor 4.0 exception/compatibility/performance cases; live/test gates still apply.",
+    )
+    parser.addoption(
+        "--include-factor4-internal-calculation", action="store_true", default=False,
+        help="Include Factor 4.0 formula mathematics and independent-calculation checks outside result acceptance.",
+    )
+    parser.addoption(
+        "--include-factor4-technical", action="store_true", default=False,
+        help="Include Factor 4.0 protocol, security and storage technical checks outside result acceptance.",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Separate Factor 4.0 specialist suites before fixtures and preserve legacy skips.
+
+    Specialist items are deselected unless their own option is enabled; enabling
+    legacy deferred cases does not enable either specialist suite. Existing deferred
+    items keep their original skip behavior. Inputs are pytest config/items; updates
+    items in place and emits the standard deselection hook, with no I/O or return.
+    This scope gate does not certify assertions, data availability or live safety.
+    """
+    excluded_markers = tuple(
+        marker for marker, option in (
+            ("factor4_internal_calculation", "--include-factor4-internal-calculation"),
+            ("factor4_technical", "--include-factor4-technical"),
+        ) if not config.getoption(option)
+    )
+    retained, deselected = [], []
+    include_deferred = config.getoption("--include-factor4-deferred")
+    for item in items:
+        if any(item.get_closest_marker(marker) for marker in excluded_markers):
+            deselected.append(item)
+            continue
+        retained.append(item)
+        if not include_deferred and item.get_closest_marker("factor4_deferred"):
+            item.add_marker(pytest.mark.skip(reason="DEFERRED_SCOPE: excluded by user; requires --include-factor4-deferred"))
+    items[:] = retained
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -58,6 +107,17 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "worker_contract: cases that call test-only Worker compatibility endpoints")
     config.addinivalue_line("markers", "external_agent: cases that start or poll a real research Agent run")
     config.addinivalue_line("markers", "unit: offline framework and service/repository unit tests")
+    config.addinivalue_line("markers", "factor4_deferred: migrated scenarios outside current live acceptance scope")
+    config.addinivalue_line("markers", "factor4_internal_calculation: formula mathematics and independent calculations; explicitly opt in")
+    config.addinivalue_line("markers", "factor4_technical: protocol/security/storage specialist checks; explicitly opt in")
+    config.addinivalue_line(
+        "markers",
+        "factor4_calculation: Factor 4.0 calculation checks against the configured test MCP and database",
+    )
+    config.addinivalue_line(
+        "markers",
+        "factor4_raw_data: cases requiring raw factor/return/position rows; unavailable in final-result-only validation",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -80,10 +140,130 @@ def live_mode(pytestconfig: pytest.Config) -> bool:
     返回布尔值；命令行开关或 ``AUTOMATION_LIVE=true`` 时返回 ``True``，否则返回 ``False``。
     """
 
-    import os
-
     configured = os.getenv("AUTOMATION_LIVE", "").strip().lower() == "true"
     return bool(pytestconfig.getoption("--live") or configured)
+
+
+@pytest.fixture(scope="session")
+def factor_data_mcp_api(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+) -> FactorDataMCPAPI:
+    """创建 Factor 4.0 计算专项使用的测试环境 MCP 客户端。
+
+    参数 ``settings`` 提供 Factor Data MCP URL、Token 和 HTTP 策略，``pytestconfig`` 用于强制检查显式
+    ``--live --env test``。返回尚未初始化会话的 ``FactorDataMCPAPI``，由 Service 统一完成握手和业务读取；缺少测试
+    配置时以 ``BLOCKED_ENV`` 跳过，环境、URL 或端点不安全时直接失败。网络和协议异常由 API/Service 原样传播。
+    """
+
+    _validate_factor4_calculation_live_environment(settings, pytestconfig)
+    mcp_url = settings.factor_data.mcp_url.strip()
+    token = settings.factor_data.auth_token
+    if not mcp_url:
+        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项缺少 AUTOMATION_FACTOR_DATA_MCP_URL")
+    if not token:
+        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项缺少 AUTOMATION_FACTOR_DATA_MCP_TOKEN")
+
+    parsed = _validate_factor4_mcp_url(
+        mcp_url,
+        settings.environment_safety.allowed_hosts,
+    )
+
+    api_settings = replace(
+        settings.api,
+        base_url=f"{parsed.scheme}://{parsed.netloc}",
+        auth_token=token,
+    )
+    return FactorDataMCPAPI(
+        HTTPClient(api_settings),
+        endpoint_path=parsed.path,
+    )
+
+
+@pytest.fixture(scope="session")
+def factor4_calculation_repository(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+) -> Factor4CalculationRepository:
+    """创建 Factor 4.0 计算专项的测试数据库只读 Repository。
+
+    参数 ``settings`` 提供测试库连接，``pytestconfig`` 强制检查显式 ``--live --env test``。返回通过
+    ``DatabaseClient`` 构造的 ``Factor4CalculationRepository``；驱动或连接配置缺失时以 ``BLOCKED_ENV`` 跳过，
+    非测试环境直接失败。Repository 自身负责在一致性只读事务中读取，不在 Fixture 中执行 SQL。
+    """
+
+    _validate_factor4_calculation_live_environment(settings, pytestconfig)
+    if settings.database.driver != "mysql":
+        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项需要 AUTOMATION_DB_DRIVER=mysql")
+    required = (
+        settings.database.host,
+        settings.database.port,
+        settings.database.name,
+        settings.database.username,
+        settings.database.password,
+    )
+    if not all(required):
+        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项的测试 MySQL 配置不完整")
+    _validate_test_host(
+        settings.database.host,
+        settings.environment_safety.allowed_database_hosts,
+        "Factor 4.0 数据库",
+    )
+    return Factor4CalculationRepository(DatabaseClient.from_settings(settings.database))
+
+
+@pytest.fixture(scope="session")
+def factor4_calculation_service(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+    factor_data_mcp_api: FactorDataMCPAPI,
+    factor4_calculation_repository: Factor4CalculationRepository,
+) -> Factor4CalculationService:
+    """组装 Factor 4.0 R0 计算逻辑校验 Service。
+
+    参数 ``settings`` 提供 MCP 协议版本，``pytestconfig`` 强制检查显式 live/test 门禁，其余参数是协议客户端和只读
+    Repository。返回会话级 ``Factor4CalculationService``；不在 Fixture 中执行业务检查，实际 MCP 握手、快照读取和
+    结构化结果生成只由 Service 的公开入口负责。Service 模块的导入延迟到 Fixture 执行，避免默认离线收集触发 live 依赖。
+    """
+
+    _validate_factor4_calculation_live_environment(settings, pytestconfig)
+    from service.factor4_calculation_service import Factor4CalculationService
+
+    return Factor4CalculationService(
+        factor4_calculation_repository,
+        factor_data_mcp_api,
+        protocol_version=settings.factor_data.protocol_version,
+    )
+
+
+@pytest.fixture(scope="session")
+def factor4_read_service(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+    factor_data_mcp_api: FactorDataMCPAPI,
+    factor4_calculation_repository: Factor4CalculationRepository,
+) -> Factor4ReadService:
+    """组装由历史 tmp 只读探针迁移来的 Factor 4.0 业务 Service。
+
+    参数由测试环境门禁和已有 MCP/DB fixture 提供。返回已完成 MCP 握手的只读 Service；
+    网络、协议和数据库异常不在 fixture 中吞掉，缺少 live/test 条件时由原 fixture 阻断。
+    """
+    _validate_factor4_calculation_live_environment(settings, pytestconfig)
+    from api.factor4_read_api import Factor4ReadAPI
+    from service.factor4_read_service import Factor4ReadService
+
+    if factor_data_mcp_api.protocol_version is None:
+        factor_data_mcp_api.initialize(protocol_version=settings.factor_data.protocol_version)
+        factor_data_mcp_api.notify_initialized()
+    return Factor4ReadService(Factor4ReadAPI(factor_data_mcp_api))
+
+
+@pytest.fixture(scope="session")
+def factor4_read_repository(
+    factor4_calculation_repository: Factor4CalculationRepository,
+) -> Factor4ReadRepository:
+    """把已有测试库连接包装成 Factor 4.0 只读数据发现 Repository。"""
+    return Factor4ReadRepository(factor4_calculation_repository.database_client)
 
 
 @pytest.fixture(scope="session")
@@ -666,16 +846,125 @@ def _validate_factor_combo_live_environment(settings: Settings, live_mode: bool)
     if not settings.api.base_url:
         pytest.skip("需要通过环境变量配置 AUTOMATION_API_BASE_URL")
     parsed = urlparse(settings.api.base_url)
-    if parsed.hostname == "factor-backend.questvector.ai":
-        pytest.fail("禁止对生产环境执行组合因子自动化测试")
+    if parsed.username is not None or parsed.password is not None:
+        pytest.fail("AUTOMATION_API_BASE_URL 不得包含用户信息")
+    _validate_test_host(
+        parsed.hostname,
+        settings.environment_safety.allowed_hosts,
+        "组合因子 Backend",
+    )
     if not parsed.path.rstrip("/").endswith("/api/v1"):
         pytest.fail("AUTOMATION_API_BASE_URL 必须包含 /api/v1")
     if settings.factor_combo.agent_base_url:
         agent_parsed = urlparse(settings.factor_combo.agent_base_url)
-        if agent_parsed.hostname in {
-            "factor-frontend.questvector.ai",
-            "factor-backend.questvector.ai",
-        }:
-            pytest.fail("禁止使用生产环境 Agent 地址执行组合因子自动化测试")
+        if agent_parsed.username is not None or agent_parsed.password is not None:
+            pytest.fail("AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL 不得包含用户信息")
+        _validate_test_host(
+            agent_parsed.hostname,
+            settings.environment_safety.allowed_hosts,
+            "组合因子 Agent",
+        )
         if not agent_parsed.path.rstrip("/").endswith("/api/v2"):
             pytest.fail("AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL 必须包含 /api/v2")
+
+
+def _validate_factor4_calculation_live_environment(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+) -> None:
+    """强制 Factor 4.0 计算专项只能通过显式命令访问测试环境。
+
+    参数 ``settings`` 是已加载配置，``pytestconfig`` 提供原始 ``--live`` 和 ``--env`` 命令选项。不返回值；未传
+    ``--live`` 时以 ``BLOCKED_ENV`` 跳过，未显式传入 ``--env test`` 或加载结果不是 test 时直接失败。该专项不接受
+    ``AUTOMATION_LIVE=true`` 或配置默认值替代命令行确认，防止意外连接外部环境。
+    """
+
+    if not bool(pytestconfig.getoption("--live")):
+        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项必须显式传入 --live")
+    selected_environment = pytestconfig.getoption("--env")
+    if not isinstance(selected_environment, str) or selected_environment.strip().lower() != "test":
+        pytest.fail("Factor 4.0 live 专项必须显式传入 --env test", pytrace=False)
+    if settings.environment.strip().lower() != "test":
+        pytest.fail("Factor 4.0 live 专项只允许加载 test 环境配置", pytrace=False)
+
+
+def _validate_factor4_mcp_url(
+    mcp_url: str,
+    allowed_hosts: tuple[str, ...],
+) -> ParseResult:
+    """Validate and parse the Factor Data MCP test URL before any request.
+
+    参数 ``mcp_url`` 是配置中的 MCP 地址，``allowed_hosts`` 是测试环境的裸主机白名单。
+    返回已验证的 ``ParseResult``；scheme、主机、路径、查询参数、端口和用户信息不符合
+    测试边界时通过 ``pytest.fail`` 终止。该函数不发起网络请求，也不会把 URL 中的凭据
+    写入异常消息。
+    """
+
+    parsed = urlparse(str(mcp_url).strip())
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        pytest.fail("Factor Data MCP URL 必须是带有效主机的 HTTPS 地址", pytrace=False)
+    if parsed.username is not None or parsed.password is not None:
+        pytest.fail("Factor Data MCP URL 不得包含用户信息", pytrace=False)
+    try:
+        # Accessing ``port`` validates malformed/non-numeric ports without
+        # echoing the original URL (which could contain userinfo).
+        _ = parsed.port
+    except ValueError:
+        pytest.fail("Factor Data MCP URL 的端口无效", pytrace=False)
+    _validate_test_host(parsed.hostname, allowed_hosts, "Factor Data MCP")
+    if (
+        parsed.path.rstrip("/") != "/mcp/factor-data"
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        pytest.fail(
+            "Factor Data MCP URL 必须精确指向测试环境 /mcp/factor-data，且不得包含参数或查询串",
+            pytrace=False,
+        )
+    return parsed
+
+
+_PRODUCTION_HOSTS = frozenset(
+    {
+        "factor-frontend.questvector.ai",
+        "factor-backend.questvector.ai",
+    }
+)
+
+
+def _validate_test_host(
+    host: str | None,
+    allowed_hosts: tuple[str, ...],
+    component: str,
+) -> None:
+    """拒绝 live 测试访问生产或未登记的主机。
+
+    参数 ``host`` 是 URL 解析出的主机名或数据库主机，``allowed_hosts`` 是测试环境配置中的
+    显式白名单，``component`` 用于失败诊断。不返回值；主机为空、命中生产域名、白名单为空
+    或不在白名单中时通过 ``pytest.fail`` 终止测试。白名单可以由
+    ``AUTOMATION_TEST_ALLOWED_HOSTS``/``AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS`` 在运行时覆盖。
+    """
+
+    normalized_host = str(host or "").strip().lower().rstrip(".")
+    normalized_allowed = {
+        str(value).strip().lower().rstrip(".")
+        for value in allowed_hosts
+        if str(value).strip()
+    }
+    if not normalized_host:
+        pytest.fail(f"{component} 地址缺少有效主机", pytrace=False)
+    if normalized_host in _PRODUCTION_HOSTS:
+        pytest.fail(f"禁止对生产环境执行 {component} 测试", pytrace=False)
+    if not normalized_allowed:
+        pytest.fail(
+            f"{component} 未配置测试环境主机白名单；请设置对应 AUTOMATION_TEST_ALLOWED_* 变量",
+            pytrace=False,
+        )
+    if normalized_host not in normalized_allowed:
+        pytest.fail(
+            f"{component} 主机不在测试环境白名单中: {normalized_host}",
+            pytrace=False,
+        )
+    if normalized_allowed & _PRODUCTION_HOSTS:
+        pytest.fail("测试环境主机白名单包含生产域名", pytrace=False)

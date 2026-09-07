@@ -6,10 +6,15 @@
 
 用途：提供给能够调用 HTTP、MCP 和测试数据库的 AI 测试执行器。本文是执行规约，不是测试结果；执行器必须根据当次环境的真实响应和数据库记录判定结果，不能用示例数据代替。
 
+2026-09-07 范围覆盖说明：本轮只验收持久化计算结果到准入、评分、排名、route 和 MCP 输出。
+本文保留完整历史需求，原始计算和技术专项不再默认执行，也不作为本轮覆盖缺口。
+执行选择、合并入口及独立开关以 [Factor 4.0 结果级验收范围](factor4-result-acceptance-scope.md) 为准；
+未明确的同分排序和依赖字段必返契约不自行补写。
+
 ## 0. 给执行 AI 的固定指令
 
 ```text
-你是因子库 4.0 测试环境验证执行器。先执行环境硬门禁，再按本文编号顺序运行用例。
+你是因子库 4.0 测试环境验证执行器。先按当前结果级验收范围筛选用例，再执行环境硬门禁及选中的用例；不要将本文历史全量需求当成默认执行清单。
 所有因子、批次、revision、publication 和 market_scope 必须动态发现，禁止硬编码示例值。
 先做 R0 只读测试；只有 ALLOW_TEST_WRITES=true、测试凭据和专用清理方案同时满足时才做 R1。
 不得调用反馈写入工具，不得改生产数据，不得用 DB 直接伪造指标或发布状态。
@@ -50,10 +55,12 @@ HTTP 200 不等于业务成功；no_recommendation、not_ready、insufficient_sa
 | `UNILATERAL_DOWN` | 单边下跌 |
 | `CHOPPY_DOWN` | 震荡下跌 |
 
-当前确认的路由准入规则为 `any_valid_scope`：time-series（TS）和 cross-sectional（CS）中至少一个维度满足
-`metric_status=success` 且 `is_valid=true` 即具备有效性准入资格，不要求两个维度同时有效；两个维度均无效时不得进入 route。
-最终是否进入 route 仍须满足当前评分版本声明的最低分及其它启用状态约束。另一个维度无效本身不能作为排除原因，
-其权重处理与得分计算按对应 `score_rule_version` 和 route evidence 核验。
+本轮任务明确指定的验收规则为 `any_valid_scope`：time-series（TS）和 cross-sectional（CS）中至少一个维度满足
+`metric_status=success` 且 `is_valid=true` 即具备有效性准入资格，不要求两个维度同时有效；当前 route evidence 也明确记录
+`admission_mode=any_valid_scope`。但截至本轮文档快照，《因子库 4.0 功能逻辑说明》和《因子库 4.0 接口+数据表文档》
+仍写成 TS/CS 两者都有效才准入，尚未与本轮验收规则同步。执行器必须记录该契约差异，不能声称 Lark 已更新；本轮行为判定以用户
+明确指定的验收规则为 task-level contract，并用当前 route evidence 作数据佐证。最终是否进入 route 仍须满足当前评分版本声明的
+最低分及其它启用状态约束；另一个维度无效本身不能作为排除原因，其权重处理与得分计算按对应 `score_rule_version` 和 route evidence 核验。
 
 `fact` 用于历史评估，`forecast` 用于在线推荐。不要把技术方案里的旧代码（例如 `trend_up`、`range_up`）当作当前接口输入。
 
@@ -86,6 +93,8 @@ HTTP 200 不等于业务成功；no_recommendation、not_ready、insufficient_sa
 ### 2.3 本轮不作为独立缺陷门禁的内容
 
 按照此前测试约定，体验、文案、纯规范和旧兼容性问题不作为本轮功能缺陷；“孤儿记录、结束时间边界、引用不存在文档”暂不作为独立缺陷门禁。执行器仍可以记录观察值，但不能把它们与本规约中的 P0/P1 功能失败混在一起。
+
+当前“Factor 4.0 自身计算逻辑补齐”阶段还暂缓以下范围：active route 数据完整性、异常/性能/限流/超时/取消、用户侧推荐链路、生命周期写入、Scheduler、HMAC，以及“VWAP 实际为累计 VWAP 而非滚动窗口”。这些顶层 Case 仍保留在总规约中，但不计入本阶段计算逻辑结论。已有 active route 可作为 `CALC-506`/`CALC-507` 的只读样本；不得因为暂缓其完整性问题，就把已存在 route 的得分和分区证据一并排除。
 
 ## 3. 运行时变量
 
@@ -631,6 +640,13 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 若当前无多 revision：记录 `BLOCKED`，不把无数据误判成通过。
 - 失败级别：P0（未来 revision 泄漏）/P1（选择错误 revision）。
 
+#### 执行子项 ENV-104-A：revision/PIT 三点边界（需受控 fixture）
+
+- **目标**：用同一业务日期的至少两个 revision，验证 `as_of` 位于新 revision 的 `available_at` 之前、恰好等于该时点、之后时的可见性。
+- **核心断言**：三个查询都只选择 `available_at <= as_of` 的最高可见 revision；恰好等于边界时按当前 Lark 契约规定的包含/排除规则处理；未来 revision 不得提前可见，旧 revision 不得被覆盖或删除。
+- **数据前置**：`revision/PIT 边界包`，包含同一 `market_scope + environment_date + label_kind` 的至少两个 revision、互不相同且已知的 `available_at`，以及契约明确的边界比较符。当前全为单 revision 的自然数据不能满足此前置。
+- **结果口径**：fixture 和契约齐备后任一可见 revision 选择错误即 `FAIL`；缺少多 revision、精确边界时间或边界比较契约时为 `BLOCKED_DATA_PRECONDITION`，不得以当前 revision 查询成功代替本子项通过。
+
 ### ENV-105 current 指针唯一性
 
 - 目的：验证同日期同类型只能有一个 current。
@@ -912,6 +928,13 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 断言：原 batch 的环境 revision、因子版本、母子关系、配置和 hashes 不变；新变化只影响新批次。
 - 失败级别：P0。
 
+#### 执行子项 LIFE-405-A：计算输入快照冻结（需受控 fixture）
+
+- **目标**：确认 batch 创建时使用的环境 revision、因子版本、母子关系和计算配置形成不可变输入快照。
+- **核心断言**：创建 batch 后新增环境 revision 或调整受控母子关系，再读取和执行原 batch，其 snapshot、输入成员、公式/config hash 与计算结果均保持不变；相同变化只允许进入后续新 batch。
+- **数据前置**：`revision/PIT 边界包` 中可写且可清理的专用 `market_scope`、至少两个环境 revision、一个可变更的测试因子关系和创建/评估权限；不得修改共享 active publication。
+- **结果口径**：fixture 完整时原 batch 被新 revision/关系污染即 `FAIL`；无法创建专用 batch、无法安全变更并恢复 fixture，或缺少可核对的 snapshot/hash 时为 `BLOCKED_DATA_PRECONDITION`。
+
 ### LIFE-406 v1 评估启动
 
 - 调用：按 HMAC 规范签名 `POST /factor/environment/evaluations/{batch_uid}`，body `{"force":false}`。
@@ -1001,12 +1024,49 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 
 这些用例需要从 DB 读取原始样本、指标和配置；不允许仅凭接口“有数字”就判通过。
 
+### 计算逻辑子项执行口径
+
+本轮最初盘点的 24 项候选中，Lark《因子库 4.0 功能逻辑说明》已明确 Factor 4.0“**不生成市场环境标签**”：环境识别服务更新源数据，Backend 只做标准化同步。因此 Factor 4.0 自身计算逻辑实际包含 22 个执行子项；另外 2 个分类算法项保留为已排除的上游专项。它们都挂在既有 `ENV-104`、`LIFE-405`、`CALC-501` 至 `CALC-512` 下，不是新的顶层 Case，也不改变正式 100-case 总数。Factor 4.0 子项结果写入所属 Case 的 assertions/evidence；发现同一根因时仍按 Bug Registry 去重。
+
+| 当前执行条件 | 子项数 | 子项 |
+| --- | ---: | --- |
+| Factor 4.0：R0 可完整判定 | 4 | `CALC-501-C`、`CALC-506-A`、`CALC-510-A`、`CALC-510-C` |
+| Factor 4.0：R0 部分执行后阻断 | 1 | `CALC-507-A`；可验证重复读取稳定和分数降序，同分 tie-breaker 因三份 Lark 均未声明而为 `BLOCKED_DOC` |
+| Factor 4.0：需要原始数据或受控 fixture | 17 | `ENV-104-A`、`LIFE-405-A`、`CALC-501-A/B`、`CALC-502-A/B`、`CALC-503-A/B`、`CALC-505-A`、`CALC-507-B`、`CALC-508-A/B`、`CALC-510-B`、`CALC-511-A/B`、`CALC-512-A/B` |
+| 已确认排除：上游环境分类专项 | 2 | `CALC-504-A/B`；不计入 Factor 4.0 的 22 项 |
+
+“R0 可完整判定”只表示已有只读证据满足执行前置，不代表预先通过。`CALC-507-A` 的可判定断言仍必须执行：若重复读取不稳定或分数并非降序，直接 `FAIL`；若这些断言通过，整体仍因 tie-breaker 契约缺失记录 `BLOCKED`/`BLOCKED_DOC`，不能报完整 PASS。17 个 fixture 子项在必要输入不存在时必须返回 `BLOCKED`/`BLOCKED_DATA_PRECONDITION`，不能用结构完整、字段非空或 HTTP 200 代替数值正确性。`CALC-504-A/B` 不进入 Factor 4.0 结果统计；如后续单独测试上游环境识别服务，应建立独立专项和 oracle，不能把上游结果归因于 Factor 4.0。
+
+`CALC-513` 是独立的 route/环境快照引用完整性检查，不属于上述 17 个“缺少原始数据或受控 fixture”的子项；它有单独的 Service 和 Case 入口。其日期语义尚未由当前文档明确，因此即使身份/外键一致，也只能报告 `BLOCKED_DOC`，不计为完整 PASS。
+
 ### CALC-501 time_series 与 cross_sectional 语义
 
 - 目的：确认两类评估没有互换。
 - 核对：TS 应按单资产时间序列；CS 应按同一时点跨资产。检查样本主键、日期/资产维度和指标字段。
 - 断言：TS 不把同日其它资产拼为时间序列；CS 不把跨日单资产样本当横截面；两者的样本数、覆盖率和结果可解释不同。
 - 失败级别：P0。
+
+#### 执行子项 CALC-501-A：time-series 独立数值重算（需原始数据）
+
+- **目标**：独立重建单资产按时间排序的 TS 样本，并重算契约声明的 TS 指标、方向和 validity。
+- **核心断言**：每个资产只使用自身历史因子值和正确 horizon 的 forward return；样本选择、有效样本数、IC/ICIR 或当前契约声明的指标、方向和 validity 与保存结果在版本化容差内一致，不混入同日其它资产。
+- **数据前置**：`多资产手算矩阵包`，需提供带资产和时间主键的原始因子值、原始价格/forward return、bar 频率、horizon、缺失值策略、评估配置和对应 metric 明细；聚合 metric 或 hash 不能替代原始行。
+- **结果口径**：原始行和版本化规则齐备后，样本身份或任一重算值不一致即 `FAIL`；缺少原始因子值、forward return、指标明细或版本化计算规则时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-501-B：cross-sectional 独立数值重算（需原始数据）
+
+- **目标**：独立重建同一时点跨资产的 CS 样本，并重算契约声明的 CS 指标、方向和 validity。
+- **核心断言**：每个截面只包含同一评价时点的合格资产，按当前契约执行排序、标准化/中性化和收益对齐；截面数、资产数、IC/ICIR 或当前契约声明的指标、方向和 validity 与保存结果一致，不把跨日单资产序列当作截面。
+- **数据前置**：`多资产手算矩阵包`，至少包含多个时点、每个时点多个资产的原始因子值和 forward return，以及资产池、缺失值、并列值和中性化规则；只含单资产或聚合结果时不满足前置。
+- **结果口径**：完整矩阵和规则齐备后，截面身份或任一重算值不一致即 `FAIL`；缺少多资产同时间矩阵、收益或 CS 规则时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-501-C：TS/CS 任一维度有效真值表（R0 当前可判定）
+
+- **目标**：按本轮 task-level contract 验证 Factor 4.0 的准入口径是 TS、CS 任一维度有效即可，而不是要求两个维度同时有效。
+- **核心断言**：在其它共同准入条件相同且满足时，`TS-only`、`CS-only`、`both` 三种组合均可得到 overall/route eligible；`neither` 必须不可用。维度有效的定义统一为对应 metric `status=success + is_valid=true`；不得仅因另一维度 `insufficient_sample`/invalid 而排除。
+- **数据前置**：从当前 metric/route 只读快照动态选择四种组合；若自然数据缺少某一组合，可由 `双分区/阈值包` 补齐。必须同时取得共同准入门槛和 route 排除原因，避免把其它门槛失败误归因 TS/CS。
+- **契约差异与判定来源**：两份当前 Lark 文档仍写 TS/CS 两者有效才准入，尚未同步。本轮“任一维有效”来自用户明确的验收指令，断言记录为 `source=contract`、`contract_ref=current_task_acceptance:any_valid_scope`；当前 route 的 `admission_mode=any_valid_scope` 只作为 `source=data_dependent` 的实现配置佐证。报告必须同时保存 Lark 冲突，不能反写成 Lark 已声明任一维有效。
+- **结果口径**：存在可判定组合时，任一真值表分支与保存的 overall/eligible 结果不符即 `FAIL`；无法区分四种组合或缺少共同准入规则时为 `BLOCKED_DATA_PRECONDITION`，不能把“当前 route 有数据”直接判为通过。
 
 ### CALC-502 时间排序与连续区间
 
@@ -1015,6 +1075,20 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 断言：连续区间被保留；配置明确采用“非目标环境零暴露”或“按连续区间分别统计”；结果不能把间隔期当持有期。
 - 失败级别：P0（错误拼接已改变 active publication 的指标或推荐）；P1（仅历史/未发布指标计算错误，尚未影响在线结果）。
 
+#### 执行子项 CALC-502-A：时间轴、频率与 forward-return 对齐（需原始数据）
+
+- **目标**：验证不同 bar 频率、因子窗口和持有 horizon 下，因子时点与未来收益区间没有偏一格、重复或反向引用。
+- **核心断言**：样本严格按资产和时间排序；时点 `t` 的因子只配对契约定义的 `t` 之后收益区间；bar 频率到 horizon 的换算、时区和开闭区间与配置一致，首尾 warmup/forward 缺失行被正确排除。
+- **数据前置**：`多资产手算矩阵包` 中至少两种频率、已知 horizon、显式时间戳与可逐行手算的价格序列，并提供 forward-return 定义和区间边界。
+- **结果口径**：数据和时间契约齐备后，任一样本配对、窗口换算或首尾处理不一致即 `FAIL`；缺少原始 bar、horizon/频率或收益边界定义时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-502-B：缺口与连续区间策略（需受控 fixture）
+
+- **目标**：验证交易/标签时间轴存在缺口时，不会把缺口两端错误拼成连续持仓或连续收益。
+- **核心断言**：同一输入分别加入单点缺口、连续缺口和非目标环境区间后，系统严格按 evaluation_config 采用“分段统计”或“非目标环境零暴露”；不得跨缺口计算 pct_change、换手、年化收益或最大回撤。
+- **数据前置**：`多资产手算矩阵包` 中带可控缺口的时间序列、目标环境掩码和版本化缺口处理配置，并可取得分段前后的中间样本或结果证据。
+- **结果口径**：fixture 和缺口策略明确时，跨缺口拼接或结果偏离独立分段 oracle 即 `FAIL`；缺少可控缺口、环境掩码或策略配置时为 `BLOCKED_DATA_PRECONDITION`。
+
 ### CALC-503 未来信息泄漏
 
 - 目的：确认 forecast、未来 bar、未来标签和全样本统计量未进入历史结果。
@@ -1022,11 +1096,39 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 断言：任何输入时间晚于可见边界都被排除；训练参数不使用验证/OOS 数据；修改未来样本不应改变过去 batch（可用只读历史 batch 对比）。
 - 失败级别：P0。
 
+#### 执行子项 CALC-503-A：OOS/fold 独立聚合（需原始数据）
+
+- **目标**：验证训练、验证和 OOS fold 的切分及总指标聚合不泄漏未来样本。
+- **核心断言**：每个 fold 的训练截止时间早于验证/OOS 输入；标准化、方向选择和阈值拟合只使用该 fold 允许的数据；先逐 fold 重算，再按版本化权重/样本数规则聚合，结果与保存的 OOS 和总指标一致。
+- **数据前置**：`多资产手算矩阵包` 中的原始样本、fold 边界、每 fold 中间指标、聚合配置和 batch `as_of_time`；只有最终聚合数字或 manifest hash 不足以建立 oracle。
+- **结果口径**：fold 明细和规则齐备后，发生边界穿越、训练使用未来数据或聚合值不一致即 `FAIL`；缺少 fold 明细、原始行或聚合规则时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-503-B：未来数据扰动不变性（需受控 fixture）
+
+- **目标**：通过只修改 `as_of_time` 之后的数据，直接验证历史 batch 结果对未来数据不敏感。
+- **核心断言**：两份在可见边界之前完全相同、仅未来区间不同的 fixture，对同一历史 snapshot 产生相同样本 hash、指标、validity 和排名；未来数据只能影响边界之后的新 batch。
+- **数据前置**：`多资产手算矩阵包` 中一对仅未来尾部不同的数据集、固定 code/config/environment snapshot，以及可执行两次隔离计算并清理的专用 scope。
+- **结果口径**：受控扰动和计算证据齐备后，历史结果随未来尾部变化即 `FAIL`；无法隔离修改未来数据、无法固定 snapshot，或只能读取一个历史结果时为 `BLOCKED_DATA_PRECONDITION`。
+
 ### CALC-504 环境分类唯一性
 
 - DB：按 market/date 查询事实标签。
-- 断言：同一资产同一日期至多一个有效环境；缺失/invalid 单独计数；不会同时归入两个目标环境或被静默复制到所有环境。
+- 断言：同一资产同一日期至多一个有效环境；缺失/invalid 单独计数；不会同时归入两个目标环境或被静默复制到所有环境。Factor 4.0 在本 Case 中只负责标签唯一性、标准化和同步映射；`label_code == raw_payload.regime_state` 可以证明映射一致，但不能证明上游分类算法正确。
 - 失败级别：P0。
+
+#### 上游专项 CALC-504-A：环境分类 Golden Oracle（已排除 Factor 4.0）
+
+- **目标**：在上游环境识别专项中，用独立 Golden vectors 验证原始市场特征到六类环境标签的计算正确性，而不只检查标签是否被同步保存。
+- **核心断言**：对每条 Golden vector，系统输出的 label、状态和版本与独立 oracle 一致且唯一。`label_code == raw_payload.regime_state` 只能证明标准化字段与 payload 的同步映射一致，不能证明 `regime_state` 本身由正确算法计算，因此该等式不得作为本子项 PASS 证据。
+- **数据前置**：上游分类服务的输入字段、六类规则、算法版本和 `环境分类 Golden vectors 包`，覆盖六类标签、缺失/invalid 和边界样本；这些数据不属于当前 Factor 4.0 fixture 前置。
+- **结果口径**：Factor 4.0 执行中记录 `NOT_APPLICABLE`，reason=`UPSTREAM_ENVIRONMENT_CLASSIFIER`，不计入 22 项；独立上游专项中，Golden vectors 齐备后任一样本分类、唯一性或版本不一致为 `FAIL`，缺少独立输入/oracle 时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 上游专项 CALC-504-B：分类阈值与状态转移（已排除 Factor 4.0）
+
+- **目标**：在上游环境识别专项中，验证阈值等号、量化精度、迟滞/状态转移和缺失输入的分支。
+- **核心断言**：阈值前、恰好等于阈值、阈值后的标签严格符合版本化规则；若契约有迟滞或前态依赖，状态序列按规定转移且不振荡；缺失/非法特征进入明确的 invalid/not_ready 分支，不被默认成任一正常环境。
+- **数据前置**：上游分类服务每个版本的阈值、比较符、精度及状态转移规则；`环境分类 Golden vectors 包` 提供各边界两侧、等值、前态组合与缺失值样本。
+- **结果口径**：Factor 4.0 执行中记录 `NOT_APPLICABLE`，reason=`UPSTREAM_ENVIRONMENT_CLASSIFIER`，不计入 22 项；独立上游专项中，规则和边界 fixture 齐备后任一错误为 `FAIL`，缺少阈值/状态样本时为 `BLOCKED_DATA_PRECONDITION`。
 
 ### CALC-505 样本门槛与 insufficient_sample
 
@@ -1034,11 +1136,25 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 断言：不满足门槛写 `insufficient_sample`；指标保存缺失原因；不生成 eligible route；不会把样本不足当 500 或成功推荐。
 - 失败级别：P1。
 
+#### 执行子项 CALC-505-A：Validity 门槛边界（需受控 fixture）
+
+- **目标**：逐一验证最低标签天数、有效样本数、覆盖率、OOS 样本数和 CS 资产池门槛的前一档、等值和后一档。
+- **核心断言**：每个门槛的比较符和 Decimal/整数精度与版本化配置一致；门槛以下为 `insufficient_sample` 并保存准确原因、不得生成 eligible route；等值和以上是否通过只按契约判定，不能硬编码 `>` 或 `>=`。
+- **数据前置**：`双分区/阈值包`，可独立控制各门槛而保持其它条件合格，并包含阈值、比较符、精度和 expected status/reason。
+- **结果口径**：边界 fixture 和规则齐备后，状态、原因或 route 准入任一不符即 `FAIL`；没有可精确命中阈值前/等于/后的样本或缺少版本化门槛时为 `BLOCKED_DATA_PRECONDITION`。
+
 ### CALC-506 路由得分重算
 
 - 核对：从 metric 表读取 TS/CS score、profile、权重、归一化和门槛，使用 Decimal 重算 routing_score。
 - 断言：结果与 route 表和 MCP/API 一致；不适用评估类型按配置重新归一；方向和费用假设来自版本化配置，而不是客户端猜测。
 - 失败级别：P0。
+
+#### 执行子项 CALC-506-A：得分、方向与权重独立重算（R0 当前可判定）
+
+- **目标**：从 route 引用的原始 metric evidence 和 `score_rule_version/evaluation_config` 独立重算 routing score。
+- **核心断言**：以 Decimal 应用当前版本的方向、归一化、TS/CS 权重、缺失维度处理和门槛，结果与 route、MCP 和 Backend 的明确返回字段一致；不得使用客户端默认权重，且维度不适用时只能按契约重新归一。
+- **数据前置**：同一稳定快照中的 route、其唯一 TS/CS metric 外键、完整评分配置、方向和精度。当前已有 route 可作 R0 样本；active route 完整性暂缓不影响对已存在行的重算。
+- **结果口径**：证据齐备后，metric 身份、方向、权重、归一化或最终分数任一不一致即 `FAIL`；缺少评分版本、唯一 metric 证据或必要中间字段时为 `BLOCKED_DATA_PRECONDITION`，不得自行补默认值。
 
 ### CALC-507 排名分区
 
@@ -1046,11 +1162,39 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 断言：不同市场/环境/profile 不互相竞争；rank 从正确分区开始；score 越高 rank 越靠前；历史 publication 不混入当前。
 - 失败级别：P1。
 
+#### 执行子项 CALC-507-A：同分稳定排序（R0 部分执行后 BLOCKED_DOC）
+
+- **目标**：验证同一完整排名分区内分数整体降序且重复读取稳定，并识别同分先后规则的文档缺口。
+- **核心断言**：使用 Decimal 数值而非字符串比较 score；非同分项必须严格按分数降序；对同一稳定快照重复查询时，MCP/API/DB 各自返回顺序及 rank 不得随机变化。三份 Lark 均未声明同分 tie-breaker，因此当前不能断言同分项中哪个因子必须排在前面，也不能自行选择 factor ID 等次级键。
+- **数据前置**：当前 route/metric 稳定快照即可执行分数降序和重复读取断言；动态选择有同分或量化后同分的分区用于记录实际顺序。`双分区/阈值包` 可以补同分数据，但不能替代缺失的产品 tie-breaker 契约。
+- **结果口径**：非同分项未按 Decimal 分数降序，或同一稳定快照重复读取的顺序/rank 发生变化时为 `FAIL`；上述可执行断言全部通过后，本子项仍因三份 Lark 未定义 tie-breaker 记录 `BLOCKED`/`BLOCKED_DOC`，不得完整判 PASS，也不得误记为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-507-B：跨分区隔离（需受控 fixture）
+
+- **目标**：确认 market scope、环境、profile、as-of/publication 任一分区键变化都不会影响原分区排名。
+- **核心断言**：向另一个分区加入更高分 route 后，原分区的成员、rank 和顺序完全不变；同因子在不同分区可独立排名，历史 publication 不进入当前分区。
+- **数据前置**：`双分区/阈值包`，至少包含两个仅一个分区键不同的可控分区、各两个以上 route、一个跨分区极高分样本和稳定 publication 身份。
+- **结果口径**：fixture 齐备后，跨分区样本改变原分区成员或 rank 即 `FAIL`；缺少双分区数据、稳定 publication 或明确分区键契约时为 `BLOCKED_DATA_PRECONDITION`。
+
 ### CALC-508 成本后指标
 
 - 核对：交易成本配置、换手、费用后收益/Sharpe 和原始收益。
 - 断言：成本假设来自 batch evaluation_config；费用后结果不会高于无成本结果（除非有明确符号定义）；空值和零值语义正确；route evidence 可追溯。
 - 失败级别：P1。
+
+#### 执行子项 CALC-508-A：零成本恒等关系（需原始数据）
+
+- **目标**：在手续费、滑点和其它契约成本均为零时，验证净收益序列及其派生指标与毛收益完全一致。
+- **核心断言**：逐期 `net_return == gross_return`，累计收益、Sharpe、最大回撤及契约声明的其它成本后指标与无成本值一致；零成本必须按数值 0 处理，不能被当作缺失或回退默认费率。
+- **数据前置**：`多资产手算矩阵包` 中原始信号/仓位、价格或收益、换手明细、全零成本配置和对应毛/净指标证据。
+- **结果口径**：原始行和零成本配置齐备后，任一净值或派生指标偏离独立 oracle 即 `FAIL`；缺少仓位/换手、收益序列或可确认的零成本配置时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-508-B：非零成本独立重算（需原始数据）
+
+- **目标**：验证非零手续费、滑点及其它已声明费用按正确换手时点、方向和单位扣减。
+- **核心断言**：逐期成本和净收益按 batch `evaluation_config` 的版本化公式重算一致；首次建仓、调仓、平仓和不交易时点处理正确；派生净指标来自净收益序列，而不是仅在最终收益上一次性减费。
+- **数据前置**：`多资产手算矩阵包` 中包含建仓/加减仓/反向/平仓/零换手的信号或仓位序列、原始收益、费率/滑点配置、单位和中间成本证据。
+- **结果口径**：成本输入和公式齐备后，逐期成本、净收益或派生指标任一不一致即 `FAIL`；缺少仓位/换手明细、成本版本或净收益证据时为 `BLOCKED_DATA_PRECONDITION`。
 
 ### CALC-509 数值精度与 null
 
@@ -1060,18 +1204,53 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 
 ### CALC-510 因子公式窗口一致性（条件执行）
 
-- 目的：检查因子公式声明的窗口与指标请求/结果窗口一致，特别是 VWAP 等滚动函数。
+- 目的：检查因子公式声明、可执行公式、输入字段、窗口与指标请求/结果一致；本阶段暂不执行 VWAP 累计/滚动窗口问题。
 - 前置：当前工具清单/因子详情必须明确提供公式、窗口和原始样本来源；`factor_get_formula`、`factor_get_metrics` 不是本规约默认存在的工具名，只有动态发现并获文档授权时才调用。
-- 方法：动态选择可读取公式的因子，解析不可变公式证据和 `factor_window_bars/window_scope`；对可获取的原始价格/成交量样本使用独立 oracle 计算滚动 VWAP，并与结果对比。
-- 断言：公式明确使用与评估窗口一致的滚动窗口；不能把累计 VWAP 当滚动 VWAP；公式版本、指标窗口和 batch config 可互相回指。
+- 方法：动态选择可读取公式的因子，解析定义、不可变公式证据、输入字段、`factor_window_bars/window_scope` 和运行时版本；有原始样本时再使用独立 oracle 重算。
+- 断言：声明窗口和字段必须实际进入可执行公式语义；公式版本、指标窗口和 batch config 可互相回指；本轮已暂缓的 VWAP 分支不作为 PASS/FAIL 门禁。
 - 定性：若发现只影响旧因子公式而不影响 4.0 路由，记录为数据/公式问题，不归因于 MCP 协议；是否纳入当前发布门禁由产品另行确认。缺少公式或独立 oracle 时标记 `BLOCKED_DATA_PRECONDITION`，不猜测数值。
 - 失败级别：P0（有独立 oracle 且已影响推荐数值）/P1（单因子影响）。
+
+#### 执行子项 CALC-510-A：公式静态一致性（R0 当前可判定）
+
+- **目标**：不依赖原始行情，静态核对因子定义、声明窗口、输入字段、不可变公式证据和实际执行版本是否自洽。
+- **核心断言**：声明的字段都能在可执行公式和数据 schema 中找到；固定周期/窗口变体必须把各自参数带入公式；detail、run、metric 和 batch 引用同一公式版本/hash，不允许定义描述与运行公式表达不同经济含义。
+- **数据前置**：只读取得 factor detail、definition、immutable formula evidence、输入 schema、completed run/metric 和版本/hash；不要求原始 bar。对象缺一时只阻断对应因子，不用别的近似因子代替。
+- **结果口径**：证据齐备后发现字段、窗口、经济含义或版本引用矛盾即 `FAIL`；缺少定义、可执行公式或版本链时为 `BLOCKED_DATA_PRECONDITION`。命中既有根因时必须使用 Bug Registry 固定中文标题去重。
+
+#### 执行子项 CALC-510-B：公式算子数值 Oracle（需原始数据）
+
+- **目标**：对当前公式实际使用的 rolling、shift、diff、pct_change、rank、zscore 等算子建立独立数值 oracle，验证窗口、warmup、缺失值和分组语义。
+- **核心断言**：每个受测算子在单调、常数、非线性、含缺失及分组序列上的逐点结果与独立实现一致；复合公式按表达式顺序计算，不能只比最终聚合 metric 或复用服务端同一实现作为 oracle。
+- **数据前置**：`多资产手算矩阵包` 中可手算的合成序列、算子参数、预期逐点输出和服务端实际公式执行结果；只测试当前公式出现且契约已定义的算子。
+- **结果口径**：算子输入、语义和逐点结果齐备后，warmup、窗口、位移、分组或数值任一不一致即 `FAIL`；无法取得服务端逐点公式输出或算子语义未版本化时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-510-C：已知公式回归（R0 当前可判定）
+
+- **目标**：对已经登记的公式根因做固定回归，确认修复作用于持久化定义、不可变公式证据和后续运行版本。
+- **核心断言**：DPO 使用 `SMA(close, window) - close.shift(window/2 + 1)` 的契约语义，而不是位移均线；48h/72h 固定周期变体把声明窗口带入各自公式和依赖跨度；修复后新 run/metric 不再引用旧公式 hash。不得把详情文案改变但运行时仍引用旧证据判为通过。
+- **数据前置**：当前 detail、immutable formula evidence、公式版本/hash 和最新 completed run；静态证据可直接判定。若要判定历史数值已回填，则另需原始样本，该扩展不影响本 R0 静态回归结论。
+- **结果口径**：任一层仍保留错误公式或新运行仍引用旧 hash 即 `FAIL`，分别沿用固定中文标题“DPO 公式错误地位移均线而非价格序列”或“固定周期因子公式未应用声明窗口”；关键公式/运行证据不可读取时为 `BLOCKED_DATA_PRECONDITION`。本子项明确不包含已暂缓的“VWAP 实际为累计 VWAP 而非滚动窗口”。
 
 ### CALC-511 母子因子快照
 
 - 核对：建批次时的关系快照、评估时的 factor_ref 和版本。
 - 断言：母因子评估输入是创建批次时的全部子因子；关系后来变化不改变旧 batch；子因子直接使用自身数据。
 - 失败级别：P1。
+
+#### 执行子项 CALC-511-A：母因子聚合独立重算（需原始数据）
+
+- **目标**：验证母因子按 batch 创建时冻结的全部子因子及版本化聚合规则生成结果。
+- **核心断言**：成员集合无遗漏、重复或越版本；对子因子逐行对齐后，权重、方向、缺失成员和归一化按契约处理，母因子逐点值及派生 metric 与独立重算一致；子因子直接评估不得误走母因子聚合。
+- **数据前置**：`母子版本矩阵包`，包含一个至少有两个子因子的母因子、关系 snapshot、各子因子的逐点值/版本、聚合配置和母因子实际输出。
+- **结果口径**：关系、原始子值和聚合规则齐备后，成员身份或任一重算结果不一致即 `FAIL`；缺少关系快照、子因子逐点值或聚合规则时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-511-B：母子关系版本隔离（需受控 fixture）
+
+- **目标**：验证母子关系增删、换版或调整权重后，旧 batch 保留旧关系，新 batch 使用新关系。
+- **核心断言**：变更前后的两个 batch 分别引用各自不可变 relation snapshot/hash；旧 batch 的成员和结果不变，新 batch 不混入旧版本；回放任一 batch 都能唯一恢复当时成员集合。
+- **数据前置**：`母子版本矩阵包` 中专用母因子、至少两个关系版本、可创建两个隔离 batch 的权限和完整清理/恢复能力。
+- **结果口径**：fixture 齐备后，旧 batch 被新关系污染、两个 batch 关系/hash 混用或无法回放即 `FAIL`；无法安全变更关系、创建新 batch 或缺少 snapshot/hash 时为 `BLOCKED_DATA_PRECONDITION`。
 
 ### CALC-512 重算可重复性
 
@@ -1080,6 +1259,20 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 断言：相同输入的指标、hash、状态和 route 排名可重复；不同 code/config/hash 生成新批次而不是覆盖旧结果。
 - 失败级别：P1。
 
+#### 执行子项 CALC-512-A：真正重复计算一致性（需受控 fixture）
+
+- **目标**：用两次真实、相互独立的计算验证确定性，避免把读取同一幂等结果误当成重算一致。
+- **核心断言**：固定原始数据、环境/关系 snapshot、公式/code/config 版本和随机种子后，两次独立计算的样本/公式/config hash、状态、metric、validity 和分区内排序一致；批次/任务 ID 可不同，但业务输出相同。
+- **数据前置**：`母子版本矩阵包` 中冻结的完整输入、允许创建两个独立 batch 的专用 scope、可确认确实执行了两次的 task/run 证据和清理能力。
+- **结果口径**：确认两次独立执行且输入相同后，任一业务 hash、状态或数值超出契约容差即 `FAIL`；只能重读同一 batch、输入未冻结或缺少第二次执行证据时为 `BLOCKED_DATA_PRECONDITION`。
+
+#### 执行子项 CALC-512-B：代码/配置/公式版本隔离（需受控 fixture）
+
+- **目标**：单独改变 code、evaluation config 或公式版本之一，验证新结果新建且旧结果不被覆盖。
+- **核心断言**：每次只变一个版本维度都产生可区分的新 batch/run 和对应 hash；旧 batch、metric、route/history 仍引用旧版本并可回放；新旧证据不得串用或静默覆写。
+- **数据前置**：`母子版本矩阵包` 中固定原始输入、至少两组可控版本、专用 scope、两个 batch 的完整版本/hash/metric 证据和恢复清理方案。
+- **结果口径**：版本 fixture 齐备后，变化未产生新身份/hash、旧结果被覆盖或新旧引用串联即 `FAIL`；无法安全切换版本、创建隔离 batch 或读取历史证据时为 `BLOCKED_DATA_PRECONDITION`。
+
 ### CALC-513 route 与环境快照引用完整性
 
 - 目的：确认推荐 route 引用的环境、批次和可见性边界真实存在且语义一致。
@@ -1087,6 +1280,26 @@ GET  ${SCHEDULER_BASE_URL}/api/v1/scheduler/runs/<run_id>/logs?tail=200
 - 核对：逐条 route 的 `eval_batch_id`、`publication_uid`、`label_kind`、`market_scope`、`as_of_time` 与 batch/publication 对账；若字段语义明确为 snapshot 成员日期，则不得命中 `missing_dates` 或不存在的 daily current 行。
 - 断言：外键和业务引用唯一、可回放；route 不引用不可见/缺失环境或另一个 scope/batch；语义未定义时不把日期差异单独定性，记录待确认项。
 - 失败级别：P0（明确违反可见性/外键契约）/P1（可回放信息缺失）。
+
+QuestTest 的正式入口为 `tests/cases/factor4/test_route_environment_references.py`。它只通过
+`Factor4CalculationService.check_route_environment_references` 读取同一只读快照；缺少
+`environment_snapshot` 正文或日期语义未定义时分别输出 `BLOCKED_DATA_PRECONDITION` / `BLOCKED_DOC`，
+不会把 route 自带 evidence 或 HTTP 200 当作引用校验通过。离线行为覆盖位于
+`tests/unit/test_factor4_route_environment_references.py`，不计入真实环境 PASS。
+
+### 受控 Fixture 包建议
+
+Factor 4.0 的 17 个数据前置子项，以及未来可能独立执行的 2 个上游分类专项，应尽量复用以下 5 个 fixture 包，避免按 Case 各造一套不可对账的数据。所有写入包只能用于测试环境的专用 scope，以 `RUN_ID` 标记归属，执行后验证恢复/清理；原始输入、版本配置和 expected oracle 需一同版本化。
+
+| Fixture 包 | 最小内容 | 覆盖子项 |
+| --- | --- | --- |
+| 环境分类 Golden vectors 包 | 六类环境的独立输入/输出向量、阈值前/等于/后样本、前态/迟滞序列、缺失/invalid、算法版本 | `CALC-504-A/B`；仅用于独立的上游环境识别专项，不计 Factor 4.0 |
+| 多资产手算矩阵包 | 多资产多时点原始 bar、因子逐点值、forward return、两种频率、缺口、fold/OOS、仓位/换手、零/非零成本和逐点 oracle | `CALC-501-A/B`、`CALC-502-A/B`、`CALC-503-A/B`、`CALC-508-A/B`、`CALC-510-B` |
+| revision/PIT 边界包 | 同日期多 revision、精确 `available_at` 三点边界、可冻结的 batch snapshot 和可恢复关系变更 | `ENV-104-A`、`LIFE-405-A` |
+| 双分区/阈值包 | TS-only/CS-only/both/neither、门槛前/等于/后、两个仅一个分区键不同的 route 集合同分样本 | `CALC-501-C`、`CALC-505-A`、`CALC-506-A`、`CALC-507-A/B`；`CALC-501-C`/`CALC-506-A` 有自然数据时优先只读复用，`CALC-507-A` 仍受 tie-breaker 文档缺口阻断 |
+| 母子版本矩阵包 | 多子因子逐点值、两版关系/权重、两版 code/config/formula、冻结输入和两次独立计算证据 | `CALC-511-A/B`、`CALC-512-A/B` |
+
+fixture 缺失时必须逐子项给出精确缺口，例如 `RAW_FORWARD_RETURNS_MISSING`、`MULTI_REVISION_SAMPLE_MISSING`、`FOLD_BOUNDARIES_MISSING` 或 `SECOND_INDEPENDENT_RUN_MISSING`，统一映射到 `failure_class=BLOCKED_DATA_PRECONDITION`。不得把 17 项合并成一个笼统的“数据库无数据”，也不得把离线 oracle 自身通过统计成真实 Factor 4.0 服务通过。
 
 ## 14. D1：数据库、审计与权限
 

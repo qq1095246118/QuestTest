@@ -193,7 +193,7 @@ class DatabaseClient:
     def from_settings(cls, settings: DatabaseSettings) -> DatabaseClient:
         """根据类型化配置创建 SQLite 或 MySQL 数据库客户端。
 
-        参数 ``settings`` 包含驱动和连接字段；支持 ``sqlite`` 与 ``mysql``。
+        参数 ``settings`` 包含驱动、连接字段以及 MySQL 连接、读取、写入超时；支持 ``sqlite`` 与 ``mysql``。
         返回 ``DatabaseClient``；不支持的驱动或缺少 MySQL 必填字段时抛出 ``ValueError``。
         """
 
@@ -235,6 +235,9 @@ class DatabaseClient:
                     charset="utf8mb4",
                     cursorclass=pymysql.cursors.DictCursor,
                     autocommit=False,
+                    connect_timeout=settings.connect_timeout_seconds,
+                    read_timeout=settings.read_timeout_seconds,
+                    write_timeout=settings.write_timeout_seconds,
                 )
 
             return cls(connection_factory)

@@ -49,6 +49,9 @@ export AUTOMATION_DB_PORT='3306'
 export AUTOMATION_DB_NAME='automation_test'
 export AUTOMATION_DB_USERNAME='automation_user'
 export AUTOMATION_DB_PASSWORD='replace-with-secret'
+# 如需覆盖 config/test.yaml 中的 live 主机，必须同时登记裸主机名（逗号分隔）
+export AUTOMATION_TEST_ALLOWED_HOSTS='test-factor-backend.questvector.ai,test-factor-frontend.questvector.ai'
+export AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS='43.167.190.122'
 ```
 
 当前项目只运行测试环境，`config/test.yaml` 保留已授权的测试地址、账号和数据库配置；不要把这些配置复制到生产环境。生产密码、Token 和数据库写入凭据只能通过环境变量或密钥服务注入。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
@@ -66,7 +69,59 @@ export AUTOMATION_DB_PASSWORD='replace-with-secret'
 .venv/bin/python scripts/run_tests.py --env test --marker unit
 ```
 
-默认命令不会访问真实接口或数据库。组合因子台用例必须显式使用 `--live`，并且基础地址必须包含 `/api/v1`：
+默认命令不会访问真实接口或数据库。
+
+Factor 4.0 当前默认验收范围为已持久化计算结果到准入、评分、排名、路由及 MCP 输出，不重算原始公式、IC 或收益。真实执行只允许显式使用 `--live --env test`，不会接受 `AUTOMATION_LIVE=true` 或默认环境名代替这两个命令行门禁。MCP URL 必须精确指向测试环境的 `/mcp/factor-data`，数据库必须是测试 MySQL。可以使用 `config/test.yaml` 中已授权的测试配置，也可以通过 `AUTOMATION_FACTOR_DATA_MCP_URL`、`AUTOMATION_FACTOR_DATA_MCP_TOKEN` 和 `AUTOMATION_DB_*` 覆盖：
+
+live 请求还会逐一匹配 `environment_safety.allowed_hosts` 和 `environment_safety.allowed_database_hosts` 白名单；命中生产域名、未登记主机或空白白名单会在发出请求前阻断。通过环境变量覆盖地址时，必须同步设置 `AUTOMATION_TEST_ALLOWED_HOSTS` 或 `AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS`，白名单只接受裸主机名，不接受 URL、路径或通配符。
+
+```bash
+# 仅运行 Factor 4.0 R0 结果级检查（不触发数学扫描）
+.venv/bin/python -m pytest tests/cases/factor4/test_calculation_logic.py -v --live --env test
+
+# 运行专项并生成 JUnit XML
+.venv/bin/python -m pytest tests/cases/factor4/test_calculation_logic.py -v --live --env test \
+  --junitxml reports/factor4-calculation.xml
+
+# 运行默认结果级验收；原始计算与技术专项在 Fixture 前排除
+.venv/bin/python -m pytest tests/cases/factor4 -v --live --env test
+
+# 仅验收已发布的最终结果（不需要原始因子值/收益/持仓明细）
+.venv/bin/python -m pytest tests/cases/factor4/test_final_results.py -v --live --env test
+
+# 迁移后的独立 factor_rank、IC 汇总、scope PIT 与公式完成边界
+.venv/bin/python -m pytest tests/cases/factor4/test_summary_business.py -v --live --env test
+```
+
+专项只在 Service 返回结构化 `PASS` 时计为 pytest passed；`FAIL` 转成带 Case ID 和失败断言的 pytest failure；`BLOCKED_DATA_PRECONDITION`、`BLOCKED_DOC` 和其它明确阻断转成 pytest skipped，并把完整阻断分类和原因保存在终端摘要及 JUnit `<skipped message>` 中。阻断不会使用空断言伪装成 PASS。
+
+历史脚本迁移登记保留；入口合并或移出默认范围不删除历史来源，也不把登记自检或固定 skip 计入业务覆盖。
+已删除来源的具体替代入口、备份恢复方式及本轮验证结果见 [脚本迁移记录](docs/factor4-script-migration.md)。
+默认选中用例数量以 `python3 -m pytest tests/cases/factor4 --collect-only -qq` 为准；
+脚本迁移、参数化实例、离线单元测试和真实环境通过数量分别统计，不能相互替代。
+已实现但按原测试范围暂缓的异常、兼容和并发用例带 `factor4_deferred` 标记，默认在 Fixture 前跳过；
+只有明确决定重新纳入该范围时才添加 `--include-factor4-deferred`，测试环境门禁仍然生效。
+
+原始计算专项标记为 `factor4_internal_calculation`，技术专项标记为 `factor4_technical`，默认在 Fixture 初始化前
+`deselected`，不计作缺数据、未完成或通过。两类开关独立，开启原有 deferred 开关不会顺带执行它们；历史专项代码不删除。
+
+```bash
+# 只查看原始计算专项清单，不执行服务端计算
+python3 -m pytest tests/cases/factor4 --collect-only -q \
+  --include-factor4-internal-calculation -m factor4_internal_calculation
+
+# 只查看技术专项清单
+python3 -m pytest tests/cases/factor4 --collect-only -q \
+  --include-factor4-technical -m factor4_technical
+
+# 查看保留的全部用例，包括默认排除/暂缓的专项；此命令不访问真实环境
+python3 -m pytest tests/cases/factor4 --collect-only -qq \
+  --include-factor4-internal-calculation --include-factor4-technical --include-factor4-deferred
+```
+
+范围、合并前后入口及待确认契约见 [Factor 4.0 结果级验收范围](docs/factor4-result-acceptance-scope.md)。
+
+组合因子台用例必须显式使用 `--live`，并且基础地址必须包含 `/api/v1`：
 
 ```bash
 # 表单、工作单及真实 Agent Run 接口

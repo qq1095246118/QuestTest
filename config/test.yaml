@@ -15,6 +15,10 @@ factor_combo:
   agent_base_url: "https://test-factor-frontend.questvector.ai/api/v2"
   worker_contracts_enabled: true
   cleanup_test_data: true
+factor_data:
+  mcp_url: "https://test-factor-frontend.questvector.ai/mcp/factor-data"
+  auth_token: "naf_mcp__gO-wkfm_PtyNd9FGzq-JwTF3dWoGAgEPwh0R5FMIFE7Lhivnfp0"
+  protocol_version: "2025-06-18"
 database:
   driver: mysql
   host: "43.167.190.122"
@@ -22,3 +26,9 @@ database:
   name: "factor_db"
   username: "factor_app"
   password: "-RL1Zivb6wIzf4CmqJp6KQ6p"
+environment_safety:
+  allowed_hosts:
+    - "test-factor-backend.questvector.ai"
+    - "test-factor-frontend.questvector.ai"
+  allowed_database_hosts:
+    - "43.167.190.122"
