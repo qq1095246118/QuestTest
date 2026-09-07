@@ -4,80 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="因子库4.0测试用例">
-      <change beforePath="$PROJECT_DIR$/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/client.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/default.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/default.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/test.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/test.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db/client.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db/factor4_calculation_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_calculation_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/automation-test-framework-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/automation-test-framework-design.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/factor-4-ai-execution-test-cases.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor-4-ai-execution-test-cases.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/factor4-bug-registry.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor4-bug-registry.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/test_settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/test_settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_calculation_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_calculation_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/active_formula_semantic_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/auto_run_selection_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/batch_cursor_boundary_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/calc508_env_met_reconcile.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/catalog_boundaries_resume_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/catalog_deep_expansion.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/catalog_deep_readonly.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/catalog_deep_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/catalog_kb_remaining_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/catalog_search_functional_deep.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/critical_readonly_gap_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/cross_invariants_readonly.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/cross_scope_identity_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/cross_scope_metrics_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/current_endpoint_deep_regression.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/current_endpoint_functional_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/daily_reconcile_readonly.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/daily_revision_precondition_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/db613_targeted_closure.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/db_route_audit_once.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/direct_functional_deep.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/dpo_formula_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/feedback_status_input_matrix.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/filter_error_kb_deep.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/fixed_horizon_adjudication.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/fixed_horizon_family_audit.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/fixed_horizon_formula_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/formula_integrity_audit.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/functional_extra_r0.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/iv_rv_definition_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/kb_topup_route_audit.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/lifecycle_readonly_resume.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/metric_scope_visibility_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/metrics_deep_minimal.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/protocol_boundary_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/protocol_gap_closure.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/rank_functional_expansion.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/rank_targeted_current.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/rank_targeted_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/ranking_parent_snapshot_closure.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/readonly_invariant_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/recheck_aggregate_window_candidates.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/recommendation_pit_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/resume_rank_adjudication.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/resume_slice_scopes_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/route_integrity_closure.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/semantic_formula_scan.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/slice_reconcile_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/status_permission_closure.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/targeted_5921_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/targeted_formula_metadata_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/temporal_oracle_closure.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/tool_matrix_pit_probe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/truerange_active_recheck.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/validity_boundary_deep.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tmp/validity_visibility_recheck.py" beforeDir="false" />
-    </list>
+    <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="因子库4.0测试用例" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -197,7 +124,15 @@
       <option name="project" value="LOCAL" />
       <updated>1788507800541</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="因子库4.0测试用例">
+      <option name="closed" value="true" />
+      <created>1788775287847</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1788775287847</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
