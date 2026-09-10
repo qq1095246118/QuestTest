@@ -5,37 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="因子库4.0测试用例">
-      <change beforePath="$PROJECT_DIR$/db/factor4_read_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_read_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/factor4-bug-registry.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor4-bug-registry.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/factor4-existing-case-corrections.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor4-existing-case-corrections.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/factor4-result-acceptance-scope.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor4-result-acceptance-scope.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/factor4-script-migration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor4-script-migration.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_calculation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_calculation_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_case_registry.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_case_registry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_catalog_extension_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_catalog_extension_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_formula_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_formula_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_read_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_read_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_recommendation_replay_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_recommendation_replay_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_recommendation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_recommendation_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_research_search_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_research_search_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/service/factor4_summary_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_summary_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_calculation_logic.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_calculation_logic.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_catalog_extension_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_catalog_extension_business.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_final_results.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_final_results.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_migrated_readonly_scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_migrated_readonly_scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_recommendation_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_recommendation_business.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_recommendation_replay_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_recommendation_replay_business.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_research_search_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_research_search_business.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_scoring_environment_matrix.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_scoring_environment_matrix.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_summary_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_summary_business.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_validity_and_slices_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_validity_and_slices_business.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_calculation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_calculation_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_catalog_extension_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_catalog_extension_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_read_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_read_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_recommendation_replay_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_recommendation_replay_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_recommendation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_recommendation_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_scoring_result_assertions.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_scoring_result_assertions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_summary_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_summary_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,7 +13,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="15611" />
+    <option name="cachedIndexableFilesCount" value="15631" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -171,8 +141,27 @@
       <option name="project" value="LOCAL" />
       <updated>1788793735601</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="因子库4.0测试用例">
+      <option name="closed" value="true" />
+      <created>1789010165768</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1789010165768</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="大版本更新" />
