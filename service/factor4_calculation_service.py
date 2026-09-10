@@ -631,12 +631,14 @@ class Factor4CalculationService:
         market_scope: str = "all",
         route_profile_key: str = "default",
     ) -> Factor4CalculationReport:
-        """Audit persisted admission, scores, ranks and MCP formula projections only.
+        """Audit persisted admission and MCP formula projections for one partition.
 
         The explicit partition is read through the repository and MCP is initialized
-        once. Returns four structured checks without scanning operator mathematics,
-        DPO/horizon regressions or normalized-formula equivalence. Network, protocol
-        and database exceptions propagate; no computation or database write occurs.
+        once. Returns two structured checks without scanning operator mathematics,
+        DPO/horizon regressions or normalized-formula equivalence. Dedicated
+        all-partition result cases own scoring and ranking, so this path neither
+        repeats those checks nor rereads routes. Network, protocol and database
+        exceptions propagate; no computation or database write occurs.
         """
         self._reset_mcp_cache()
         self._mcp_api.initialize(protocol_version=self._protocol_version)
@@ -648,12 +650,7 @@ class Factor4CalculationService:
         validity = _with_additional_findings(
             self.check_any_valid_scope(snapshot), _membership_difference_issues(snapshot),
         )
-        scoring = self.check_route_score_recalculation(snapshot)
-        repeated = self._repository.read_published_route_snapshot(
-            market_scope=market_scope, route_profile_key=route_profile_key,
-        )
-        ranking = self.check_rank_stability(snapshot, repeated)
-        checks = (validity, scoring, ranking, formula)
+        checks = (validity, formula)
         return Factor4CalculationReport(
             batch_uid=snapshot.batch.batch_uid, captured_at=snapshot.captured_at,
             market_scope=snapshot.batch.market_scope,

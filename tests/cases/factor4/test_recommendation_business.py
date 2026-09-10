@@ -7,7 +7,7 @@ import pytest
 from db.factor4_publication_repository import Factor4PublicationRepository, PublicationHistory
 from db.factor4_calculation_repository import Factor4CalculationRepository
 from db.factor4_read_repository import Factor4ReadRepository
-from service.factor4_read_service import Factor4ReadService, ReadCheck, ReadContractError, ReadPrecondition, visible_daily_rows
+from service.factor4_read_service import LABELS, Factor4ReadService, ReadCheck, ReadContractError, ReadPrecondition, visible_daily_rows
 from service.factor4_recommendation_service import Factor4RecommendationService, check_forecast_probabilities
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression, pytest.mark.factor4_calculation]
@@ -62,3 +62,25 @@ def test_ready_forecast_has_six_normalized_probabilities(
     except ReadContractError as error:
         pytest.fail(str(error), pytrace=False)
     _verify(lambda: check_forecast_probabilities(traversal.rows))
+
+
+@pytest.mark.parametrize("label", LABELS)
+def test_each_forecast_label_recommends_only_its_visible_historical_routes(
+    factor4_read_service: Factor4ReadService, factor4_read_repository: Factor4ReadRepository,
+    publication_history: PublicationHistory, label: str, record_property: Callable[[str, object], None],
+) -> None:
+    """Read one real forecast/publication intersection per label and market/profile.
+
+    Correct empty recommendations are valid business outcomes; another environment's
+    routes cannot substitute. Missing samples skip only after all output failures are
+    asserted. Service/API failures propagate, without live writes or raw recomputation.
+    """
+    result = Factor4RecommendationService(factor4_read_service.api).check_forecast_label_history(
+        publication_history, factor4_read_repository.daily_snapshot(), label)
+    record_property("forecast_label", label)
+    record_property("forecast_history_samples", result.evidence["samples"])
+    record_property("forecast_history_blocked", result.evidence["blocked"])
+    assert not result.issues, result.issues[:30]
+    if result.evidence["blocked"]:
+        pytest.skip("BLOCKED_DATA_PRECONDITION: forecast label history: " + str(result.evidence["blocked"][:15]))
+    assert result.checked_count > 0

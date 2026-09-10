@@ -95,11 +95,13 @@ class ToolPage:
 
 @dataclass(frozen=True)
 class PageTraversal:
-    """一次有界完整分页；不序列化正文/游标，不把达到执行上限视为读完。"""
+    """分页结果及终态；正文/游标不进入 repr，受限或阻塞不代表完整读取。"""
 
     rows: tuple[dict[str, Any], ...] = field(repr=False)
     pages: tuple[ToolPage, ...] = field(repr=False)
     issues: tuple[str, ...] = ()
+    termination: str = "complete"
+    blocked: tuple[str, ...] = ()
 
 
 def read_tool_body(response: MCPResponse) -> dict[str, Any]:
@@ -216,30 +218,40 @@ class Factor4ReadService:
         self.api = api
 
     def catalog_pages(self, subset: CatalogSubset, *, updated_after: datetime | None = None) -> PageTraversal:
-        """遍历已发现小目录分区；返回所有页，循环游标/超限/错误响应抛安全异常。"""
+        """读取目录分区及可选更新时间筛选，返回已读页和预算/阻塞终态；契约错误透传。"""
         filters = CatalogFilter(subset.kind, subset.status, subset.category)
         return self._traverse(lambda cursor: self.api.search_catalog(
             filters, limit=3, cursor=cursor,
             updated_after=updated_after.isoformat() if updated_after else None,
-        ), page_size=3, max_pages=len(subset.rows) // 3 + 3)
+        ), page_size=3, max_pages=len(subset.rows) // 3 + 3, catalog_budget=True)
 
     def catalog_query(self, subset: CatalogSubset, query: str) -> PageTraversal:
         """Search one discovered catalog partition by exact query text and paginate it.
 
         Blank query is rejected before I/O; returned pages retain the same status/category
-        filters as the discovered partition and are bounded by the normal traversal cap.
+        filters as the discovered partition. Declared budgets stop the chain; dependency
+        blocks retain earlier pages for validation. Contract errors propagate.
         """
         if not isinstance(query, str) or not query.strip():
             raise ValueError("query must not be blank")
         filters = CatalogFilter(subset.kind, subset.status, subset.category)
         return self._traverse(lambda cursor: self.api.search_catalog(
             filters, limit=3, cursor=cursor, query=query,
-        ), page_size=3, max_pages=3)
+        ), page_size=3, max_pages=len(subset.rows) // 3 + 3, catalog_budget=True)
 
     def check_catalog_members(self, subset: CatalogSubset, traversal: PageTraversal) -> ReadCheck:
-        """对账目录实体/状态/币种分类和完整集合；返回差异，不抛业务断言。"""
-        result = compare_rows(traversal.rows, subset.rows, _CATALOG_FIELDS)
-        issues = list(result.issues)
+        """核对目录页的实体和筛选，只有自然结束核对完整集合；返回差异及覆盖范围。"""
+        return self._check_catalog_selection(subset, traversal, subset.rows)
+
+    def _check_catalog_selection(
+        self, subset: CatalogSubset, traversal: PageTraversal, expected: Sequence[Mapping[str, Any]],
+    ) -> ReadCheck:
+        actual_ids = {row["id"] for row in traversal.rows
+                      if isinstance(row.get("id"), int) and not isinstance(row["id"], bool)}
+        complete = traversal.termination == "complete"
+        compared = expected if complete else [row for row in expected if row["id"] in actual_ids]
+        result = compare_rows(traversal.rows, compared, _CATALOG_FIELDS)
+        issues = [*traversal.issues, *result.issues]
         for row in traversal.rows:
             if row.get("factor_ref") != f"{subset.kind}:{row.get('id')}" or row.get("kind") != subset.kind:
                 issues.append("catalog:factor_identity")
@@ -247,7 +259,20 @@ class Factor4ReadService:
                 issues.append("catalog:status_filter")
             if subset.category not in (row.get("library_coin_categories") or []):
                 issues.append("catalog:category_filter")
-        return ReadCheck(result.checked_count, tuple(issues), result.evidence)
+        full_membership = complete and not any(
+            issue.startswith(("missing_id=", "unexpected_id=", "api:invalid_id", "api:duplicate_id="))
+            for issue in result.issues
+        )
+        evidence = {
+            **result.evidence, "blocked": traversal.blocked,
+            "catalog_traversal": traversal.termination, "catalog_page_count": len(traversal.pages),
+            "catalog_returned_count": len(traversal.rows), "catalog_returned_unique_count": len(actual_ids),
+            "catalog_database_unique_count": len({row["id"] for row in expected}),
+            "catalog_full_membership_verified": full_membership,
+            "catalog_completeness": "verified" if full_membership else "not_verified",
+            "catalog_budget_code": "CATALOG_CURSOR_BUDGET_REACHED" if traversal.termination == "bounded" else None,
+        }
+        return ReadCheck(max(1, result.checked_count), tuple(dict.fromkeys(issues)), evidence)
 
     def check_catalog_stats(self, subset: CatalogSubset) -> ReadCheck:
         """读取同一目录能力的统计并核对 total/group 自洽；统计口径由服务返回值决定。
@@ -272,12 +297,27 @@ class Factor4ReadService:
         return ReadCheck(max(1, len(subset.rows)), tuple(issues))
 
     def check_catalog_replay(self, subset: CatalogSubset, initial: PageTraversal) -> ReadCheck:
-        """重新读取同一分区并核对全量顺序/字段；不会用缓存代替重复请求。"""
+        """重读目录核对已返回前缀；只有两次自然完结证明全量稳定，异常按分页契约处理。"""
         repeated = self.catalog_pages(subset)
-        issues = list(repeated.issues)
-        if repeated.rows != initial.rows:
+        first = self.check_catalog_members(subset, initial)
+        second = self.check_catalog_members(subset, repeated)
+        issues = [*first.issues, *second.issues]
+        full_replay = initial.termination == repeated.termination == "complete"
+        length = min(len(initial.rows), len(repeated.rows))
+        if (full_replay and repeated.rows != initial.rows
+                or not full_replay and repeated.rows[:length] != initial.rows[:length]):
             issues.append("catalog:repeat_read_changed")
-        return ReadCheck(len(initial.rows), tuple(issues))
+        evidence = {**second.evidence, "blocked": (*initial.blocked, *repeated.blocked),
+                    "catalog_initial_traversal": initial.termination,
+                    "catalog_initial_returned_count": len(initial.rows),
+                    "catalog_repeat_full_verified": full_replay and not issues}
+        if not full_replay:
+            terminal = ("invalid" if "invalid" in {initial.termination, repeated.termination}
+                        else "blocked" if evidence["blocked"] else "bounded")
+            evidence.update(catalog_traversal=terminal, catalog_full_membership_verified=False,
+                            catalog_completeness="not_verified",
+                            catalog_budget_code=first.evidence["catalog_budget_code"] or second.evidence["catalog_budget_code"])
+        return ReadCheck(max(first.checked_count, second.checked_count), tuple(dict.fromkeys(issues)), evidence)
 
     def check_catalog_updated_boundary(self, subset: CatalogSubset, offset: int) -> ReadCheck:
         """对动态 updated_at 的前/等/后三个秒级点验证严格大于筛选；offset 仅允许 -1/0/1。"""
@@ -289,8 +329,8 @@ class Factor4ReadService:
         boundary = sorted(times)[len(times) // 2] + timedelta(seconds=offset)
         expected = [row for row in subset.rows if row.get("updated_at") and _time(row["updated_at"], db_local=True) > boundary]
         actual = self.catalog_pages(subset, updated_after=boundary)
-        check = compare_rows(actual.rows, expected, _CATALOG_FIELDS)
-        return ReadCheck(max(1, check.checked_count), (*check.issues, *actual.issues), {**check.evidence, "offset_seconds": offset})
+        check = self._check_catalog_selection(subset, actual, expected)
+        return ReadCheck(check.checked_count, check.issues, {**check.evidence, "offset_seconds": offset})
 
     def check_details_batch(self, subset: CatalogSubset, detail_level: str) -> ReadCheck:
         """Compare required identity and level-specific common single/batch fields.
@@ -340,27 +380,12 @@ class Factor4ReadService:
                         issues.append(f"detail:database_field={field}")
         return ReadCheck(len(refs), tuple(dict.fromkeys(issues)))
 
-    def check_details_executable_common_fields(self, subset: CatalogSubset) -> ReadCheck:
-        """核对 executable single/batch 详情的公共字段和可执行定义字段。
-
-        MCP 的 batch 结果允许省略 children/relations，但不得改变身份、版本及
-        executable 定义的公共投影；错误 envelope、缺少定义字段或身份漂移均记为业务问题。
-        """
-        return self.check_details_batch(subset, "executable")
-
     def check_catalog_query(self, subset: CatalogSubset, query: str, traversal: PageTraversal) -> ReadCheck:
-        """核对 query 筛选仍保留 kind/status/category，并返回匹配的发现实体。"""
+        """核对非空 query 的发现实体及原筛选；预算只限制集合完整性，空 query 抛 ValueError。"""
         if not isinstance(query, str) or not query.strip():
             raise ValueError("query must not be blank")
         expected = [row for row in subset.rows if query in {row.get("name"), row.get("cn_name")}]
-        check = compare_rows(traversal.rows, expected, _CATALOG_FIELDS)
-        issues = list(check.issues) + list(traversal.issues)
-        for row in traversal.rows:
-            if row.get("kind") != subset.kind or row.get("library_status") != subset.status:
-                issues.append("catalog:query_filter_identity")
-            if subset.category not in (row.get("library_coin_categories") or []):
-                issues.append("catalog:query_category_filter")
-        return ReadCheck(check.checked_count, tuple(dict.fromkeys(issues)), check.evidence)
+        return self._check_catalog_selection(subset, traversal, expected)
 
     def daily_pages(
         self, snapshot: DailyReadSnapshot, label_kind: LabelKind, *,
@@ -593,31 +618,57 @@ class Factor4ReadService:
             "request_count": len(requests), "partition_count": len(snapshot.batches), "captured_at": snapshot.as_of.isoformat(),
             "scope": "representative_shape_matrix_not_all_entities"})
 
-    def _traverse(self, fetch: Callable[[str | None], MCPResponse], *, page_size: int, max_pages: int) -> PageTraversal:
+    def _traverse(
+        self, fetch: Callable[[str | None], MCPResponse], *, page_size: int, max_pages: int,
+        catalog_budget: bool = False,
+    ) -> PageTraversal:
         rows: list[dict[str, Any]] = []
         pages: list[ToolPage] = []
         issues: list[str] = []
         cursor: str | None = None
         seen: set[str] = set()
         for _ in range(max_pages):
-            page = read_tool_page(fetch(cursor))
+            try:
+                page = read_tool_page(fetch(cursor))
+            except ReadPrecondition as error:
+                if not catalog_budget:
+                    raise
+                return PageTraversal(tuple(rows), tuple(pages), tuple(issues), "blocked", (str(error),))
             items = page.items
             pages.append(page)
             rows.extend(items)
             next_cursor = page.meta.get("next_cursor")
-            if page.meta.get("truncated") is not bool(next_cursor):
-                issues.append("pagination:truncated_cursor_mismatch")
             if len(items) > page_size:
                 issues.append("pagination:limit_exceeded")
             if "returned_count" in page.data and page.data["returned_count"] != len(items):
                 issues.append("pagination:returned_count")
+            warnings = page.meta.get("warnings")
+            declared_budget = catalog_budget and isinstance(warnings, list) and any(
+                warning == "CATALOG_CURSOR_BUDGET_REACHED"
+                or isinstance(warning, Mapping) and warning.get("code") == "CATALOG_CURSOR_BUDGET_REACHED"
+                for warning in warnings
+            )
+            if declared_budget:
+                valid_terminal = (page.meta.get("truncated") is True
+                                  and "next_cursor" in page.meta and next_cursor is None)
+                if not valid_terminal:
+                    issues.append("pagination:budget_terminal_contract")
+                return PageTraversal(tuple(rows), tuple(pages), tuple(issues), "bounded" if valid_terminal else "invalid")
+            if page.meta.get("truncated") is not bool(next_cursor):
+                issues.append("pagination:truncated_cursor_mismatch")
             if not next_cursor:
-                return PageTraversal(tuple(rows), tuple(pages), tuple(issues))
+                terminal = "complete" if next_cursor is None and page.meta.get("truncated") is False else "invalid"
+                if next_cursor is not None:
+                    issues.append("pagination:invalid_terminal_cursor")
+                return PageTraversal(tuple(rows), tuple(pages), tuple(issues), terminal)
             if not isinstance(next_cursor, str) or next_cursor in seen or not items:
                 raise ReadContractError("pagination cursor loop or empty continuation page")
             seen.add(next_cursor)
             cursor = next_cursor
-        raise ReadPrecondition("BLOCKED_DATA_PRECONDITION: traversal safety cap reached; not a complete read")
+        reason = "BLOCKED_DATA_PRECONDITION: traversal safety cap reached; not a complete read"
+        if catalog_budget:
+            return PageTraversal(tuple(rows), tuple(pages), tuple(issues), "blocked", (reason,))
+        raise ReadPrecondition(reason)
 
 
 def _environment_publication_fingerprint(rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, ...], ...]:

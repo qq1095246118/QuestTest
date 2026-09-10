@@ -10,8 +10,6 @@ import pytest
 from api.factor_data_mcp_api import FactorDataMCPAPI
 from db.factor4_calculation_repository import CalculationAuditSnapshot, Factor4CalculationRepository
 from service.factor4_calculation_service import CalculationCheckResult, Factor4CalculationService
-from service.factor4_environment_closure_service import Factor4EnvironmentClosureService
-from service.factor4_result_service import ENVIRONMENT_LABELS
 from service.factor4_scoring_service import AdmissionAuditResult, Factor4ScoringService, ScoringAuditResult
 
 
@@ -45,21 +43,6 @@ def _verify_score_results(results: Sequence[ScoringAuditResult]) -> None:
     if blocked or not results:
         pytest.skip(f"BLOCKED_DATA_PRECONDITION: {diagnostics}")
     assert all(result.status == "PASS" for result in results) and diagnostics["checked_count"] > 0, diagnostics
-
-
-def test_six_environment_profile_has_routes_and_metrics_for_every_label(
-    factor4_closure_snapshots: tuple[CalculationAuditSnapshot, ...],
-) -> None:
-    """Reconcile six labels in every publication without profile-name or positive-route assumptions.
-
-    The shared fixture detects selector/publication drift. Missing metric evidence
-    is separate; a declared zero route count with zero actual routes is legal.
-    """
-
-    _verify_calculation_results([
-        Factor4EnvironmentClosureService.check_label_results(snapshot, label)
-        for snapshot in factor4_closure_snapshots for label in ENVIRONMENT_LABELS
-    ])
 
 
 def test_persisted_v1_scores_match_independent_decimal_oracle(

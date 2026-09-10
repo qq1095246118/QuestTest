@@ -13,7 +13,7 @@ from api.factor4_read_api import Factor4ReadAPI
 from api.factor_data_mcp_api import MCPResponse
 from db.factor4_calculation_repository import CalculationAuditSnapshot, CalculationRepositoryError, PublishedRouteSnapshot
 from db.factor4_read_repository import DailyReadSnapshot, EnvironmentMetricSample
-from service.factor4_read_service import Factor4ReadService, ReadCheck, _METRIC_FIELDS
+from service.factor4_read_service import Factor4ReadService, ReadCheck, _DAILY_FIELDS, _METRIC_FIELDS
 from service.factor4_recommendation_service import lifecycle_time
 from service.factor4_recommendation_replay_service import Factor4RecommendationReplayService
 from tests.unit.test_factor4_calculation_service import _formula, _metric, _route, _snapshot
@@ -71,6 +71,7 @@ class ReplayFixture:
         self.drift = False
         self.replay_error = False
         self.metric_sample_error = False
+        self.daily_rows = [{key: row.get(key) for key in _DAILY_FIELDS} for row in _daily().rows]
         self.pages: dict[tuple[str, str], dict[str, Any]] = {}
         self.samples: dict[tuple[str, str], EnvironmentMetricSample] = {}
         self.metric_pages: dict[tuple[str, str], dict[str, Any]] = {}
@@ -111,6 +112,8 @@ class ReplayFixture:
     def call_tool(self, tool: str, arguments: dict[str, Any]) -> MCPResponse:
         """Use the requested immutable selectors, not defaults; unknown tools raise AssertionError."""
         self.calls.append((tool, deepcopy(arguments)))
+        if tool == "environment_get_daily":
+            return _response({"items": self.daily_rows})
         if tool == "environment_get_recommendations":
             if self.replay_error and sum(name == tool for name, _ in self.calls) > 1:
                 body = {"error": {"code": "SERVICE_UNAVAILABLE"}}
@@ -155,15 +158,16 @@ def test_recommendation_actual_ref_drives_exact_batch_and_formula_run_mode_windo
     result = fixture.check(kind)
     assert not result.issues and not result.evidence["blocked"]
     assert result.checked_count == 1
-    assert [tool for tool, _ in fixture.calls] == ["environment_get_recommendations", "factor_get_environment_metrics",
+    assert [tool for tool, _ in fixture.calls] == ["environment_get_daily", "environment_get_recommendations", "factor_get_environment_metrics",
                                                  "factor_get_formula", "environment_get_recommendations"]
-    metric, formula = fixture.calls[1][1], fixture.calls[2][1]
+    metric, formula = fixture.calls[2][1], fixture.calls[3][1]
     assert fixture.discovery == [{"kind": kind, "batch_uid": "batch-6", "factor_ref": f"{kind}:10"}]
     assert metric["batch_uid"] == "batch-6" and metric["factor_ref"] == f"{kind}:10"
     assert metric["label_code"] == "WIDE_RANGE" and "as_of" not in metric
     assert formula["run_id"] == "run-10" and formula["factor_window_bars"] == "24H"
     assert formula["calculation_mode"] == ("child_aggregate" if kind == "factor" else "direct")
     assert all(args["as_of"] == NOW.isoformat() for tool, args in fixture.calls if tool != "factor_get_environment_metrics")
+    assert result.evidence["public_forecast_id"] == 10
 
 
 @pytest.mark.parametrize("field", ["run_id", "formula_version", "formula_hash", "expression", "factor_ref"])
@@ -261,7 +265,7 @@ def test_wrong_initial_publication_is_not_silently_used_for_followup_reads() -> 
     fixture.pages[("all", "default")]["publication"]["publication_uid"] = "other"
     result = fixture.check()
     assert result.issues
-    assert not [tool for tool, _ in fixture.calls if tool != "environment_get_recommendations"]
+    assert not [tool for tool, _ in fixture.calls if tool not in {"environment_get_daily", "environment_get_recommendations"}]
 
 
 def test_formula_mismatch_still_fails_when_publication_changes_afterward() -> None:
@@ -297,7 +301,40 @@ def test_legal_no_forecast_response_blocks_chain_without_inventing_publication_r
     fixture = ReplayFixture((_bound(),))
     fixture.pages[("all", "default")] = {"publication": None, "forecast": None, "items": [],
         "returned_count": 0, "status": "no_recommendation", "reason_code": "ACTIVE_FORECAST_NOT_FOUND"}
+    fixture.daily_rows = []
     service = Factor4RecommendationReplayService(Factor4ReadService(Factor4ReadAPI(fixture)), fixture, fixture)
     result = service.check_kind(fixture.snapshots, DailyReadSnapshot(NOW, ()), "sub_factor")
     assert not result.issues and result.evidence["blocked"]
-    assert not [tool for tool, _ in fixture.calls if tool != "environment_get_recommendations"]
+    assert not [tool for tool, _ in fixture.calls if tool not in {"environment_get_daily", "environment_get_recommendations"}]
+
+
+@pytest.mark.parametrize("field,value", [("label_code", "CHOPPY_UP"), ("revision", 99), ("id", 999)])
+def test_public_daily_mutations_fail_even_when_recommendation_matches_database(field: str, value: Any) -> None:
+    fixture = ReplayFixture((_bound(),))
+    fixture.daily_rows[0][field] = value
+    result = fixture.check()
+    assert any("public_forecast:" in issue for issue in result.issues)
+
+
+def test_wrong_public_daily_label_does_not_get_replaced_by_database_for_formula_followup() -> None:
+    fixture = ReplayFixture((_bound(),))
+    fixture.daily_rows[0]["label_code"] = "CHOPPY_UP"
+    result = fixture.check()
+    assert result.issues
+    assert not any(tool == "factor_get_formula" for tool, _ in fixture.calls)
+
+
+def test_daily_failure_survives_later_missing_recommended_kind() -> None:
+    fixture = ReplayFixture((_bound(),))
+    fixture.daily_rows[0]["revision"] = 99
+    result = fixture.check("factor")
+    assert result.issues and result.evidence["blocked"]
+
+
+def test_missing_public_forecast_is_not_filled_from_database_to_claim_a_complete_chain() -> None:
+    fixture = ReplayFixture((_bound(),))
+    fixture.daily_rows = []
+    result = fixture.check()
+    assert result.issues and result.evidence["blocked"]
+    assert result.checked_count == 0 and result.evidence["public_forecast_id"] is None
+    assert not any(tool == "factor_get_formula" for tool, _ in fixture.calls)

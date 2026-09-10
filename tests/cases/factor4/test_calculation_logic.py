@@ -20,8 +20,6 @@ if TYPE_CHECKING:
 _CASE_IDS: Final[tuple[str, ...]] = (
     "CALC-510-A",
     "CALC-501-C",
-    "CALC-506-A",
-    "CALC-507-A",
 )
 _PASS = "PASS"
 _FAIL = "FAIL"
@@ -62,7 +60,8 @@ def factor4_calculation_report(
     """只执行最终结果及 MCP 输出校验并共享不可变结构化报告。
 
     参数 ``factor4_calculation_service`` 是 conftest 按 live/test 门禁组装的业务服务。返回
-    ``Factor4CalculationReport``，供四个 Case 独立判定；不执行静态算子数学扫描，网络、协议或数据库异常不吞掉。
+    ``Factor4CalculationReport``，供公式输出和准入两项独立判定；评分与排名由全分区正式用例承接。
+    不执行静态算子数学扫描，网络、协议或数据库异常不吞掉。
     """
 
     return factor4_calculation_service.run_result_checks(

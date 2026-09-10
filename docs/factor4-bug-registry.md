@@ -18,15 +18,33 @@
 | --- | --- |
 | 公式绑定缺证据 | 正式 batch 6 的 32 个已发布子因子没有运行公式证据；更广的 metric-to-run 强链接也缺失，不等同于公式算错 |
 | 环境快照缺失日期与当时可用环境记录不一致 | 仍为 CANDIDATE；daily 1341 的同一日期差异复现，尚无已确认数值影响 |
-| `new` 状态子因子目录分页验收失败 | 服务明确游标预算终止；测试未区分该终止状态，全量读取契约待确认 |
+| `new` 状态子因子目录分页验收失败 | 2026-09-08 契约澄清：预算终止属于预期保护，不计产品 Bug；原失败归属测试判定器，修正记录见下方 |
 | 成本结果证据不完整 | QA batch 7 的人工样本缺字段，不是已证实成本计算错误 |
 | 因子定义版本证据不完整 | QA batch 7 缺独立 definition 版本，不是已证实正式版本混用 |
 | OOS 时间证据不完整 | QA batch 7 缺 folds，不是已证实未来数据泄漏 |
 | 推荐结果回查误报指标快照变化 | 测试判定器比较原列与 JSON 投影导致差异，不是实际快照漂移 |
 
-当前样本回归通过的历史标题：Backend 环境日期精确过滤遗漏已有环境记录；
+2026-09-07 当时样本回归通过的历史标题：Backend 环境日期精确过滤遗漏已有环境记录；
 Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发布摘要路由数量与实际有效路由数量不一致。
 历史证据及未纳入本轮的专项状态继续保留，不按本次通过推断所有历史问题均已修复。
+
+2026-09-08 本地目录修正及去重后的 31 项定向回归：29 passed、2 failed，目录相关 24 项全部通过。
+“发布摘要路由数量与实际有效路由数量不一致”再次出现，本次摘要 86、实际有效 route 83。
+另一失败固定名称为“有效路由排名不连续”，其与摘要数量差异是否同一根因尚未确定，先作为候选保留，不重复增加独立根因计数。
+详情见 [目录修正与用例去重](factor4-catalog-case-cleanup-20260908.md)，不是全量历史 Bug 复测。
+
+2026-09-08 后续全量已执行全部 668 实例：467 passed、76 failed、125 skipped、0 errors，三个专项均开启。
+核心结果级 478 中 373 passed、5 failed、100 skipped。76 为实例数，不是独立 Bug 数；
+详细归并、公式元数据定向复现及历史边界观察见 [本次全量结果](factor4-full-live-20260908.md)。
+本次没有修改用例来改变结果，旧历史总数不自动替换为本轮独立根因数。
+
+### `new` 状态子因子目录分页验收失败
+
+- **最新裁决**：2026-09-08，`NOT_A_PRODUCT_BUG`；固定中文标题保留作为原误报的追踪名称。
+- **规则依据**：用户补充防批量导出用途及每分钟 2000 条限制；[MCP 使用说明第 3.2、5.6 节](https://jjp1ynw9z1yy.jp.larksuite.com/wiki/AdOhwoJLMiII4HkCSfJjUB2RpXg)明确单链到达预算后终止 cursor 并返回 warning。文档默认值可由部署配置覆盖。
+- **事实边界**：9 月 7 日同链返回 2000 条后明确 `CATALOG_CURSOR_BUDGET_REACHED`，不是静默丢失其余 1420 个已有记录。该现象没有验证分钟限流或一分钟后的恢复机制，不混同日预算、分钟限流和单链累计量。
+- **测试修正**：目录受限终态只核验已返回数据；自然末页才要求完整集合。无说明的提前终止、重复及错误数据仍失败，报告保留受限范围。
+- **进度及证据**：测试判定器已修正，41 个离线实例通过，14 个目录 live 实例通过；其中本项返回 2000/3421 个因子，按受限范围验收，其余 13 个自然完结并对账完整集合。详见 [现有 Case 修正记录](factor4-existing-case-corrections.md) 及 `reports/factor4-catalog-bounded-live-20260908.xml`。原全量 JUnit 的 6 failed 保持历史原貌，不事后改写。
 
 ## 命名规则
 
@@ -57,6 +75,7 @@ Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发
 | DPO 公式错误地位移均线而非价格序列 | `F4-DPO-FORMULA` | `CALC-510` |
 | 固定周期因子公式未应用声明窗口 | `F4-FIXED-HORIZON-FORMULA` | `CALC-510` |
 | 发布摘要路由数量与实际有效路由数量不一致 | `F4-PUBLISHED-ROUTE-COUNT` | `DB-613` |
+| 有效路由排名不连续 | `F4-ELIGIBLE-ROUTE-RANK-GAP` | `RESULT-504`，最终排名结果级检查 |
 | 论文候选与注册因子语义映射错误 | `F4-KB-MAPPING-SEMANTIC-MISMATCH` | 论文/KB 专项 |
 | IV/RV 因子定义与实际执行公式及输入字段不一致 | `F4-IV-RV-DEFINITION-RUNTIME-MISMATCH` | IV/RV 专项 |
 | 公式已更新但 normalized_formula 元数据仍保留旧表达式 | `F4-NORMALIZED-FORMULA-STALE` | `CALC-510-A`，当前元数据专项 |
@@ -82,7 +101,8 @@ Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发
 ### 公式已更新但 normalized_formula 元数据仍保留旧表达式
 
 - **英文索引**：`F4-NORMALIZED-FORMULA-STALE`
-- **当前状态**：`CANDIDATE`，2026-09-06 本地判定器修正后尚未进行独立线上复核，不计入本轮确认数量。
+- **当前状态**：`CONFIRMED`，2026-09-08 全量静态检查及真实 MCP 批量详情定向复核，确认公式输出元数据互相矛盾；不证明当前计算数值错误。
+- **本轮事实**：`sub_factor:161104/161106/161108` 的 executable 详情 `calc_logic=mean(close, window) - close.shift(window // 2 + 1)`，`metadata.normalized_formula=-(close - mean(close, (60 + 0)).shift(((60 + 0)) // 2 + 1))`。最新 DB detail 不含 normalized 字段，MCP 仍返回旧元数据。复现调用 `factor_get_details_batch`，`factor_refs` 为上述三个，`detail_level=executable`；详见 [全量结果](factor4-full-live-20260908.md)。
 - **历史事实**：2026-09-05 保存的报告中，`sub_factor:161104/161106/161108` 的 `calc_logic` 和精确公式 evidence 已使用正确 DPO，但 `metadata.normalized_formula` 仍保留位移均线的表达式。
 - **根因边界**：这是元数据一致性问题，不能沿用「DPO 公式错误地位移均线而非价格序列」来断言实际运行错误。归一化前后仅周期参数不同且没有实际输入 cadence/单位转换证据时，只记录 `BLOCKED_DOC`；不得直接判为错误或通过。
 - **测试判定修正**：家族回归只读取可执行 detail 与精确 Run evidence。当前详情静态审计独立核验归一化元数据，同层输入字段分别对账，禁止把逻辑输入与 raw dependency closure 合并后比较。
@@ -181,13 +201,30 @@ Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发
 - **复现命令**：
 
   ```bash
-  python3 -m pytest tests/cases/factor4/test_final_results.py::test_each_environment_summary_matches_final_routes --live --env test -v
+  python3 -m pytest tests/cases/factor4/test_environment_closure_business.py::test_each_label_metrics_routes_and_summary_share_full_publication_identity --live --env test -v
   ```
 
 - **复现步骤**：在 `START TRANSACTION READ ONLY` 中读取 batch 的 `environment_status.WIDE_RANGE.route_count`；再用同一 `batch/publication_uid/publish_version/market_scope/label_code` 查询 `market_environment_factor_route` 的 active eligible 数量；重复读取一次并回滚。
 - **预期 / 实际**：预期摘要数量等于精确 route 数量；实际 `0 != 86`。
 - **最新证据**：2026-09-07 新增闭环用例真实只读复核，`reports/factor4-closure-final-live-20260907.xml`；同名问题仍复现 `WIDE_RANGE route_count=0`、实际 active eligible route 为 `86`。本次入口为 `test_environment_closure_business.py::test_each_label_metrics_routes_and_summary_share_full_publication_identity[WIDE_RANGE]`，其余五种 label 的该项对账通过；这不是全量历史 Bug 重新验收。历史证据继续保留在 `reports/factor4-resume/20260904T151150+0800-db613-targeted-closure/adjudicated-summary.json`。
+- **2026-09-08 定向复核**：`reports/factor4-catalog-dedup-live-20260908.xml`，同一中文标题再次失败：`WIDE_RANGE` 摘要 `86`，实际 active eligible `83`。9 月 7 日后续样本曾通过的记录保持原貌，不据此覆盖本次差异。
 - **边界**：不要把 `DB-605` 单独登记；它只是 `F4-ENV-BACKEND-EXACT-FILTER` 与 `F4-METRIC-PERIOD-TZ` 的汇总失败。
+
+### 有效路由排名不连续
+
+- **英文索引**：`F4-ELIGIBLE-ROUTE-RANK-GAP`
+- **状态**：`CANDIDATE`，2026-09-08。有效结果排名不连续已证实；与上述摘要数量差异是否同一根因尚未确定，不先计作第二个独立产品根因。
+- **实际结果**：测试库 batch `6`、`all/default`、`WIDE_RANGE`、环境日期 `2026-09-01`，active eligible route 共 `83` 条，rank 范围 `1..86`，缺少 `74、75、84`，没有重复 rank。正式用例的初次与重复读取均报 `RANK_NOT_CONTIGUOUS`，没有 publication 切换或重复读取漂移。
+- **预期**：按现有结果级验收规则，同分区的 active eligible 排名应从 1 连续至实际结果数；不据此推断评分计算错误。
+- **复现命令**：
+
+  ```bash
+  python3 -m pytest tests/cases/factor4/test_final_results.py::test_final_result_ranking_is_partitioned_and_repeatable --live --env test -v --tb=short
+  ```
+
+- **验证步骤**：使用测试配置读取当前 active published 分区；按完整 publication/batch/profile/label/环境日期身份筛选 active eligible route；按 rank 排序，与 `1..N` 比较；再次读取同 publication 检查是否稳定。当前样本预期为 `1..83`，实际仍含 `85、86` 且中间缺位。
+- **证据**：`reports/factor4-catalog-dedup-live-20260908.xml`。另经只读 Repository 的 `read_published_route_snapshot("all", "default")` 核对当前 83 条及上述缺位，仅输出数字/分区摘要，不读取原始计算过程、不写库。
+- **处理边界**：保留用例；不因本次清理而删除失败项，不把两次读取的两个失败码计成两个 Bug。
 
 ### 论文候选与注册因子语义映射错误
 
@@ -265,6 +302,20 @@ Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发
 - **证据 / 用例**：`tests/cases/factor_combo/test_feedback_api.py::test_feedback_rejects_combo_and_resets_form_for_next_round`；`service/factor_combo_persistence.py`。
 
 ## 测试环境/前置阻断（不计产品 Bug）
+
+### 2026-09-08 全量执行的固定测试问题名称
+
+| 固定中文标题 | 本轮失败实例 | 裁决 |
+| --- | ---: | --- |
+| 参数校验错误的文本响应被误判为 MCP 返回格式错误 | 58 | 本地 JSON-only 解析路径问题，代表请求已确认返回明确拒绝；未逐个改判为通过 |
+| Accept 协商用例错误要求仅声明 SSE 的 POST 请求成功 | 1 | 本地请求和预期不符合 POST Accept 要求 |
+| 协议版本协商用例错误限制服务端只能返回配置版本 | 1 | 服务端实际协商到另一受支持版本，非接受虚构版本 |
+| 子因子分页重放用例将动态游标变化误判为业务数据变化 | 3 | 本地比较了动态 children_next_cursor，业务数据一致 |
+| 批量指标查询对重复因子引用的返回规则未明确 | 1 | 公开去重/保留输入位置契约待确认，不计产品 Bug |
+| 计算结果审计记录缺少 request_id | 4 | 技术审计观察，不据此认定计算结果错误 |
+
+本轮证据和代表复核见 [全量结果](factor4-full-live-20260908.md)。此表不是修复记录；本轮没有修改这些用例。
+“Slice 结束时间边界错误”本次显式全开执行后仍复现，保留下面历史暂不处理归类，不混入核心结果级 Bug 数量。
 
 | 固定中文标题 | 英文索引 | 本轮表现 | 需要的处理 |
 |---|---|---|---|

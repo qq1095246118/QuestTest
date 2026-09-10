@@ -12,7 +12,7 @@ from api.factor4_read_api import Factor4ReadAPI
 from db.factor4_publication_repository import PublicationHistory
 from db.factor4_read_repository import DailyReadSnapshot
 from service.factor4_read_service import (
-    LABELS, ReadCheck, ReadContractError, ReadPrecondition, compare_rows,
+    LABELS, Factor4ReadService, ReadCheck, ReadContractError, ReadPrecondition, compare_rows,
     ToolPage, read_tool_page, visible_daily_rows,
 )
 
@@ -70,13 +70,15 @@ def check_forecast_probabilities(rows: tuple[dict[str, Any], ...]) -> ReadCheck:
 
 def compare_recommendation_page(
     page: ToolPage, batch: Mapping[str, Any], routes: tuple[dict[str, Any], ...],
-    forecast: Mapping[str, Any] | None, *, limit: int,
+    forecast: Mapping[str, Any] | None, *, limit: int, historical: bool = False,
 ) -> ReadCheck:
     """Compare one actual recommendation page with its DB publication and forecast.
 
     This shared projection check sends no requests and never substitutes a public
-    label for the independent forecast. Invalid timestamp values raise ValueError;
-    business differences are returned without response bodies or credentials.
+    label for the independent forecast. Historical routes retain their publication
+    identity even after today's active flag is cleared. Missing historical route
+    identities block full-set conclusions, while known projection errors remain
+    failures. Invalid timestamps raise ValueError; no credentials/bodies are returned.
     """
     issues: list[str] = []
     actual_forecast = page.data.get("forecast")
@@ -91,32 +93,89 @@ def compare_recommendation_page(
         issues.append("recommendation:forecast_selection")
     elif lifecycle_time(actual_forecast.get("available_at")) != lifecycle_time(forecast["available_at"], database=True):
         issues.append("recommendation:forecast_available_at")
+    if isinstance(actual_forecast, Mapping) and actual_forecast.get("label_kind", "forecast") != "forecast":
+        issues.append("recommendation:forecast_kind")
     publication = page.data.get("publication")
     if not isinstance(publication, Mapping) or publication.get("publication_uid") != batch["publication_uid"]:
         issues.append("recommendation:active_publication_identity")
-    eligible = [row for row in routes if row["eval_batch_id"] == batch["id"]
-                and row["is_active"] and row["is_eligible"] and row["label_kind"] == "fact"
-                and row["label_code"] == forecast["label_code"]]
+    if isinstance(publication, Mapping):
+        for field in ("batch_uid", "publish_version", "market_scope", "route_profile_key"):
+            if publication.get(field) != batch.get(field):
+                issues.append("recommendation:publication_field=" + field)
+    candidates = [row for row in routes if row["eval_batch_id"] == batch["id"]
+                  and (historical or row["is_active"]) and row["is_eligible"] and row["label_kind"] == "fact"
+                  and row["label_code"] == forecast["label_code"]]
+    unbound: list[dict[str, Any]] = []
+    if historical:
+        identity_fields = ("publication_uid", "publish_version")
+        candidates = [row for row in candidates if not any(
+            row.get(key) not in (None, "") and row[key] != batch.get(key) for key in identity_fields)]
+        unbound = [row for row in candidates if any(row.get(key) in (None, "") for key in identity_fields)]
+        eligible = [row for row in candidates if all(row.get(key) not in (None, "")
+                    and row[key] == batch.get(key) for key in identity_fields)]
+    else:
+        eligible = candidates
     eligible.sort(key=lambda row: (row["rank_no"], row["id"]))
-    expected = eligible[:limit]
+    # Unknown publication membership cannot establish the complete top-N set.
+    # Still reconcile every returned row with a known exact-publication identity.
+    expected = eligible if unbound else eligible[:limit]
     fields = ("factor_ref", "factor_type", "factor_id", "factor_version", "rank_no",
               "routing_score", "confidence", "time_series_score", "cross_sectional_score", "score_rule_version")
     expected_keys = {(row["factor_ref"], row["factor_version"]): row for row in expected}
     actual_keys = [(row.get("factor_ref"), row.get("factor_version")) for row in page.items]
-    if len(set(actual_keys)) != len(actual_keys) or set(actual_keys) != set(expected_keys):
+    if any(row.get("label_code", forecast["label_code"]) != forecast["label_code"] for row in page.items):
+        issues.append("recommendation:route_forecast_label")
+    possible_keys = set(expected_keys) | {(row["factor_ref"], row["factor_version"]) for row in unbound}
+    if (len(set(actual_keys)) != len(actual_keys) or set(actual_keys) - possible_keys
+            or not unbound and set(actual_keys) != set(expected_keys)
+            or unbound and eligible and not actual_keys):
         issues.append("recommendation:factor_membership")
     comparable = [{**row, "id": expected_keys[key]["id"]} for row, key in zip(page.items, actual_keys, strict=True)
                   if key in expected_keys]
-    issues.extend(compare_rows(comparable, expected, fields).issues)
-    if actual_keys != [(row["factor_ref"], row["factor_version"]) for row in expected]:
+    comparable_expected = [row for row in expected if (row["factor_ref"], row["factor_version"]) in actual_keys] if unbound else expected
+    issues.extend(compare_rows(comparable, comparable_expected, fields).issues)
+    ordered_actual = [key for key in actual_keys if key in expected_keys] if unbound else actual_keys
+    if ordered_actual != [(row["factor_ref"], row["factor_version"]) for row in comparable_expected]:
         issues.append("recommendation:route_order")
-    if page.data.get("returned_count") != len(expected):
+    if page.data.get("returned_count") != (len(page.items) if unbound else len(expected)) or len(page.items) > limit:
         issues.append("recommendation:returned_count")
-    if not eligible and (page.data.get("status") != "no_recommendation" or page.data.get("reason_code") != "NO_ELIGIBLE_FACTOR"):
+    if not eligible and not unbound and (page.data.get("status") != "no_recommendation" or page.data.get("reason_code") != "NO_ELIGIBLE_FACTOR"):
         issues.append("recommendation:no_eligible_reason")
-    if eligible and page.data.get("status") != "ready":
+    if (eligible or page.items) and page.data.get("status") != "ready":
         issues.append("recommendation:ready_status")
-    return ReadCheck(max(1, len(expected)), tuple(issues))
+    return ReadCheck(max(1, len(comparable_expected)), tuple(issues), {
+        "blocked": tuple(f"recommendation:historical_route_publication_identity_missing:route_id={row['id']}"
+                         for row in unbound),
+    })
+
+
+def read_public_forecast(
+    reads: Factor4ReadService, daily: DailyReadSnapshot, as_of: datetime,
+) -> tuple[dict[str, Any] | None, ReadCheck]:
+    """Read MCP daily at as_of and return its selected ready forecast plus DB checks.
+
+    The returned public row, never a DB substitute, drives follow-up reads. All
+    visible revisions and ordering are independently reconciled with the supplied
+    DB snapshot. Declared dependency/contract errors become separate blocked/issues
+    evidence; unexpected transport errors propagate. No ready forecast returns None.
+    """
+    try:
+        traversal = reads.daily_pages(daily, "forecast", as_of=as_of)
+        check = reads.check_daily(daily, "forecast", traversal, as_of=as_of)
+    except ReadContractError as error:
+        return None, ReadCheck(0, ("public_forecast:" + str(error),), {"blocked": ()})
+    except ReadPrecondition as error:
+        return None, ReadCheck(0, (), {"blocked": ("public_forecast:" + str(error),)})
+    forecast = next((row for row in traversal.rows if row.get("label_status") == "ready"), None)
+    expected = next((row for row in visible_daily_rows(daily, "forecast", as_of=as_of)
+                     if row.get("label_status") == "ready"), None)
+    issues = ["public_forecast:" + issue for issue in check.issues]
+    if (forecast or {}).get("id") != (expected or {}).get("id"):
+        issues.append("public_forecast:selected_revision")
+    return forecast, ReadCheck(check.checked_count, tuple(dict.fromkeys(issues)), {
+        "blocked": traversal.blocked, "public_forecast_id": (forecast or {}).get("id"),
+        "as_of": as_of.isoformat(),
+    })
 
 
 class Factor4RecommendationService:
@@ -213,3 +272,72 @@ class Factor4RecommendationService:
                 issues.append("recommendation:fixed_asof_replay_changed")
             issues.extend(compare_recommendation_page(page, batch, history.routes, expected_forecast, limit=limit).issues)
         return ReadCheck(len(active), tuple(issues))
+
+    def check_forecast_label_history(
+        self, history: PublicationHistory, daily: DailyReadSnapshot, label: str,
+    ) -> ReadCheck:
+        """Check one forecast label at a real visible historical instant per partition.
+
+        Select as_of from actual revision/publication events no later than both DB
+        snapshots, requiring the independently selected ready forecast to have label.
+        MCP daily supplies the user-visible snapshot before recommendations. An empty
+        eligible route set must yield NO_ELIGIBLE_FACTOR, not another label's factors.
+        Missing natural label/publication intersections are blocked; confirmed output
+        differences are retained first. Invalid labels raise ValueError; unexpected
+        transport errors propagate. Historical reads never call current-only tags.
+        """
+        if label not in LABELS:
+            raise ValueError("unsupported forecast label")
+        cutoff = min(history.as_of, daily.as_of)
+        instants = {cutoff}
+        instants.update(lifecycle_time(row["available_at"], database=True)
+                        for row in daily.rows if row["label_kind"] == "forecast")
+        instants.update(lifecycle_time(batch["published_at"], database=True) for batch in history.batches)
+        candidates: list[tuple[datetime, dict[str, Any]]] = []
+        for as_of in sorted((time for time in instants if time <= cutoff), reverse=True):
+            forecast = next((row for row in visible_daily_rows(daily, "forecast", as_of=as_of)
+                             if row.get("label_status") == "ready"), None)
+            if forecast is not None and forecast.get("label_code") == label:
+                candidates.append((as_of, forecast))
+        partitions = sorted({(batch["market_scope"], batch["route_profile_key"]) for batch in history.batches})
+        issues: list[str] = []
+        blocked: list[str] = []
+        evidence: list[dict[str, Any]] = []
+        checked = 0
+        reads = Factor4ReadService(self.api)
+        public_snapshots: dict[datetime, tuple[dict[str, Any] | None, ReadCheck]] = {}
+        for market, profile in partitions:
+            selected = next(((as_of, forecast, batch) for as_of, forecast in candidates
+                             if (batch := visible_publication(history, market, profile, as_of)) is not None), None)
+            prefix = f"forecast_label={label}:market={market}:profile={profile}:"
+            if selected is None:
+                blocked.append(prefix + "no_visible_forecast_publication_intersection")
+                continue
+            as_of, forecast, batch = selected
+            if as_of not in public_snapshots:
+                public_snapshots[as_of] = read_public_forecast(reads, daily, as_of)
+            public, daily_check = public_snapshots[as_of]
+            issues.extend(prefix + issue for issue in daily_check.issues)
+            blocked.extend(prefix + reason for reason in daily_check.evidence["blocked"])
+            try:
+                page = read_tool_page(self.api.recommendations(market, profile, as_of=as_of.isoformat(), limit=200))
+                result = compare_recommendation_page(page, batch, history.routes, forecast, limit=200, historical=True)
+                issues.extend(prefix + issue for issue in result.issues)
+                blocked.extend(prefix + reason for reason in result.evidence["blocked"])
+                if public is not None and public.get("label_code") != forecast["label_code"]:
+                    issues.append(prefix + "daily_recommendation_label_mismatch")
+                checked += int(not daily_check.evidence["blocked"] and not result.evidence["blocked"])
+                evidence.append({"market_scope": market, "route_profile_key": profile,
+                                 "as_of": as_of.isoformat(), "forecast_id": forecast["id"],
+                                 "revision": forecast["revision"], "batch_id": batch["id"],
+                                 "returned_count": len(page.items)})
+            except ReadContractError as error:
+                issues.append(prefix + str(error))
+            except ReadPrecondition as error:
+                blocked.append(prefix + str(error))
+        if not partitions:
+            blocked.append("forecast_label=" + label + ":no_published_partitions")
+        return ReadCheck(checked, tuple(dict.fromkeys(issues)), {
+            "blocked": tuple(dict.fromkeys(blocked)), "label": label,
+            "partition_count": len(partitions), "samples": tuple(evidence),
+        })

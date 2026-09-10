@@ -55,8 +55,8 @@ def scope_snapshot(request: pytest.FixtureRequest, factor4_read_repository: Fact
 def test_factor_rank_values_order_identity_and_latest_run(
     summary_service: Factor4SummaryService, summary_sample: SummarySample, mode: RankingMode,
 ) -> None:
-    """MCP-016：三种排名模式核对数值/顺序/身份/最新 Run；raw 与 abs 独立验证极值选择。"""
-    _verify(lambda: summary_service.check_rank(summary_sample, ranking_mode=mode))
+    """MCP-016：三种模式核对数值/顺序/身份/最新 Run，signed 同时验证固定时点重放。"""
+    _verify(lambda: summary_service.check_rank(summary_sample, ranking_mode=mode, repeat=mode == "signed"))
 
 
 @pytest.mark.parametrize("metric", ["mean_rank_ic", "icir", "rank_icir", "ic_t_stat", "rank_ic_t_stat",
@@ -82,11 +82,6 @@ def test_factor_rank_requested_sides_and_repeat_are_stable(
 def test_factor_rank_zero_both_sides_is_rejected(summary_service: Factor4SummaryService, summary_sample: SummarySample) -> None:
     """双侧均为零属于已裁决的 INVALID_ARGUMENT，不再误报成功空集缺陷。"""
     _verify(lambda: Factor4RankFilterService(summary_service).check_no_requested_side_rejected(summary_sample))
-
-
-def test_factor_rank_signed_repeated_request_is_stable(summary_service: Factor4SummaryService, summary_sample: SummarySample) -> None:
-    """固定 as-of signed 模式重复请求也须保持相同 ID、方向和数值。"""
-    _verify(lambda: summary_service.check_rank(summary_sample, ranking_mode="signed", repeat=True))
 
 
 @pytest.mark.parametrize("variant", ["baseline", "slices_equal", "slices_above", "final_score_empty", "coverage_median", "coverage_one", "require_oos", "theme_hit", "theme_miss"])

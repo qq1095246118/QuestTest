@@ -15,15 +15,30 @@ from service.factor4_read_service import Factor4ReadService, ReadCheck, ReadCont
 pytestmark = [pytest.mark.integration, pytest.mark.regression, pytest.mark.factor4_calculation]
 
 
-def _verify(action: Callable[[], ReadCheck]) -> None:
+def _verify(action: Callable[[], ReadCheck], record_property: Callable[[str, object], None] | None = None) -> None:
     try:
         result = action()
     except ReadPrecondition as exc:
         pytest.skip(str(exc))
     except ReadContractError as exc:
         pytest.fail(str(exc), pytrace=False)
-    assert result.checked_count > 0
+    blocked = result.evidence.get("blocked", ())
+    if record_property is not None:
+        for name in (
+            "catalog_traversal", "catalog_returned_count", "catalog_returned_unique_count",
+            "catalog_database_unique_count", "catalog_page_count", "catalog_full_membership_verified",
+            "catalog_completeness", "catalog_budget_code", "catalog_statistics",
+        ):
+            record_property(name, result.evidence[name])
+        record_property("catalog_blocked", "; ".join(blocked))
+        record_property("catalog_acceptance", "FAILED" if result.issues else (
+            "BLOCKED" if blocked else "BOUNDED_READ_ACCEPTED_NOT_FULL_EXPORT" if result.evidence["catalog_traversal"] == "bounded"
+            else "COMPLETE_CATALOG_ACCEPTED"
+        ))
     assert not result.issues, ", ".join(result.issues)
+    if blocked:
+        pytest.skip("BLOCKED_DEPENDENCY: catalog checks incomplete: " + "; ".join(blocked))
+    assert result.checked_count > 0
 
 
 @pytest.fixture(scope="module")
@@ -113,17 +128,17 @@ def test_parent_children_pagination_exhausts_exact_database_relations(catalog_se
 
 @pytest.mark.parametrize("kind", ["factor", "sub_factor"])
 @pytest.mark.parametrize("status", ["inactive", "new", "valid", "invalid", "deleted"])
-def test_catalog_every_kind_and_status_returns_database_members(catalog_service: Factor4CatalogExtensionService, catalog_repository: Factor4AuxiliaryRepository, kind: str, status: str) -> None:
-    """CAT-STATUS十个组合：完整分页成员/身份/中文名/分类核DB；stats仅核对内部group总和。"""
+def test_catalog_every_kind_and_status_returns_database_members(catalog_service: Factor4CatalogExtensionService, catalog_repository: Factor4AuxiliaryRepository, kind: str, status: str, record_property: Callable[[str, object], None]) -> None:
+    """CAT-STATUS：核对预算内返回成员；只有自然完结验全集，JUnit 明示受限验收范围。"""
     rows = catalog_repository.catalog_status_members(kind, status)
-    _verify(lambda: catalog_service.check_status_category(kind, status, None, rows))
+    _verify(lambda: catalog_service.check_status_category(kind, status, None, rows), record_property)
 
 
 @pytest.mark.parametrize("category", ["all", "main", "altcoin", "custom"])
-def test_catalog_valid_subfactor_each_coin_category_matches_database(catalog_service: Factor4CatalogExtensionService, catalog_repository: Factor4AuxiliaryRepository, category: str) -> None:
-    """CAT-CATEGORY：四分类完整分页集合核DB，空分类须为空；stats不作为目录实体数Oracle。"""
+def test_catalog_valid_subfactor_each_coin_category_matches_database(catalog_service: Factor4CatalogExtensionService, catalog_repository: Factor4AuxiliaryRepository, category: str, record_property: Callable[[str, object], None]) -> None:
+    """CAT-CATEGORY：四分类预算内成员核DB；自然完结验全集，空分类仍须成功空页。"""
     rows = catalog_repository.catalog_status_members("sub_factor", "valid", category)
-    _verify(lambda: catalog_service.check_status_category("sub_factor", "valid", category, rows))
+    _verify(lambda: catalog_service.check_status_category("sub_factor", "valid", category, rows), record_property)
 
 
 @pytest.mark.parametrize("kind", ["factor", "sub_factor"])

@@ -564,27 +564,34 @@ class TestResultOnlyCalculationPath:
         assert len(api.formula_calls) == 1
         assert api.detail_batch_sizes == [1]
 
-    def test_default_report_never_invokes_historical_math_checks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_report_never_repeats_score_rank_or_historical_math_checks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         service, api = _service(_snapshot())
         called: list[str] = []
 
         def forbidden(*args: Any, **kwargs: Any) -> Any:
-            raise AssertionError("default report invoked historical mathematics")
+            raise AssertionError("default report invoked duplicate scoring/ranking or historical mathematics")
 
-        for name in ("check_formula_static_consistency", "check_known_formula_regressions", "check_formula_integrity"):
+        for name in ("check_formula_static_consistency", "check_known_formula_regressions", "check_formula_integrity",
+                     "check_route_score_recalculation", "check_rank_stability", "check_final_result_ranking"):
             monkeypatch.setattr(service, name, forbidden)
+        monkeypatch.setattr(service._repository, "read_published_route_snapshot", forbidden)
         for name, identifier in (("check_formula_result_consistency", "CALC-510-A"),
-                                 ("check_any_valid_scope", "CALC-501-C"),
-                                 ("check_route_score_recalculation", "CALC-506-A"),
-                                 ("check_rank_stability", "CALC-507-A")):
+                                 ("check_any_valid_scope", "CALC-501-C")):
             def check(*args: Any, selected: str = name, case_id: str = identifier) -> CalculationCheckResult:
                 called.append(selected)
                 return CalculationCheckResult(case_id, selected, "PASS", "ok", 1)
             monkeypatch.setattr(service, name, check)
         report = service.run_result_checks()
-        assert len(called) == 4
-        assert {check.case_id for check in report.checks} == {"CALC-510-A", "CALC-501-C", "CALC-506-A", "CALC-507-A"}
+        assert called == ["check_formula_result_consistency", "check_any_valid_scope"]
+        assert {check.case_id for check in report.checks} == {"CALC-510-A", "CALC-501-C"}
         assert report.status == "PASS"
+        assert api.initialized and api.notified
+
+    def test_default_case_ids_keep_only_formula_and_admission(self) -> None:
+        """Default R0 Cases must not recollect score/rank checks owned by all-partition Cases."""
+        from tests.cases.factor4.test_calculation_logic import _CASE_IDS
+
+        assert _CASE_IDS == ("CALC-510-A", "CALC-501-C")
 
     def test_default_case_fixture_uses_only_result_report(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from tests.cases.factor4.test_calculation_logic import factor4_calculation_report

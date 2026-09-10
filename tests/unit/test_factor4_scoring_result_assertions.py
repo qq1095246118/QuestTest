@@ -10,6 +10,7 @@ from service.factor4_calculation_oracles import environment_score_v1
 from service.factor4_calculation_service import CalculationCheckResult, CalculationIssue
 from service.factor4_result_service import ENVIRONMENT_LABELS
 from service.factor4_scoring_service import Factor4ScoringService
+from tests.cases.factor4 import test_environment_closure_business as environment_cases
 from tests.cases.factor4 import test_scoring_environment_matrix as cases
 from tests.unit.test_factor4_calculation_service import _batch, _metric as _stored_metric, _snapshot
 from tests.unit.test_factor4_scoring_service import _complete_payload, _metric
@@ -175,7 +176,8 @@ def test_default_profile_six_labels_with_zero_routes_is_a_legal_result() -> None
                     for index, label in enumerate(ENVIRONMENT_LABELS))
     statuses = {label: {"status": "success", "route_count": 0, "metric_count": 1} for label in ENVIRONMENT_LABELS}
     snapshot = _snapshot(batch=_batch(environment_status=statuses), metrics=metrics, routes=())
-    cases.test_six_environment_profile_has_routes_and_metrics_for_every_label((snapshot,))
+    for label in ENVIRONMENT_LABELS:
+        environment_cases.test_each_label_metrics_routes_and_summary_share_full_publication_identity((snapshot,), label)
 
 
 def test_all_partitions_are_checked_before_environment_blocks_are_reported() -> None:
@@ -183,8 +185,9 @@ def test_all_partitions_are_checked_before_environment_blocks_are_reported() -> 
     first = _snapshot(batch=_batch(environment_status={}), metrics=(), routes=())
     second = _snapshot(batch=_batch(environment_status={label: {"status": "success", "route_count": 1} for label in ENVIRONMENT_LABELS}),
                        metrics=(), routes=())
-    with pytest.raises(AssertionError, match="ROUTE_ENVIRONMENT_ROUTE_COUNT_MISMATCH"):
-        cases.test_six_environment_profile_has_routes_and_metrics_for_every_label((first, second))
+    for label in ENVIRONMENT_LABELS:
+        with pytest.raises(AssertionError, match="ROUTE_ENVIRONMENT_ROUTE_COUNT_MISMATCH"):
+            environment_cases.test_each_label_metrics_routes_and_summary_share_full_publication_identity((first, second), label)
 
 
 def test_weight_case_runs_all_profiles_and_does_not_stop_at_first_block(monkeypatch: pytest.MonkeyPatch) -> None:

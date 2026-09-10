@@ -1,9 +1,17 @@
 """目录检索交集、详情级别和母子分页的正式流程，独立于临时探针。"""
 
+import re
 from typing import Any
 
 from api.factor4_auxiliary_api import Factor4AuxiliaryAPI
 from service.factor4_read_service import ReadCheck, ReadContractError, ReadPrecondition, read_tool_page
+
+
+def _catalog_precondition(stage: str, error: ReadPrecondition) -> str:
+    reason = str(error)
+    if not re.fullmatch(r"BLOCKED_[A-Z_]+: [A-Z][A-Z0-9_]{0,79}", reason):
+        reason = "ReadPrecondition"
+    return f"catalog:{stage}:{reason}"
 
 
 class Factor4CatalogExtensionService:
@@ -160,29 +168,59 @@ class Factor4CatalogExtensionService:
         return ReadCheck(max(1, len(refs)), tuple(issues))
 
     def check_status_category(self, kind: str, status: str, category: str | None, rows: tuple[dict[str, Any], ...]) -> ReadCheck:
-        """Compare complete paged catalog membership with DB for one kind/status/category.
+        """Check one catalog selection until natural completion or declared cursor budget.
 
-        Statistics only check group-sum consistency, not library membership counts.
-        Cursor loops or incomplete traversal raise ReadContractError; API errors propagate.
+        Inputs are kind/status/optional category and the complete DB selection. Return
+        checked returned items plus explicit bounded/complete evidence; only natural
+        completion proves full membership. A declared budget never causes a restart or
+        retry. Paging/statistics preconditions are returned as independent blocked
+        evidence after validating all pages already read. Statistics only check group
+        sums. Cursor loops or the local safety cap raise ReadContractError; other API
+        errors propagate without printing response bodies.
         """
         filters = {"library_status": status, **({"library_coin_category": category} if category is not None else {})}
         issues: list[str] = []
+        blocked: list[str] = []
         by_id = {row["id"]: row for row in rows}
         items: list[dict[str, Any]] = []
         seen_cursors: set[str] = set()
         cursor: str | None = None
+        termination = "invalid"
+        page_count = 0
         for _ in range(max(2, len(by_id) + 1)):
             page_filters = {**filters, **({"cursor": cursor} if cursor is not None else {})}
-            page = read_tool_page(self.api.search_catalog(kind=kind, filters=page_filters, limit=50))
+            try:
+                page = read_tool_page(self.api.search_catalog(kind=kind, filters=page_filters, limit=50))
+            except ReadPrecondition as error:
+                blocked.append(_catalog_precondition("pagination", error))
+                termination = "blocked"
+                break
+            page_count += 1
             items.extend(page.items)
             if len(page.items) > 50:
                 issues.append("catalog:status_category_page_limit")
             if "returned_count" in page.data and page.data["returned_count"] != len(page.items):
                 issues.append("catalog:status_category_returned_count")
             cursor = page.meta.get("next_cursor")
+            warnings = page.meta.get("warnings")
+            budget_warning = isinstance(warnings, list) and any(
+                warning == "CATALOG_CURSOR_BUDGET_REACHED"
+                or isinstance(warning, dict) and warning.get("code") == "CATALOG_CURSOR_BUDGET_REACHED"
+                for warning in warnings
+            )
+            if budget_warning:
+                # This is a per-chain delivery boundary, not a daily quota or a
+                # request-per-minute limit. Do not reopen or wait to resume it.
+                if page.meta.get("truncated") is True and "next_cursor" in page.meta and cursor is None:
+                    termination = "bounded"
+                else:
+                    issues.append("catalog:status_category_budget_terminal_contract")
+                break
             if page.meta.get("truncated") is not bool(cursor):
                 issues.append("catalog:status_category_cursor_truncation")
             if cursor is None:
+                if page.meta.get("truncated") is False:
+                    termination = "complete"
                 break
             if not isinstance(cursor, str) or not cursor or cursor in seen_cursors or not page.items:
                 raise ReadContractError("catalog status/category cursor repeated or malformed")
@@ -190,10 +228,23 @@ class Factor4CatalogExtensionService:
         else:
             raise ReadContractError("catalog status/category traversal did not reach its terminal page")
         actual_ids = [item.get("id") for item in items]
-        if set(actual_ids) != set(by_id) or len(actual_ids) != len(by_id):
+        valid_ids = [identifier for identifier in actual_ids
+                     if isinstance(identifier, int) and not isinstance(identifier, bool) and identifier > 0]
+        if len(valid_ids) != len(actual_ids):
+            issues.append("catalog:status_category_invalid_id")
+        if len(set(valid_ids)) != len(valid_ids):
+            issues.append("catalog:status_category_duplicate_identity")
+        full_membership_verified = (
+            termination == "complete" and len(valid_ids) == len(actual_ids)
+            and set(valid_ids) == set(by_id) and len(valid_ids) == len(by_id)
+        )
+        if termination == "complete" and not full_membership_verified:
             issues.append("catalog:status_category_complete_membership")
         for item in items:
-            expected = by_id.get(item.get("id"))
+            identifier = item.get("id")
+            if not isinstance(identifier, int) or isinstance(identifier, bool) or identifier < 1:
+                continue
+            expected = by_id.get(identifier)
             if (expected is None or item.get("kind") != kind or item.get("library_status") != status
                     or item.get("factor_ref") != f"{kind}:{item.get('id')}"):
                 issues.append("catalog:status_category_identity")
@@ -204,14 +255,30 @@ class Factor4CatalogExtensionService:
             expected_categories = {row["coin_category"] for row in rows if row["id"] == item["id"]}
             if not isinstance(actual_categories, list) or not expected_categories <= set(actual_categories):
                 issues.append("catalog:status_category_memberships")
-        stats = read_tool_page(self.api.catalog_stats(kind, filters=filters)).data
-        groups, total = stats.get("groups"), stats.get("total")
-        if not isinstance(total, int) or isinstance(total, bool) or total < 0 or not isinstance(groups, list):
-            issues.append("catalog:stats_shape")
-        elif any(not isinstance(row, dict) or isinstance(row.get("count"), bool) or not isinstance(row.get("count"), int) or row["count"] < 0 for row in groups) or sum(row["count"] for row in groups) != total:
-            issues.append("catalog:stats_group_sum")
-        return ReadCheck(max(1, len(by_id)), tuple(dict.fromkeys(issues)),
-                         {"catalog_membership_oracle": "complete_database_set", "stats_oracle": "group_sum_only"})
+        stats_status = "blocked"
+        try:
+            stats = read_tool_page(self.api.catalog_stats(kind, filters=filters)).data
+        except ReadPrecondition as error:
+            blocked.append(_catalog_precondition("statistics", error))
+        else:
+            groups, total = stats.get("groups"), stats.get("total")
+            stats_status = "verified"
+            if not isinstance(total, int) or isinstance(total, bool) or total < 0 or not isinstance(groups, list):
+                issues.append("catalog:stats_shape")
+                stats_status = "failed"
+            elif any(not isinstance(row, dict) or isinstance(row.get("count"), bool) or not isinstance(row.get("count"), int) or row["count"] < 0 for row in groups) or sum(row["count"] for row in groups) != total:
+                issues.append("catalog:stats_group_sum")
+                stats_status = "failed"
+        checked = max(len(items), int(page_count > 0 or stats_status != "blocked"))
+        return ReadCheck(checked, tuple(dict.fromkeys(issues)), {
+            "catalog_membership_oracle": "complete_database_set", "stats_oracle": "group_sum_only",
+            "catalog_traversal": termination, "catalog_returned_count": len(items),
+            "catalog_returned_unique_count": len(set(valid_ids)), "catalog_database_unique_count": len(by_id),
+            "catalog_page_count": page_count, "catalog_full_membership_verified": full_membership_verified,
+            "catalog_completeness": "verified" if full_membership_verified else "not_verified",
+            "catalog_budget_code": "CATALOG_CURSOR_BUDGET_REACHED" if termination == "bounded" else None,
+            "catalog_statistics": stats_status, "blocked": tuple(blocked),
+        })
 
     def check_chinese_query(self, kind: str, rows: tuple[dict[str, Any], ...]) -> ReadCheck:
         """cn_name独立查询应能发现真实中文名种子，返回name/cn_name至少一字段匹配；无自然种子阻断。"""

@@ -44,8 +44,8 @@ python3 -m pytest tests/cases/factor4 --collect-only -qq
 ```bash
 python3 -m pytest tests/cases/factor4/test_summary_business.py \
   -k factor_rank_values_order_identity --live --env test -v
-python3 -m pytest tests/cases/factor4/test_final_results.py \
-  -k each_environment_summary --live --env test -v
+python3 -m pytest tests/cases/factor4/test_environment_closure_business.py \
+  -k each_label_metrics_routes_and_summary --live --env test -v
 ```
 
 ## 覆盖边界

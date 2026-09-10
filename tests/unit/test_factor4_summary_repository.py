@@ -6,7 +6,7 @@ from typing import Any, Iterator
 
 import pytest
 
-from db.factor4_read_repository import Factor4ReadRepository
+from db.factor4_read_repository import Factor4ReadRepository, SummarySample
 
 pytestmark = pytest.mark.unit
 
@@ -134,3 +134,34 @@ def test_slice_discovery_does_not_merge_symbol_and_aggregate(mode: str, clause: 
     assert "COALESCE(symbol,'')=COALESCE(%s,'')" in query
     assert "ORDER BY as_of_time, id" in query
     assert args[-1] == row["symbol"]
+
+
+@pytest.mark.parametrize("kind,table,flag", [("factor", "factors", 0), ("sub_factor", "sub_factors", 1)])
+def test_research_catalog_members_keep_unknown_left_join_rows_and_exact_typed_scope(kind: str, table: str, flag: int) -> None:
+    scope = {"ic_scope": "cross_sectional", "calculation_mode": "child_aggregate" if kind == "factor" else "direct",
+             "factor_bar_interval": "1h", "factor_window_bars": "24", "return_bar_interval": "1h",
+             "forward_return_bars": 1, "universe_key": "all", "symbol": "", "window_scope": "1y", "scoring_version": "v1"}
+    sample = SummarySample(kind, datetime(2026, 9, 8, tzinfo=timezone.utc), scope, (), ())
+    rows = [{"factor_id": 1, "metric_id": 11, "validity_status": "valid"},
+            {"factor_id": 2, "metric_id": None, "validity_status": "unknown"}]
+    db = _DB([], [rows])
+    snapshot = Factor4ReadRepository(db).research_catalog_snapshot(sample)
+    assert snapshot.rows == tuple(rows) and snapshot.ambiguous_count == 0
+    sql, args = next((sql, args) for sql, args in db.calls if "WITH ranked" in sql)
+    assert f"FROM {table} catalog LEFT JOIN ranked latest" in sql
+    assert "LEFT JOIN factor_validity_status" in sql and "v.cross_sectional_summary_id=latest.metric_id" in sql
+    assert "r.completed_at DESC,m.updated_at DESC,m.id DESC" in sql and "latest.rn=1" in sql
+    assert args == (flag, *scope.values(), datetime(2026, 9, 8, 8), flag, "1h")
+    assert "SELECT m.*" not in sql and "metric_payload" not in sql
+    assert db.calls[-1] == ("ROLLBACK", ())
+
+
+def test_research_catalog_duplicate_validity_matches_are_not_silently_collapsed() -> None:
+    scope = {"ic_scope": "time_series", "calculation_mode": "direct", "factor_bar_interval": "1d",
+             "factor_window_bars": "24", "return_bar_interval": "1d", "forward_return_bars": 1,
+             "universe_key": "all", "symbol": "", "window_scope": "1y", "scoring_version": "v1"}
+    rows = [{"factor_id": 1, "validity_id": 11}, {"factor_id": 1, "validity_id": 12}]
+    db = _DB([], [rows])
+    snapshot = Factor4ReadRepository(db).research_catalog_snapshot(
+        SummarySample("sub_factor", datetime(2026, 9, 8, tzinfo=timezone.utc), scope, (), ()))
+    assert snapshot.ambiguous_count == 1 and len(snapshot.rows) == 2

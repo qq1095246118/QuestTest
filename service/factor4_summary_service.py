@@ -44,21 +44,29 @@ def summary_scope(row: Mapping[str, Any]) -> SummaryScope:
 
 
 def metric_slice_arguments(sample: SliceSample, *, limit: int = 7, explicit_run: bool = True,
-                           as_of: str | None = None) -> dict[str, Any]:
+                           as_of: str | None = None,
+                           time_range: tuple[str, str] | None = None) -> dict[str, Any]:
     """Build a bounded exact-scope slice read; missing natural rows raise ReadPrecondition.
 
     The final persisted slice end is advanced one day to exclude the deferred equality
-    boundary. Invalid DB timestamps/required fields raise ValueError/KeyError; no I/O.
+    boundary unless an explicit aware public time_range is supplied unchanged.
+    Invalid timestamps/ranges or missing keys raise ValueError/KeyError; no I/O.
     """
     summary, rows = sample.summary, sample.rows
     if not rows:
         raise ReadPrecondition("BLOCKED_DATA_PRECONDITION: no persisted metric slices")
-    start = min(_time(row["slice_start"], timezone.utc) for row in rows)
-    end = max(_time(row["slice_end"], timezone.utc) for row in rows)
     captured = _time(as_of) if as_of is not None else datetime.now(timezone.utc)
-    upper = min(end + timedelta(days=1), captured)
-    if upper <= end:
-        raise ReadPrecondition("BLOCKED_DATA_PRECONDITION: no visible instant after the final slice end")
+    if time_range is None:
+        start = min(_time(row["slice_start"], timezone.utc) for row in rows)
+        end = max(_time(row["slice_end"], timezone.utc) for row in rows)
+        upper = min(end + timedelta(days=1), captured)
+        if upper <= end:
+            raise ReadPrecondition("BLOCKED_DATA_PRECONDITION: no visible instant after the final slice end")
+    else:
+        # Consumer journeys retain their public metric period, not DB-only dates.
+        start, upper = (_time(value) for value in time_range)
+        if not start < upper <= captured:
+            raise ValueError("slice time range must be increasing and visible at as_of")
     args = {"factor_ref": f"{'sub_factor' if summary.get('is_sub_factor_id', 1) else 'factor'}:{summary['factor_id']}",
             **{key: value for key, value in summary.items() if key in SUMMARY_KEYS and key != "factor_bar_interval"},
             "interval": summary["factor_bar_interval"], "symbol": summary.get("symbol") or "",
@@ -553,16 +561,21 @@ class Factor4SummaryService:
         return compare_validity(item, sample, scope)
 
     def check_metric_slices(self, sample: SliceSample, *, limit: int = 500, explicit_run: bool = True,
-                            as_of: str | None = None, resolved_scope: bool = False) -> ReadCheck:
+                            as_of: str | None = None, resolved_scope: bool = False,
+                            time_range: tuple[str, str] | None = None) -> ReadCheck:
         """Compare all cursor-paginated slice identities/values with DB rows for an exact summary.
 
         The endpoint may emit a very large text representation for high limits. Pages are
         deliberately bounded to 100 and followed by their signed cursor, so a truncated
         response cannot be mistaken for a complete reconciliation.
+        An explicit aware time_range comes from the consumer's public metric period;
+        sample.rows must already be the independent expected subset for that range.
+        Invalid time ranges raise ValueError; transport/contract errors propagate.
         """
         summary, expected = sample.summary, sample.rows
         if not expected: raise ReadPrecondition("BLOCKED_DATA_PRECONDITION: no persisted metric slices")
-        args = metric_slice_arguments(sample, limit=limit, explicit_run=explicit_run, as_of=as_of)
+        args = metric_slice_arguments(sample, limit=limit, explicit_run=explicit_run,
+                                      as_of=as_of, time_range=time_range)
         requested = args["limit"]
         actual_rows: list[dict[str, Any]] = []
         pages = 0

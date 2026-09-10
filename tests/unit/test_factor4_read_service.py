@@ -124,7 +124,7 @@ def _detail_payload(level: str) -> dict[str, Any]:
     return data
 
 
-def _detail_check(single: dict[str, Any], batch: dict[str, Any], level: str, *, executable_entry: bool = False) -> ReadCheck:
+def _detail_check(single: dict[str, Any], batch: dict[str, Any], level: str) -> ReadCheck:
     mcp = SimpleNamespace(
         get_factor_details_batch=lambda *args, **kwargs: _response({"data": {"items": [
             {"factor_ref": "sub_factor:1", "success": True, "data": batch}]}, "meta": {}}),
@@ -132,7 +132,7 @@ def _detail_check(single: dict[str, Any], batch: dict[str, Any], level: str, *, 
     )
     subset = CatalogSubset("sub_factor", "valid", "all", ({"id": 1, "name": "value", "cn_name": None, "serial_number": "F1"},))
     service = Factor4ReadService(SimpleNamespace(mcp=mcp))
-    return service.check_details_executable_common_fields(subset) if executable_entry else service.check_details_batch(subset, level)
+    return service.check_details_batch(subset, level)
 
 
 @pytest.mark.parametrize("level", ["summary", "definition", "executable"])
@@ -174,7 +174,166 @@ def test_detail_common_fields_detect_null_omission_and_value_drift(field: str) -
     assert f"detail:definition_field={field}" in _detail_check(single, batch, "definition").issues
 
 
-def test_executable_entry_reuses_complete_detail_comparison() -> None:
-    single = _detail_payload("executable")
-    batch = {**single, "data_source_metadata": {"required_fields": ["open"]}}
-    assert _detail_check(single, batch, "executable", executable_entry=True).issues == _detail_check(single, batch, "executable").issues
+def _catalog_subset() -> CatalogSubset:
+    return CatalogSubset("sub_factor", "valid", "all", tuple(
+        {"id": i, "name": "value", "cn_name": None, "serial_number": f"F{i}", "data_source": "Kline",
+         "updated_at": datetime(2026, 9, i, tzinfo=timezone.utc)} for i in range(1, 4)))
+
+
+def _catalog_page(rows: tuple[dict[str, Any], ...], *, terminal: str = "bounded") -> MCPResponse:
+    items = [{**{key: value for key, value in row.items() if key != "updated_at"},
+              "factor_ref": f"sub_factor:{row['id']}", "kind": "sub_factor", "library_status": "valid",
+              "library_coin_categories": ["all"]} for row in rows]
+    return _response({"data": {"items": items, "returned_count": len(items)}, "meta": {
+        "next_cursor": "next" if terminal == "continuation" else None,
+        "truncated": terminal != "complete",
+        "warnings": ["CATALOG_CURSOR_BUDGET_REACHED"] if terminal == "bounded" else [],
+    }})
+
+
+def _catalog_reader(*responses: MCPResponse) -> tuple[Factor4ReadService, list[dict[str, Any]]]:
+    pending = iter(responses)
+    calls: list[dict[str, Any]] = []
+
+    def search_catalog(*args: object, **kwargs: Any) -> MCPResponse:
+        calls.append(kwargs)
+        return next(pending)
+
+    return Factor4ReadService(SimpleNamespace(search_catalog=search_catalog)), calls
+
+
+@pytest.mark.parametrize("entry", ["members", "query"])
+def test_legacy_catalog_reads_accept_budget_without_claiming_all_members(entry: str) -> None:
+    """Both live entry paths retain correct partial data and JUnit scope without another request."""
+    from tests.cases.factor4.test_migrated_readonly_scripts import _assert_check
+
+    subset = _catalog_subset()
+    service, calls = _catalog_reader(_catalog_page(subset.rows[:1]))
+    traversal = service.catalog_query(subset, "value") if entry == "query" else service.catalog_pages(subset)
+    check = service.check_catalog_query(subset, "value", traversal) if entry == "query" else service.check_catalog_members(subset, traversal)
+    properties: dict[str, object] = {}
+    _assert_check(check, properties.__setitem__)
+    assert len(calls) == 1
+    assert properties["catalog_acceptance"] == "BOUNDED_READ_ACCEPTED_NOT_FULL_EXPORT"
+    assert properties["catalog_returned_unique_count"] == 1
+    assert properties["catalog_database_unique_count"] == 3
+    assert properties["catalog_full_membership_verified"] is False
+
+
+@pytest.mark.parametrize("mutation", ["wrong_field", "duplicate", "unexpected"])
+def test_legacy_catalog_budget_does_not_hide_bad_returned_data(mutation: str) -> None:
+    """Budgeted membership still rejects corrupt fields, repeated IDs and unrequested entities."""
+    subset = _catalog_subset()
+    row = dict(subset.rows[0])
+    if mutation == "wrong_field":
+        row["name"] = "wrong"
+    elif mutation == "unexpected":
+        row["id"] = 99
+    selected = (row, row) if mutation == "duplicate" else (row,)
+    service, _ = _catalog_reader(_catalog_page(selected))
+    check = service.check_catalog_members(subset, service.catalog_pages(subset))
+    assert check.issues
+
+
+def test_legacy_catalog_natural_end_still_requires_complete_database_selection() -> None:
+    """Natural completion cannot excuse missing members using the new budget handling."""
+    subset = _catalog_subset()
+    service, _ = _catalog_reader(_catalog_page(subset.rows[:1], terminal="complete"))
+    check = service.check_catalog_members(subset, service.catalog_pages(subset))
+    assert "missing_id=2" in check.issues
+    assert check.evidence["catalog_full_membership_verified"] is False
+
+
+def test_catalog_budget_warning_never_relaxes_daily_pagination() -> None:
+    """Identical metadata is accepted only for catalog calls, not for environment pages."""
+    response = _catalog_page(_catalog_subset().rows[:1])
+    service = Factor4ReadService(SimpleNamespace())
+    daily = service._traverse(lambda _: response, page_size=3, max_pages=1)
+    assert daily.issues == ("pagination:truncated_cursor_mismatch",)
+    assert daily.termination == "invalid"
+
+
+def test_legacy_catalog_checks_invalid_budget_terminal_metadata_without_following_cursor() -> None:
+    """A budget warning with a continuation cursor remains a contract failure."""
+    subset = _catalog_subset()
+    response = _catalog_page(subset.rows[:1])
+    body = response.structured_content
+    body["meta"]["next_cursor"] = "must-not-follow"
+    service, calls = _catalog_reader(_response(body))
+    check = service.check_catalog_members(subset, service.catalog_pages(subset))
+    assert "pagination:budget_terminal_contract" in check.issues
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_later_catalog_dependency_block_keeps_earlier_field_failures(corrupt: bool) -> None:
+    """A later dependency failure skips only when already-read pages contain no differences."""
+    from tests.cases.factor4.test_migrated_readonly_scripts import _assert_check
+
+    subset = _catalog_subset()
+    row = {**subset.rows[0], "name": "wrong"} if corrupt else subset.rows[0]
+    error = _response({"data": {}, "meta": {}, "error": {"code": "DEPENDENCY_UNAVAILABLE"}}, error=True)
+    service, _ = _catalog_reader(_catalog_page((row,), terminal="continuation"), error)
+    check = service.check_catalog_members(subset, service.catalog_pages(subset))
+    properties: dict[str, object] = {}
+    with pytest.raises(AssertionError if corrupt else pytest.skip.Exception):
+        _assert_check(check, properties.__setitem__)
+    assert properties["catalog_acceptance"] == ("FAILED" if corrupt else "BLOCKED")
+    assert check.evidence["blocked"]
+
+
+@pytest.mark.parametrize("first_terminal,second_terminal", [
+    ("bounded", "bounded"), ("complete", "bounded"), ("bounded", "complete"), ("complete", "complete"),
+])
+def test_catalog_replay_completeness_matches_both_traversals(first_terminal: str, second_terminal: str) -> None:
+    """Only two complete traversals certify full replay; bounded lengths may differ."""
+    subset = _catalog_subset()
+    first = subset.rows if first_terminal == "complete" else subset.rows[:2]
+    second = subset.rows if second_terminal == "complete" else subset.rows[:1]
+    service, _ = _catalog_reader(_catalog_page(first, terminal=first_terminal), _catalog_page(second, terminal=second_terminal))
+    check = service.check_catalog_replay(subset, service.catalog_pages(subset))
+    assert not check.issues
+    full = first_terminal == second_terminal == "complete"
+    assert check.evidence["catalog_repeat_full_verified"] is full
+    assert check.evidence["catalog_full_membership_verified"] is full
+
+
+def test_bounded_catalog_replay_rejects_changed_common_prefix() -> None:
+    """Individually valid returned members still fail when their replay order changes."""
+    from tests.cases.factor4.test_migrated_readonly_scripts import _assert_check
+
+    subset = _catalog_subset()
+    service, _ = _catalog_reader(_catalog_page(subset.rows[:2]), _catalog_page(tuple(reversed(subset.rows[:2]))))
+    check = service.check_catalog_replay(subset, service.catalog_pages(subset))
+    assert "catalog:repeat_read_changed" in check.issues
+    with pytest.raises(AssertionError, match="catalog:repeat_read_changed"):
+        _assert_check(check)
+
+
+@pytest.mark.parametrize("first_terminal", ["complete", "bounded", "blocked"])
+def test_catalog_replay_block_retains_initial_failures_and_both_block_reasons(first_terminal: str) -> None:
+    """A blocked reread never converts an already-observed data failure into a skip."""
+    from tests.cases.factor4.test_migrated_readonly_scripts import _assert_check
+
+    subset = _catalog_subset()
+    rows = ({**subset.rows[0], "name": "wrong"}, *subset.rows[1:])
+    error = _response({"data": {}, "meta": {}, "error": {"code": "DEPENDENCY_UNAVAILABLE"}}, error=True)
+    first = _catalog_page(rows, terminal="continuation" if first_terminal == "blocked" else first_terminal)
+    responses = (first, error, error) if first_terminal == "blocked" else (first, error)
+    service, _ = _catalog_reader(*responses)
+    check = service.check_catalog_replay(subset, service.catalog_pages(subset))
+    properties: dict[str, object] = {}
+    with pytest.raises(AssertionError, match="field=name"):
+        _assert_check(check, properties.__setitem__)
+    assert properties["catalog_acceptance"] == "FAILED"
+    assert len(check.evidence["blocked"]) == (2 if first_terminal == "blocked" else 1)
+    assert check.evidence["catalog_repeat_full_verified"] is False
+
+
+def test_catalog_updated_filter_budget_preserves_time_selection_assertion() -> None:
+    """Budget termination cannot hide a returned row below the requested updated_after boundary."""
+    subset = _catalog_subset()
+    service, calls = _catalog_reader(_catalog_page(subset.rows[:1]))
+    check = service.check_catalog_updated_boundary(subset, 0)
+    assert "unexpected_id=1" in check.issues
+    assert calls[0]["updated_after"] == subset.rows[1]["updated_at"].isoformat()

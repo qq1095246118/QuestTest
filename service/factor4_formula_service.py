@@ -63,6 +63,29 @@ def _ref(row: Mapping[str, Any]) -> str:
     return f"{'sub_factor' if row.get('is_sub_factor_id', 1) else 'factor'}:{row['factor_id']}"
 
 
+def compare_exact_formula_output(row: Mapping[str, Any], data: Mapping[str, Any]) -> ReadCheck:
+    """Compare an already fetched formula with persisted exact-Run evidence.
+
+    Inputs are the independent DB row and public response data. Returns field-level
+    differences without I/O or mathematical evaluation; missing DB identity raises
+    KeyError. Publicly missing fields are differences, including expected nulls.
+    """
+    issues, ref = [], _ref(row)
+    if data.get("factor_ref") != ref:
+        issues.append(f"{ref}:formula:factor_ref")
+    for key in ("run_id", "expression", "formula_hash", "formula_version", "source_detail_id", "required_fields"):
+        if key not in data or _json(data.get(key)) != _json(row.get(key)):
+            issues.append(f"{ref}:formula:{key}")
+    identity = _mapping(data.get("metric_identity"))
+    for key in ("calculation_mode", "factor_bar_interval", "factor_window_bars", "return_bar_interval", "forward_return_bars"):
+        if key not in identity or str(identity[key]).casefold() != str(row.get(key)).casefold():
+            issues.append(f"{ref}:formula:metric_identity:{key}")
+    for public, database in (("lookback", "lookback_json"), ("lag", "lag_json")):
+        if database in row and (public not in data or _json(data.get(public)) != _json(row[database])):
+            issues.append(f"{ref}:formula:{public}")
+    return ReadCheck(1, tuple(issues))
+
+
 def _window(value: Any) -> int | None:
     if isinstance(value, bool):
         return None
@@ -354,20 +377,7 @@ class Factor4FormulaService:
         if cache_key in self._formula_checks:
             return self._formula_checks[cache_key]
         data = read_tool_page(self.api.formula(row)).data
-        issues, ref = [], _ref(row)
-        if data.get("factor_ref") != ref:
-            issues.append(f"{ref}:formula:factor_ref")
-        for key in ("run_id", "expression", "formula_hash", "formula_version", "source_detail_id", "required_fields"):
-            if _json(data.get(key)) != _json(row.get(key)):
-                issues.append(f"{ref}:formula:{key}")
-        identity = _mapping(data.get("metric_identity"))
-        for key in ("calculation_mode", "factor_bar_interval", "factor_window_bars", "return_bar_interval", "forward_return_bars"):
-            if str(identity.get(key)).casefold() != str(row.get(key)).casefold():
-                issues.append(f"{ref}:formula:metric_identity:{key}")
-        for public, database in (("lookback", "lookback_json"), ("lag", "lag_json")):
-            if database in row and _json(data.get(public)) != _json(row.get(database)):
-                issues.append(f"{ref}:formula:{public}")
-        result = ReadCheck(1, tuple(issues))
+        result = compare_exact_formula_output(row, data)
         self._formula_checks[cache_key] = result
         return result
 

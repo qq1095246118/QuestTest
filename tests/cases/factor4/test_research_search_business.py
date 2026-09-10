@@ -5,7 +5,7 @@ from collections.abc import Callable
 import pytest
 
 from api.factor4_summary_api import Factor4SummaryAPI
-from db.factor4_read_repository import Factor4ReadRepository, SummarySample
+from db.factor4_read_repository import Factor4ReadRepository, ResearchCatalogSnapshot, SummarySample
 from service.factor4_read_service import Factor4ReadService, ReadCheck, ReadContractError, ReadPrecondition
 from service.factor4_research_search_service import Factor4ResearchSearchService
 from service.factor4_summary_service import Factor4SummaryService
@@ -13,15 +13,21 @@ from service.factor4_summary_service import Factor4SummaryService
 pytestmark = [pytest.mark.integration, pytest.mark.regression, pytest.mark.factor4_calculation]
 
 
-def _verify(action: Callable[[], ReadCheck]) -> None:
+def _verify(action: Callable[[], ReadCheck], record_property: Callable[[str, object], None] | None = None) -> None:
     try:
         result = action()
     except ReadPrecondition as exc:
         pytest.skip(str(exc))
     except ReadContractError as exc:
         pytest.fail(str(exc), pytrace=False)
-    assert result.checked_count > 0
+    if record_property is not None:
+        for name, value in result.evidence.items():
+            if name.startswith("research_validity_readback_"):
+                record_property(name, value)
     assert not result.issues, ", ".join(result.issues[:20])
+    if result.evidence.get("blocked"):
+        pytest.skip("BLOCKED_DATA_OR_DEPENDENCY: " + "; ".join(result.evidence["blocked"]))
+    assert result.checked_count > 0
 
 
 @pytest.fixture(scope="module")
@@ -77,20 +83,44 @@ def test_mixed_metric_batch_preserves_two_existing_factor_identities_and_local_e
 
 
 @pytest.fixture(scope="module")
-def research_validity_counts(research_sample: SummarySample, factor4_read_repository: Factor4ReadRepository) -> tuple[dict[str, int], int]:
-    """Read the complete interval-catalog left-join counts once for each exact research scope."""
-    return factor4_read_repository.research_validity_counts(research_sample)
+def research_catalog(research_sample: SummarySample, factor4_read_repository: Factor4ReadRepository) -> ResearchCatalogSnapshot:
+    """Read slim final results for every interval-catalog entity, including absent summaries."""
+    return factor4_read_repository.research_catalog_snapshot(research_sample)
 
 
 @pytest.mark.parametrize("validity", ["valid", "invalid", "unknown"])
 def test_research_explicit_validity_statistics_include_unknown_catalog_entities(
     research_service: Factor4ResearchSearchService, research_sample: SummarySample,
-    research_validity_counts: tuple[dict[str, int], int], validity: str,
+    research_catalog: ResearchCatalogSnapshot, validity: str, record_property: Callable[[str, object], None],
 ) -> None:
-    """Each explicit status must match total and grouped DB counts, including absent-summary unknowns."""
-    counts, ambiguity = research_validity_counts
-    _verify(lambda: research_service.check_explicit_validity_stats(research_sample, counts, validity,
-                                                                  ambiguous_count=ambiguity))
+    """Status members, stats and public-ref validity replay match DB; unknowns keep absent evidence."""
+    _verify(lambda: research_service.check_explicit_validity_members(research_catalog, validity), record_property)
+
+
+@pytest.mark.parametrize("shape", ["ts_symbol", "ts_aggregate", "cs_aggregate"])
+@pytest.mark.parametrize("scenario", ["hit", "empty", "relaxed"])
+def test_research_combined_filters_have_exact_intersection_and_monotone_relaxation(
+    research_service: Factor4ResearchSearchService, factor4_read_repository: Factor4ReadRepository,
+    shape: str, scenario: str,
+) -> None:
+    """Query, validity and two metric gates use real discriminating hit/empty/relaxed members."""
+    minimum = 2 if scenario == "empty" else 3
+    sample = factor4_read_repository.summary_sample(shape, minimum_factors=minimum)
+    if sample is None:
+        pytest.skip(f"BLOCKED_DATA_PRECONDITION: no {minimum}-factor {shape} research partition")
+    snapshot = factor4_read_repository.research_catalog_snapshot(sample)
+    _verify(lambda: research_service.check_combined_filters(snapshot, scenario))
+
+
+@pytest.mark.parametrize("shape", ["ts_aggregate", "cs_aggregate"])
+def test_parent_aggregate_research_and_ranking_do_not_substitute_child_results(
+    research_service: Factor4ResearchSearchService, factor4_read_repository: Factor4ReadRepository, shape: str,
+) -> None:
+    """Parent discovery and raw-signed Top ranking use only completed child_aggregate evidence."""
+    sample = factor4_read_repository.summary_sample(shape, kind="factor", calculation_mode="child_aggregate", minimum_factors=2)
+    if sample is None:
+        pytest.skip(f"BLOCKED_DATA_PRECONDITION: no two-parent {shape} child_aggregate partition")
+    _verify(lambda: research_service.check_parent_research_and_rank(sample))
 
 
 @pytest.mark.parametrize("shape", ["ts_only", "cs_only"])

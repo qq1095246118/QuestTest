@@ -73,6 +73,15 @@ class SummarySample:
 
 
 @dataclass(frozen=True)
+class ResearchCatalogSnapshot:
+    """Current interval catalog joined to completed results at one fixed research scope."""
+
+    sample: SummarySample
+    rows: tuple[dict[str, Any], ...] = field(repr=False)
+    ambiguous_count: int = 0
+
+
+@dataclass(frozen=True)
 class MetricScopeSnapshot:
     """指定端点筛选下的所有 completed run/factor 记录，保留历史以重建 PIT 并集。"""
 
@@ -483,6 +492,43 @@ class Factor4ReadRepository:
         return ({status: sum(int(row["factor_count"]) for row in rows if row["validity_status"] == status)
                  for status in ("valid", "invalid", "unknown")},
                 sum(int(row.get("ambiguous_count") or 0) for row in rows))
+
+    def research_catalog_snapshot(self, sample: SummarySample) -> ResearchCatalogSnapshot:
+        """Read typed catalog members with latest exact-scope metrics and linked validity.
+
+        Missing summaries and validity remain explicit unknown members. Only slim
+        final result columns are read, not formula inputs or OOS arrays. Multiple
+        matching validity rows are retained and counted as oracle ambiguity instead
+        of picking an arbitrary status. Invalid scope/kind raises ValueError;
+        sanitized read-only database failures propagate.
+        """
+        scope = sample.scope["ic_scope"]
+        if sample.kind not in _TABLES or scope not in {"time_series", "cross_sectional"}:
+            raise ValueError("unsupported research catalog scope or kind")
+        table, name, flag = _TABLES[sample.kind]
+        where = " AND ".join(f"m.{key} <=> %s" for key in SUMMARY_KEYS)
+        cutoff = sample.as_of.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+        with self._snapshot() as tx:
+            rows = tx.fetch_all(f"""WITH ranked AS (
+                SELECT m.id AS metric_id,m.factor_id,m.run_id,m.factor_bar_interval,m.scoring_version,
+                    m.coverage_mean,m.icir,m.rank_icir,m.oos_icir,m.rank_oos_icir,m.final_score,m.valid_slice_count,
+                    ROW_NUMBER() OVER (PARTITION BY m.factor_id ORDER BY r.completed_at DESC,m.updated_at DESC,m.id DESC) AS rn
+                FROM factor_ic_summary_metrics m JOIN factor_ic_runs r ON r.run_id=m.run_id
+                WHERE m.is_sub_factor_id=%s AND {where} AND r.status='completed' AND r.completed_at<=%s
+                ) SELECT catalog.id AS factor_id,catalog.{name} AS name,catalog.cn_name,
+                    catalog.factor_bar_interval,latest.metric_id,latest.run_id,latest.scoring_version,
+                    latest.coverage_mean,latest.icir,latest.rank_icir,latest.oos_icir,latest.rank_oos_icir,
+                    latest.final_score,latest.valid_slice_count,v.id AS validity_id,v.run_id AS validity_run_id,
+                    v.time_series_status,v.cross_sectional_status,v.overall_status,
+                    CASE WHEN v.{scope}_status IS NULL OR LOWER(v.{scope}_status) NOT IN ('valid','invalid','unknown')
+                         THEN 'unknown' ELSE LOWER(v.{scope}_status) END AS validity_status
+                FROM {table} catalog LEFT JOIN ranked latest ON latest.factor_id=catalog.id AND latest.rn=1
+                LEFT JOIN factor_validity_status v ON v.is_sub_factor_id=%s AND v.factor_id=catalog.id
+                    AND v.run_id=latest.run_id AND v.{scope}_summary_id=latest.metric_id
+                WHERE catalog.factor_bar_interval=%s ORDER BY catalog.id,v.id""",
+                (flag, *(sample.scope[key] for key in SUMMARY_KEYS), cutoff, flag, sample.scope["factor_bar_interval"]))
+        identities = [row["factor_id"] for row in rows]
+        return ResearchCatalogSnapshot(sample, tuple(rows), len(identities) - len(set(identities)))
 
     def one_dimension_research_sample(self, shape: str) -> tuple[ValiditySample, str] | None:
         """Discover a latest CS metric whose overall validity is TS-only or CS-only.

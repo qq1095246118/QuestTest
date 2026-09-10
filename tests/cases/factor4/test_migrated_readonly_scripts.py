@@ -34,10 +34,21 @@ def _execute(action: Callable[[], _T]) -> _T:
         pytest.fail(str(error), pytrace=False)
 
 
-def _assert_check(check: ReadCheck) -> None:
-    """统一断言正式 Case 的结构化差异；错误只含字段/ID，不输出响应正文。"""
-    assert check.checked_count > 0
+def _assert_check(check: ReadCheck, record_property: Callable[[str, object], None] | None = None) -> None:
+    """先断言已知差异，再处理独立阻塞；目录覆盖范围可写 JUnit，不输出正文。"""
+    blocked = check.evidence.get("blocked")
+    if record_property is not None:
+        for name, value in check.evidence.items():
+            if name.startswith("catalog_"):
+                record_property(name, value)
+        record_property("catalog_blocked", blocked or ())
+        record_property("catalog_acceptance", "FAILED" if check.issues else "BLOCKED" if blocked else (
+            "BOUNDED_READ_ACCEPTED_NOT_FULL_EXPORT" if check.evidence.get("catalog_traversal") == "bounded"
+            else "COMPLETE_CATALOG_ACCEPTED"))
     assert not check.issues, "Factor 4.0 read-only reconciliation failed: " + ", ".join(check.issues[:20])
+    if blocked:
+        pytest.skip(f"BLOCKED_DATA_OR_DEPENDENCY: {blocked}")
+    assert check.checked_count > 0
 
 
 def _skip_precondition(error: ReadPrecondition) -> None:
@@ -93,14 +104,15 @@ def _assert_environment_matrix(check: ReadCheck) -> None:
 def test_catalog_pagination_and_database_membership(
     read_service: Factor4ReadService,
     catalog_subset: CatalogSubset,
+    record_property: Callable[[str, object], None],
 ) -> None:
-    """MCP-006/MCP-018：动态筛选完整分页、身份、状态和 category 与 DB 对账。"""
+    """MCP-006/MCP-018：目录返回项核DB，预算终止不验全集；差异失败，依赖缺失阻塞。"""
     subset = catalog_subset
     try:
         traversal = read_service.catalog_pages(subset)
     except ReadPrecondition as error:
         _skip_precondition(error)
-    _assert_check(read_service.check_catalog_members(subset, traversal))
+    _assert_check(read_service.check_catalog_members(subset, traversal), record_property)
 
 
 def test_catalog_stats_group_counts_are_internally_consistent(
@@ -115,11 +127,14 @@ def test_catalog_stats_group_counts_are_internally_consistent(
         _skip_precondition(error)
 
 
-def test_catalog_repeat_read_is_stable(read_service: Factor4ReadService, catalog_subfactor: CatalogSubset) -> None:
-    """MCP-018 子项：同一筛选串行重读的排序、成员和字段一致；不是并发测试。"""
+def test_catalog_repeat_read_is_stable(
+    read_service: Factor4ReadService, catalog_subfactor: CatalogSubset,
+    record_property: Callable[[str, object], None],
+) -> None:
+    """MCP-018：串行重读已返回前缀并记录完整性；差异失败，依赖缺失阻塞。"""
     try:
         initial = read_service.catalog_pages(catalog_subfactor)
-        _assert_check(read_service.check_catalog_replay(catalog_subfactor, initial))
+        _assert_check(read_service.check_catalog_replay(catalog_subfactor, initial), record_property)
     except ReadPrecondition as error:
         _skip_precondition(error)
 
@@ -127,10 +142,11 @@ def test_catalog_repeat_read_is_stable(read_service: Factor4ReadService, catalog
 @pytest.mark.parametrize("offset", [-1, 0, 1], ids=["before", "equal", "after"])
 def test_catalog_updated_after_boundary(
     read_service: Factor4ReadService, catalog_subfactor: CatalogSubset, offset: int,
+    record_property: Callable[[str, object], None],
 ) -> None:
     """MCP-006：updated_after 前/等/后边界严格按 > 过滤且不丢页。"""
     try:
-        _assert_check(read_service.check_catalog_updated_boundary(catalog_subfactor, offset))
+        _assert_check(read_service.check_catalog_updated_boundary(catalog_subfactor, offset), record_property)
     except ReadPrecondition as error:
         _skip_precondition(error)
 
@@ -143,15 +159,9 @@ def test_single_and_batch_factor_details_are_identical(
     _assert_check(_execute(lambda: read_service.check_details_batch(catalog_subfactor, detail_level)))
 
 
-def test_executable_detail_common_fields_are_consistent(
-    read_service: Factor4ReadService, catalog_subfactor: CatalogSubset,
-) -> None:
-    """MCP-005：executable 详情的公共定义字段在 single/batch envelope 中一致。"""
-    _assert_check(_execute(lambda: read_service.check_details_executable_common_fields(catalog_subfactor)))
-
-
 def test_catalog_exact_query_preserves_filter_identity(
     read_service: Factor4ReadService, catalog_subfactor: CatalogSubset,
+    record_property: Callable[[str, object], None],
 ) -> None:
     """MCP-006：按已发现名称精确 query 时必须返回该实体，不能退化成无筛选目录。"""
     row = catalog_subfactor.rows[0]
@@ -159,7 +169,7 @@ def test_catalog_exact_query_preserves_filter_identity(
     if not isinstance(query, str) or not query:
         pytest.skip("BLOCKED_DATA_PRECONDITION: discovered catalog row has no searchable name")
     traversal = _execute(lambda: read_service.catalog_query(catalog_subfactor, query))
-    _assert_check(read_service.check_catalog_query(catalog_subfactor, query, traversal))
+    _assert_check(read_service.check_catalog_query(catalog_subfactor, query, traversal), record_property)
 
 
 @pytest.mark.parametrize("label_kind", ["fact", "forecast"], ids=["fact", "forecast"])

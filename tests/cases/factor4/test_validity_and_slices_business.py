@@ -51,11 +51,12 @@ def slice_sample(request: pytest.FixtureRequest, factor4_read_repository: Factor
     return sample
 
 
+@pytest.mark.parametrize("validity_sample", ["any"], indirect=True)
 @pytest.mark.parametrize("scope", ["ts", "cs"])
 def test_validity_matches_database_identity_status_and_scores(
     summary_service: Factor4SummaryService, validity_sample: ValiditySample, scope: str,
 ) -> None:
-    """factor_get_validity returns the selected DB row, same run and validity flags."""
+    """Check an unconstrained shape; exact TS-only/CS-only/both shapes live in the evidence matrix."""
     _verify(lambda: summary_service.check_validity(validity_sample, scope, as_of=datetime.now(timezone.utc).isoformat(), explicit_run=True))
 
 

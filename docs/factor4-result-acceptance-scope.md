@@ -1,6 +1,7 @@
 # Factor 4.0 结果级验收范围
 
-更新：2026-09-07。本次只落实用户确认的用例合并与范围分离，不扩展新的业务场景，也不执行真实环境回归。
+更新：2026-09-08。结果级边界与专项开关不变；最近一次目录判定器修正、重复入口清理及定向回归见
+[目录修正与用例去重](factor4-catalog-case-cleanup-20260908.md)。下方 9 月 7 日统计保留为历史基线。
 
 ## 验收边界
 
@@ -10,7 +11,7 @@
 组合因子台不在此次改动范围内。
 
 后续同日完成的 12 项旧 Case 误报/漏报修正及其验证见
-[现有 Case 问题修正](factor4-existing-case-corrections.md)；以下范围选择和历史数量口径不变。
+[现有 Case 问题修正](factor4-existing-case-corrections.md)；以下范围选择不变，最新数量见文末。
 
 ## 执行选择
 
@@ -33,14 +34,14 @@
 | 旧入口 | 当前承接入口 | 保留的行为 |
 | --- | --- | --- |
 | `test_migrated_readonly_scripts.py::test_mcp_tool_inventory_is_complete_for_readonly_4_0_surface` | `test_protocol_read_business.py::test_protocol_tool_inventory_has_unique_names_and_object_schemas` | 完整 tools/list 分页、原两处必要工具的并集、唯一名称与 schema 校验 |
-| `test_formula_route_audit_migrations.py::test_published_route_audit_and_db613_reconciliation` | `test_final_results.py` 内的身份、数值域、evidence、分区、环境矩阵、各环境摘要及排名重复读取用例 | 原 route 结果级断言；不重复运行旧 wrapper |
+| `test_formula_route_audit_migrations.py::test_published_route_audit_and_db613_reconciliation` | `test_final_results.py` 内的数值域、evidence、环境矩阵、排名用例，加 `test_environment_closure_business.py` 的逐标签身份与摘要闭环 | 原 route 结果级断言；不重复运行旧 wrapper |
 
 路由迁移来源 `db_route_audit_once.py`、`db613_targeted_closure.py` 和引用旧工具入口的历史脚本登记均保留。
 重连/RPC ID 专项中的 schema 输出功能由已有 `test_schema_business.py` 的默认/指定版本、字段选择和重复读取继续覆盖。
 
 ## 混合用例拆分
 
-- 默认 R0 使用结果级 Service 路径，保留准入、route 评分、排名及公式输出；不能先执行完整旧数学审计再忽略结果。
+- 默认 R0 使用结果级 Service 路径，保留准入及公式输出；route 评分与排名由全分区正式用例承接，不在 R0 内重复执行。不能先执行完整旧数学审计再忽略结果。
 - DPO、固定 horizon 和公式数学语义留在原始计算专项。混合 catalog/detail/evidence 检查保留结果投影分支，数学分支需显式纳入。
 - 独立两批计算比较属于原始计算专项；同一已完成批次的重复读取不是重新计算，仍保留默认。
 - 原子发布契约、actor 审计和物理 DDL 属于技术专项；失败/取消/回滚的最终 active 指针检查仍保留默认。
@@ -48,7 +49,7 @@
 
 | 拆分前混合入口 | 默认结果部分 | 保留的原始计算专项 |
 | --- | --- | --- |
-| `test_factor4_r0_calculation_check` 原五个参数 | 原名保留四个结果参数，Fixture 调用 `run_result_checks` | `test_factor4_r0_internal_formula_regressions` 承接 `CALC-510-C`；原静态来源链入口仍显式可选 |
+| `test_factor4_r0_calculation_check` 原五个参数 | 原名保留公式输出及准入两参数，Fixture 调用 `run_result_checks`；评分与排名由全分区用例承接 | `test_factor4_r0_internal_formula_regressions` 承接 `CALC-510-C`；原静态来源链入口仍显式可选 |
 | DPO 与 fixed_horizon 家族检查 | `test_formula_family_current_and_completed_evidence_projections` 承接十个原候选的详情/证据输出 | 原 DPO/fixed_horizon 数学 Case 保留 |
 | 全 active catalog 与 evidence 检查 | 原名保留，明确 `include_internal_semantics=False` | `test_formula_catalog_and_evidence_internal_semantics` |
 | IV/RV 三个因子及 5921 的 detail 检查 | 原名保留，明确 `include_internal_semantics=False` | `test_formula_detail_levels_internal_semantics` 承接原四个参数的数学分支 |
@@ -86,8 +87,19 @@
 默认收集的 618 个包括 139 个会按原规则跳过的暂缓实例，不能将 618 或 669 宣称为当前结果级可执行业务场景数。
 专项拆分增加的入口只承接原有检查，不代表本次新增需求或已覆盖新的业务场景。
 
-2026-09-07 去重场景补充后的现有数量：173 个函数、689 个参数化实例；默认收集 638 个，
+2026-09-07 去重场景补充后的历史数量：173 个函数、689 个参数化实例；默认收集 638 个，
 其中原 139 个仍暂缓，默认结果级非暂缓 499 个。原始计算 36 个、技术专项 15 个的选择规则不变。
 仅开启原始计算专项时收集 674 个；仅开启技术专项时收集 653 个。
 新增内容、正式入口及尚未确证的发布入选规则见
 [去重后结果级覆盖记录](factor4-deduplicated-result-coverage.md)。本轮仍无新的真实产品通过结论。
+
+2026-09-08 目录清理后实际收集：167 个函数、668 个参数化实例；默认收集 617 个，
+其中 139 个仍暂缓，默认结果级非暂缓 478 个。原始计算 36 个、技术专项 15 个保持不变。
+本次净减少 21 个重复执行实例，没有删除历史需求、因缺样本或失败而删除 Case。
+删除入口与承接断言、31 项定向 live 回归的范围和结果见
+[目录修正与用例去重](factor4-catalog-case-cleanup-20260908.md)，不将其当作全量 4.0 产品验收。
+
+2026-09-08 使用端补充后：171 个函数、691 个参数化实例；默认收集 640 个，
+其中原 139 个仍暂缓，默认结果级非暂缓 501 个。净增 23 个实例，另增强原 11 个实例。
+六组正式入口、去重边界及本轮真实执行阻塞见
+[使用端场景覆盖记录](factor4-consumer-coverage-20260908.md)。代码已补充不等于真实环境验收通过。

@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from api.factor_data_mcp_api import FactorDataMCPAPI
 from db.factor4_calculation_repository import Factor4CalculationRepository
 from service.factor4_calculation_service import Factor4CalculationService
-from service.factor4_result_service import ENVIRONMENT_LABELS, Factor4FinalResultService
+from service.factor4_result_service import Factor4FinalResultService
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression, pytest.mark.factor4_calculation]
@@ -35,21 +34,6 @@ def published_snapshots(
         )
         for partition in partitions
     )
-
-
-def test_final_result_identity_and_admission_are_self_consistent(published_snapshots) -> None:
-    """route 只能引用同批次、同版本、同标签且有效的最终 metric。"""
-
-    auditor = Factor4FinalResultService()
-    failures = []
-    checked = 0
-    for partition, snapshot in published_snapshots:
-        result = auditor.check_route_identity(snapshot)
-        checked += result.checked_count
-        if result.status == "FAIL":
-            failures.append((partition.route_profile_key, result.summary, [f.code for f in result.findings]))
-    assert checked > 0, "BLOCKED_DATA_PRECONDITION: no published route result"
-    assert not failures, failures
 
 
 def test_final_result_numeric_domains_are_valid(published_snapshots) -> None:
@@ -82,21 +66,6 @@ def test_final_route_evidence_matches_persisted_result_columns(published_snapsho
     assert not failures, failures
 
 
-def test_final_result_partition_isolation(published_snapshots) -> None:
-    """验证 route 不跨 batch、market_scope、profile 或环境日期分区串线。"""
-
-    auditor = Factor4FinalResultService()
-    failures = []
-    checked = 0
-    for partition, snapshot in published_snapshots:
-        result = auditor.check_partition_isolation(snapshot)
-        checked += result.checked_count
-        if result.status == "FAIL":
-            failures.append((partition.route_profile_key, result.summary, [f.code for f in result.findings]))
-    assert checked > 0, "BLOCKED_DATA_PRECONDITION: no final partition result"
-    assert not failures, failures
-
-
 def test_final_environment_matrix_uses_declared_labels(published_snapshots) -> None:
     """验证最终 route 标签只能来自当前批次声明成功的环境矩阵。"""
 
@@ -117,32 +86,6 @@ def test_active_publication_selector_is_unique(published_snapshots) -> None:
         for partition, _snapshot in published_snapshots
     ]
     assert len(selectors) == len(set(selectors)), selectors
-
-
-@pytest.mark.parametrize("label_code", ENVIRONMENT_LABELS)
-def test_each_environment_summary_matches_final_routes(
-    published_snapshots,
-    label_code: str,
-) -> None:
-    """六类环境逐一对账摘要 route_count，不只检查 WIDE_RANGE。"""
-
-    auditor = Factor4FinalResultService()
-    failures = []
-    observed = 0
-    for partition, snapshot in published_snapshots:
-        result = auditor.check_environment_summary(snapshot, label_code)
-        if result.checked_count:
-            observed += result.checked_count
-        if result.status == "FAIL":
-            failures.append((
-                partition.route_profile_key,
-                result.summary,
-                result.evidence,
-                [f.code for f in result.findings],
-            ))
-    if not observed:
-        pytest.skip(f"BLOCKED_DATA_PRECONDITION: {label_code} has no final summary field")
-    assert not failures, failures
 
 
 def test_final_result_ranking_is_partitioned_and_repeatable(

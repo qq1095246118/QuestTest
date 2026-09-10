@@ -21,7 +21,7 @@ from service.factor4_read_service import (
     Factor4ReadService, ReadCheck, ReadContractError, ReadPrecondition, _METRIC_FIELDS, read_tool_page,
     visible_daily_rows,
 )
-from service.factor4_recommendation_service import compare_recommendation_page, lifecycle_time
+from service.factor4_recommendation_service import compare_recommendation_page, lifecycle_time, read_public_forecast
 
 
 def _publication_identity(snapshot: CalculationAuditSnapshot | PublishedRouteSnapshot) -> tuple[Any, ...]:
@@ -48,8 +48,9 @@ class Factor4RecommendationReplayService:
                    kind: str) -> ReadCheck:
         """Replay actual recommendations for one factor kind in every published partition.
 
-        The fixed daily as_of is used for recommendation and exact-Run formula reads;
-        environment metrics instead use the explicit batch because their API has no
+        MCP daily at the fixed as_of supplies the public forecast before recommendation
+        and exact-Run formula reads; DB visibility remains the independent oracle.
+        Environment metrics instead use the explicit batch because their API has no
         as_of parameter. Return failures and missing/drift evidence together so the
         caller can fail before blocking. Invalid kind raises ValueError. Unexpected
         transport errors propagate; declared data/contract errors are safely aggregated.
@@ -65,11 +66,14 @@ class Factor4RecommendationReplayService:
             issues.append("recommendation_chain:duplicate_publication_partition")
         forecasts = [row for row in visible_daily_rows(daily, "forecast", as_of=daily.as_of)
                      if row.get("label_status") == "ready"]
-        forecast = forecasts[0] if forecasts else None
+        expected_forecast = forecasts[0] if forecasts else None
+        forecast, daily_check = read_public_forecast(self.reads, daily, daily.as_of)
+        issues.extend(daily_check.issues)
+        blocked.extend(daily_check.evidence["blocked"])
         for snapshot in snapshots:
             prefix = f"batch={snapshot.batch.id}:"
             try:
-                result = self._partition(snapshot, forecast, daily.as_of, kind)
+                result = self._partition(snapshot, forecast, expected_forecast, daily.as_of, kind)
             except ReadContractError as error:
                 issues.append(prefix + str(error))
                 continue
@@ -89,10 +93,11 @@ class Factor4RecommendationReplayService:
         return ReadCheck(checked, tuple(dict.fromkeys(issues)), {
             "blocked": tuple(dict.fromkeys(blocked)), "kind": kind, "as_of": daily.as_of.isoformat(),
             "partition_count": len(snapshots), "kind_absent_partitions": tuple(absent),
+            "public_forecast_id": (forecast or {}).get("id"),
         })
 
     def _partition(self, snapshot: CalculationAuditSnapshot, forecast: Mapping[str, Any] | None,
-                   as_of: datetime, kind: str) -> ReadCheck:
+                   expected_forecast: Mapping[str, Any] | None, as_of: datetime, kind: str) -> ReadCheck:
         batch = snapshot.batch
         selectors = (batch.market_scope, batch.route_profile_key)
         expected_publication = _publication_identity(snapshot)
@@ -105,7 +110,7 @@ class Factor4RecommendationReplayService:
         page = read_tool_page(self.reads.api.recommendations(*selectors, **request))
         route_rows = tuple(asdict(route) for route in snapshot.routes)
         recommendation_issues = list(compare_recommendation_page(
-            page, asdict(batch), route_rows, forecast, limit=200).issues)
+            page, asdict(batch), route_rows, expected_forecast, limit=200).issues)
         publication = page.data.get("publication")
         same_publication = True
         for field in ("batch_uid", "publication_uid", "publish_version", "market_scope", "route_profile_key"):
@@ -116,7 +121,8 @@ class Factor4RecommendationReplayService:
         issues: list[str] = []
         blocked: list[str] = []
         checked = 0
-        selected = [item for item in page.items if item.get("factor_type") == kind] if same_publication else []
+        selected = ([item for item in page.items if item.get("factor_type") == kind]
+                    if same_publication and forecast is not None else [])
         for item in selected:
             prefix = "factor=" + str(item.get("factor_id")) + ":"
             try:
