@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
+import sqlite3
+import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -129,6 +132,83 @@ def _batch_row() -> dict[str, Any]:
         "evaluation_config": '{"minimum_route_score": 60}',
         "environment_status": '{"WIDE_RANGE": {"status": "success"}}',
     }
+
+
+def _publication_selector_queries() -> dict[str, tuple[str, tuple[Any, ...]]]:
+    """Capture the actual four publication queries without accessing a database."""
+
+    transaction = StubTransaction(
+        one_responses=[{"captured_at": datetime(2026, 9, 4, 12)}],
+        all_responses=[[{"id": 6}], []],
+    )
+    repository = Factor4CalculationRepository(StubDatabaseClient(transaction))
+    with pytest.raises(CalculationRepositoryError, match="selected active published batch"):
+        repository.read_calculation_snapshot()
+    captured = [
+        (query, parameters or ())
+        for operation, query, parameters in transaction.operations
+        if operation == "fetch_all"
+    ]
+    assert len(captured) == 2
+    return {
+        "discovery": (repository._active_published_partitions_query(), ()),
+        "snapshot_candidate": captured[0],
+        "snapshot_same_id": captured[1],
+        "route_repeat": (repository._route_snapshot_batch_query(), ("all", "default")),
+    }
+
+
+@pytest.mark.parametrize("query_kind", ["discovery", "snapshot_candidate", "snapshot_same_id", "route_repeat"])
+def test_publication_selectors_admit_only_declared_incremental_partial_failure(query_kind: str) -> None:
+    """Execute real selector SQL across published/active/state/frozen-mode combinations.
+
+    SQLite supplies the local relational and JSON evaluation; its JSON_EXTRACT
+    already returns an unquoted scalar, so JSON_UNQUOTE is an identity shim.
+    This verifies returned rows rather than checking SQL substrings.
+    """
+
+    query, parameters = _publication_selector_queries()[query_kind]
+    cases = [
+        ("success", {}, "published", 1, True),
+        ("success", {"publication_mode": "atomic"}, "published", 1, True),
+        ("partial_fail", {"publication_mode": "per_factor_incremental"}, "published", 1, True),
+        ("partial_fail", {}, "published", 1, False),
+        ("partial_fail", {"publication_mode": None}, "published", 1, False),
+        ("partial_fail", {"publication_mode": "atomic"}, "published", 1, False),
+        ("partial_fail", {"publication_mode": "incremental"}, "published", 1, False),
+        ("partial_fail", {"publication_mode": ["per_factor_incremental"]}, "published", 1, False),
+        ("partial_fail", {"publish_mode": "per_factor_incremental"}, "published", 1, False),
+        ("running", {"publication_mode": "per_factor_incremental"}, "published", 1, False),
+        ("pending", {"publication_mode": "per_factor_incremental"}, "published", 1, False),
+        ("failed", {"publication_mode": "per_factor_incremental"}, "published", 1, False),
+        ("cancelled", {"publication_mode": "per_factor_incremental"}, "published", 1, False),
+        ("unknown", {"publication_mode": "per_factor_incremental"}, "published", 1, False),
+        ("success", {}, "published", 0, False),
+        ("success", {}, "unpublished", 1, False),
+        ("partial_fail", {"publication_mode": "per_factor_incremental"}, "published", 0, False),
+        ("partial_fail", {"publication_mode": "per_factor_incremental"}, "unpublished", 1, False),
+    ]
+    row = {**_batch_row(), "environment_snapshot": None}
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.create_function("JSON_UNQUOTE", 1, lambda value: value)
+        connection.create_function("COMPRESS", 1, lambda value: value)
+        connection.execute("CREATE TABLE market_environment_eval_batch (" + ", ".join(row) + ")")
+        placeholders = ", ".join("?" for _ in row)
+        for status, config, publish_status, active, expected in cases:
+            row.update(status=status, evaluation_config=json.dumps(config), publish_status=publish_status, is_active=active)
+            connection.execute("DELETE FROM market_environment_eval_batch")
+            connection.execute(
+                "INSERT INTO market_environment_eval_batch VALUES (" + placeholders + ")",
+                tuple(value.isoformat() if isinstance(value, (date, datetime)) else value for value in row.values()),
+            )
+            actual = connection.execute(query.replace("%s", "?"), parameters).fetchall()
+            assert [item["id"] for item in actual] == ([6] if expected else []), (
+                query_kind, status, config, publish_status, active,
+            )
+    finally:
+        connection.close()
 
 
 def test_list_active_published_partitions_discovers_all_profiles_read_only() -> None:
@@ -439,16 +519,25 @@ def _happy_transaction() -> StubTransaction:
     )
 
 
-def test_read_calculation_snapshot_returns_typed_atomic_evidence() -> None:
+@pytest.mark.parametrize("batch_status", ["success", "partial_fail"])
+@pytest.mark.parametrize("compressed_snapshot", [False, True])
+def test_read_calculation_snapshot_returns_typed_atomic_evidence(batch_status: str, compressed_snapshot: bool) -> None:
     """The public read should normalize every evidence family in one transaction."""
 
     transaction = _happy_transaction()
+    transaction.all_responses[0][0]["status"] = batch_status
+    if batch_status == "partial_fail":
+        transaction.all_responses[0][0]["evaluation_config"] = '{"publication_mode":"per_factor_incremental"}'
+    if compressed_snapshot:
+        raw = transaction.all_responses[0][0]["factor_set_snapshot"].encode("utf-8")
+        transaction.all_responses[0][0]["factor_set_snapshot"] = len(raw).to_bytes(4, "little") + zlib.compress(raw)
     client = StubDatabaseClient(transaction)
 
     snapshot = Factor4CalculationRepository(client).read_calculation_snapshot()
 
     assert client.transaction_count == 1
     assert snapshot.batch.id == 6
+    assert snapshot.batch.status == batch_status
     assert snapshot.batch.factor_set_snapshot["factor_count"] == 1
     assert snapshot.membership_differences.missing_from_metrics == ()
     assert snapshot.membership_differences.unexpected_in_metrics == ()
@@ -515,7 +604,7 @@ def test_read_calculation_snapshot_returns_typed_atomic_evidence() -> None:
         and "FROM market_environment_factor_metric" in query
     ]
     compact_query = next(query for query in metric_queries if "route_eligibility" in query)
-    evidence_query = next(query for query in metric_queries if "score_components" in query)
+    evidence_query = next(query for query in metric_queries if "AS metric_payload" in query)
     assert "sample_start_date" in compact_query
     assert "mean_rank_ic" in compact_query
     assert "SHA2(" in compact_query
@@ -531,8 +620,13 @@ def test_read_calculation_snapshot_returns_typed_atomic_evidence() -> None:
     assert "AS metric_payload" not in compact_query
     assert "routing_score IS NOT NULL" not in evidence_query
     assert "AS metric_payload" in evidence_query
-    assert "'$.directed_mean_ic'" in evidence_query
-    assert "'$.directed_rank_icir'" in evidence_query
+    assert "'$.oos.folds'" in evidence_query
+    assert "'$.data_diagnostics.artifact_fingerprints'" in evidence_query
+    assert "'$.data_diagnostics.artifact_manifest_json'" in evidence_query
+    assert "'$.data_diagnostics.artifact_manifest_hash'" not in evidence_query
+    for scope in ("time_series", "cross_sectional"):
+        assert f"'$.{scope}.data_diagnostics.artifact_manifest_json'" in route_query[1]
+        assert f"'$.{scope}.data_diagnostics.artifact_manifest_hash'" not in route_query[1]
     formula_query = next(
         query
         for operation, query, _ in transaction.operations
@@ -546,22 +640,28 @@ def test_read_calculation_snapshot_returns_typed_atomic_evidence() -> None:
     assert all(not mutation.search(query) for _, query, _ in transaction.operations)
 
 
-def test_metric_payload_preserves_unscored_rejections_and_explicit_null() -> None:
+@pytest.mark.parametrize("compressed_payload", [False, True])
+def test_metric_payload_preserves_unscored_rejections_and_explicit_null(compressed_payload: bool) -> None:
     """Unscored metrics retain null/absent distinctions and rejection evidence."""
 
     row = _evaluation_metric_row()
     row["routing_score"] = None
     row["is_valid"] = 0
     payload = {
-        "metric_identity": {"factor_window_bars": "24H"},
+        "metric_identity": {"factor_window_bars": "24H", "artifact_manifest_hash": "identity-manifest-hash"},
+        "data_diagnostics": {"artifact_manifest_hash": "diagnostic-manifest-hash", "missing_symbols": []},
         "directed_mean_rank_ic": None,
         "reject_reasons": ["NET_RETURN_NOT_POSITIVE"],
         "is_valid": False,
         "oos": {"valid_fold_count": 0, "retention": None},
         "route_eligibility": {"is_eligible": False, "routing_score": None},
     }
+    transmitted: Any = payload
+    if compressed_payload:
+        raw = json.dumps(payload).encode("utf-8")
+        transmitted = len(raw).to_bytes(4, "little") + zlib.compress(raw)
     transaction = StubTransaction(one_responses=[], all_responses=[
-        [row], [{"id": row["id"], "metric_payload": payload}],
+        [row], [{"id": row["id"], "metric_payload": transmitted}],
     ])
 
     stored = Factor4CalculationRepository._read_evaluation_metric_rows(transaction, 6)[0]
@@ -570,6 +670,8 @@ def test_metric_payload_preserves_unscored_rejections_and_explicit_null() -> Non
     assert stored["metric_payload"]["directed_mean_rank_ic"] is None
     assert "directed_mean_ic" not in stored["metric_payload"]
     assert stored["route_eligibility"]["routing_score"] is None
+    assert stored["metric_payload"]["metric_identity"]["artifact_manifest_hash"] == "identity-manifest-hash"
+    assert stored["metric_payload"]["data_diagnostics"]["artifact_manifest_hash"] == "diagnostic-manifest-hash"
 
 
 def test_read_calculation_snapshot_reports_metric_membership_drift() -> None:

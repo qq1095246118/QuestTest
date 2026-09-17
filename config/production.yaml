@@ -1,0 +1,33 @@
+environment: production
+api:
+  # Credentials are supplied through the ignored local production overlay.
+  base_url: https://factor-backend.questvector.ai/api/v1
+  auth_token: ""
+  timeout_seconds: 60
+  retry_attempts: 2
+  retry_backoff_seconds: 0.25
+authentication:
+  privileged_email: ""
+  privileged_password: ""
+database:
+  driver: mysql
+  host: jp-cdb-ipse0bs3.sql.tencentcdb.com
+  port: 24856
+  name: factor_db
+  username: Lucky
+  read_only: true
+  compress: true
+factor_data:
+  mcp_url: https://factor-frontend.questvector.ai/mcp/factor-data
+  protocol_version: "2025-06-18"
+factor_combo:
+  worker_contracts_enabled: false
+  cleanup_test_data: false
+environment_safety:
+  allowed_hosts:
+    - factor-frontend.questvector.ai
+    - factor-backend.questvector.ai
+  allowed_database_hosts:
+    - jp-cdb-ipse0bs3.sql.tencentcdb.com
+reports:
+  junit_path: reports/factor4-production.xml

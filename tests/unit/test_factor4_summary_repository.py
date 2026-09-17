@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import sqlite3
 from typing import Any, Iterator
 
 import pytest
@@ -45,7 +46,9 @@ def test_summary_discovery_converts_utc_clock_to_db_lifecycle_zone_and_rolls_bac
              "factor_window_bars": "24", "return_bar_interval": "1h", "forward_return_bars": 1,
              "universe_key": "all", "symbol": "BTCUSDT", "window_scope": "1y", "scoring_version": "v1"}
     row = {**scope, "id": 11, "factor_id": 1, "run_id": "run"}
-    db = _DB([{"as_of_time": clock}, scope], [[row], []])
+    members = [{"factor_id": identifier} for identifier in (1, 2, 3)]
+    rows = [{**row, "id": 10 + identifier, "factor_id": identifier} for identifier in (1, 2, 3)]
+    db = _DB([{"as_of_time": clock}], [[scope], [scope], members, members, rows, [], [], []])
     sample = Factor4ReadRepository(db).summary_sample("ts_symbol")
     assert sample.as_of == clock.replace(tzinfo=timezone.utc)
     selection = next((sql, args) for sql, args in db.calls if "ROW_NUMBER()" in sql)
@@ -60,12 +63,19 @@ def test_summary_discovery_converts_utc_clock_to_db_lifecycle_zone_and_rolls_bac
 
 
 def test_scope_discovery_keeps_run_factor_rows_without_group_concat_truncation() -> None:
-    db = _DB([{"as_of_time": datetime(2026, 9, 6)}, {"factor_bar_interval": "1h", "universe_key": "all"}], [[]])
+    scope = {"ic_scope": "cross_sectional", "calculation_mode": "direct", "factor_bar_interval": "1h",
+             "factor_window_bars": "24", "return_bar_interval": "1h", "forward_return_bars": 1,
+             "universe_key": "all", "symbol": "", "window_scope": "1y", "scoring_version": "v1"}
+    rows = [{**scope, "factor_id": identifier, "run_id": f"run-{identifier}",
+             "run_completed_at": datetime(2026, 9, 5), "metric_period_end": datetime(2026, 9, 4)}
+            for identifier in (1, 2)]
+    db = _DB([{"as_of_time": datetime(2026, 9, 6)}],
+             [[{"factor_bar_interval": "1h", "universe_key": "all"}], rows])
     snapshot = Factor4ReadRepository(db).metric_scope_snapshot("cross_sectional")
-    assert snapshot.rows == ()
-    query, args = next((sql, args) for sql, args in db.calls if "MAX(m.period_end)" in sql)
+    assert snapshot.rows == tuple(rows)
+    query, args = next((sql, args) for sql, args in db.calls if "m.period_end AS metric_period_end" in sql)
     assert "m.factor_id, m.run_id" in query
-    assert args == (1, "cross_sectional", "1h", "all")
+    assert args[:4] == (1, "cross_sectional", "1h", "all")
     assert all("GROUP_CONCAT" not in sql for sql, _ in db.calls)
     assert db.calls[-1][0] == "ROLLBACK"
 
@@ -125,15 +135,68 @@ def test_default_validity_candidates_do_not_filter_invalid_or_incomplete_history
 @pytest.mark.parametrize("mode,clause", [("symbol", "COALESCE(m.symbol,'')<>''"),
                                          ("aggregate", "COALESCE(m.symbol,'')=''")])
 def test_slice_discovery_does_not_merge_symbol_and_aggregate(mode: str, clause: str) -> None:
-    row = {"id": 1, "symbol": "BTCUSDT" if mode == "symbol" else ""}
-    db = _DB([row], [[]])
-    Factor4ReadRepository(db).slice_sample(symbol_mode=mode)
-    sql = next(sql for sql, _ in db.calls if "SELECT m.*" in sql)
-    assert clause in sql and "COALESCE(s.symbol,'')=COALESCE(m.symbol,'')" in sql
+    row = {"id": 1, "symbol": "BTCUSDT" if mode == "symbol" else "",
+           "run_id": "run", "factor_id": 7, "is_sub_factor_id": 1, "ic_scope": "time_series",
+           "calculation_mode": "direct", "factor_bar_interval": "1h", "factor_window_bars": "24",
+           "return_bar_interval": "1h", "forward_return_bars": 1, "universe_key": "all", "window_scope": "1y"}
+    db = _DB([{"id": 1}, {"run_id": "run"}, row], [[row], [{"id": 9}], [{"id": 9}]])
+    sample = Factor4ReadRepository(db).slice_sample(symbol_mode=mode)
+    assert sample.summary == row and sample.rows == ({"id": 9},)
+    sql = next(sql for sql, _ in db.calls if "SELECT m.id," in sql)
+    assert clause in sql and "m.id>%s AND m.id<=%s" in sql
     query, args = next((sql, args) for sql, args in db.calls if "SELECT * FROM factor_ic_slice_metrics" in sql)
     assert "COALESCE(symbol,'')=COALESCE(%s,'')" in query
     assert "ORDER BY as_of_time, id" in query
     assert args[-1] == row["symbol"]
+
+
+@pytest.mark.parametrize("symbols,expected_symbol", [
+    ([None, "", "ETHUSDT", "BTCUSDT", "BTCUSDT"], "BTCUSDT"),
+    ([None, ""], ""),
+    ([], None),
+])
+def test_exact_summary_symbol_discovery_prioritizes_real_symbols_without_scope_leakage(
+    symbols: list[str | None], expected_symbol: str | None,
+) -> None:
+    """Execute discovery SQL with mixed symbols and a decoy for every scope field."""
+    summary = {"run_id": "run", "factor_id": 7, "is_sub_factor_id": 1,
+               "ic_scope": "time_series", "calculation_mode": "direct",
+               "factor_bar_interval": "1h", "factor_window_bars": "24",
+               "return_bar_interval": "1h", "forward_return_bars": 1,
+               "universe_key": "all", "window_scope": "1y", "symbol": ""}
+    profile = None if expected_symbol is None else {"symbol": expected_symbol}
+    db = _DB([profile], [[]] if profile is not None else [])
+    Factor4ReadRepository(db).slices_for_summary(summary, discover_symbol=True)
+    sql, args = next((sql, args) for sql, args in db.calls if "grouped_symbols" in sql)
+    keys = tuple(key for key in summary if key != "symbol")
+    assert args == tuple(summary[key] for key in keys)
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    try:
+        columns = ", ".join(f"{key} {'INTEGER' if isinstance(summary[key], int) else 'TEXT'}"
+                            for key in keys)
+        connection.execute(f"CREATE TABLE factor_ic_slice_metrics ({columns}, symbol TEXT)")
+        rows = [(*args, symbol) for symbol in symbols]
+        for index, value in enumerate(args):
+            decoy = list(args)
+            decoy[index] = value + 100 if isinstance(value, int) else f"other-{value}"
+            rows.append((*decoy, "AAAUSDT"))
+        connection.executemany(
+            f"INSERT INTO factor_ic_slice_metrics VALUES ({','.join('?' for _ in range(len(keys) + 1))})",
+            rows,
+        )
+        selected = connection.execute(sql.replace("<=>", "IS").replace("%s", "?"), args).fetchone()
+        assert (None if selected is None else selected["symbol"]) == expected_symbol
+        slice_queries = [(query, values) for query, values in db.calls
+                         if "SELECT * FROM factor_ic_slice_metrics" in query]
+        if selected is None:
+            assert slice_queries == []
+        else:
+            assert len(slice_queries) == 1
+            assert slice_queries[0][1] == (*args, expected_symbol)
+        assert db.calls[-1] == ("ROLLBACK", ())
+    finally:
+        connection.close()
 
 
 @pytest.mark.parametrize("kind,table,flag", [("factor", "factors", 0), ("sub_factor", "sub_factors", 1)])
@@ -151,7 +214,7 @@ def test_research_catalog_members_keep_unknown_left_join_rows_and_exact_typed_sc
     assert f"FROM {table} catalog LEFT JOIN ranked latest" in sql
     assert "LEFT JOIN factor_validity_status" in sql and "v.cross_sectional_summary_id=latest.metric_id" in sql
     assert "r.completed_at DESC,m.updated_at DESC,m.id DESC" in sql and "latest.rn=1" in sql
-    assert args == (flag, *scope.values(), datetime(2026, 9, 8, 8), flag, "1h")
+    assert args == (flag, *scope.values(), datetime(2026, 9, 8, 8), flag, "1h", datetime(2026, 9, 8, 8))
     assert "SELECT m.*" not in sql and "metric_payload" not in sql
     assert db.calls[-1] == ("ROLLBACK", ())
 
@@ -165,3 +228,50 @@ def test_research_catalog_duplicate_validity_matches_are_not_silently_collapsed(
     snapshot = Factor4ReadRepository(db).research_catalog_snapshot(
         SummarySample("sub_factor", datetime(2026, 9, 8, tzinfo=timezone.utc), scope, (), ()))
     assert snapshot.ambiguous_count == 1 and len(snapshot.rows) == 2
+
+
+@pytest.mark.parametrize("kind,table,name", [
+    ("factor", "factors", "factor_name"), ("sub_factor", "sub_factors", "sub_factor_name"),
+])
+def test_research_catalog_sql_keeps_asof_boundary_and_excludes_later_created_entities(
+    kind: str, table: str, name: str,
+) -> None:
+    """Execute the actual catalog query against before/equal/after creation witnesses."""
+    scope = {"ic_scope": "cross_sectional", "calculation_mode": "direct",
+             "factor_bar_interval": "1h", "factor_window_bars": "24", "return_bar_interval": "1h",
+             "forward_return_bars": 1, "universe_key": "all", "symbol": "", "window_scope": "1y",
+             "scoring_version": "v1"}
+    db = _DB([], [[]])
+    Factor4ReadRepository(db).research_catalog_snapshot(
+        SummarySample(kind, datetime(2026, 9, 8, tzinfo=timezone.utc), scope, (), ()))
+    sql, args = next((sql, args) for sql, args in db.calls if "WITH ranked" in sql)
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute(f"CREATE TABLE {table} (id INTEGER, {name} TEXT, cn_name TEXT, "
+                           "factor_bar_interval TEXT, created_at TEXT)")
+        connection.executemany(f"INSERT INTO {table} VALUES (?, ?, NULL, '1h', ?)", [
+            (1, "before", "2026-09-08 07:59:59.999999"),
+            (2, "equal", "2026-09-08 08:00:00.000000"),
+            (3, "after", "2026-09-08 08:00:00.000001"),
+        ])
+        connection.execute("""CREATE TABLE factor_ic_summary_metrics (
+            id INTEGER, factor_id INTEGER, run_id TEXT, is_sub_factor_id INTEGER,
+            ic_scope TEXT, calculation_mode TEXT, factor_bar_interval TEXT, factor_window_bars TEXT,
+            return_bar_interval TEXT, forward_return_bars INTEGER, universe_key TEXT, symbol TEXT,
+            window_scope TEXT, scoring_version TEXT, coverage_mean REAL, icir REAL, rank_icir REAL,
+            oos_icir REAL, rank_oos_icir REAL, final_score REAL, valid_slice_count INTEGER, updated_at TEXT)
+        """)
+        connection.execute("CREATE TABLE factor_ic_runs (run_id TEXT, status TEXT, completed_at TEXT)")
+        connection.execute("""CREATE TABLE factor_validity_status (
+            id INTEGER, factor_id INTEGER, is_sub_factor_id INTEGER, run_id TEXT,
+            time_series_status TEXT, cross_sectional_status TEXT, overall_status TEXT,
+            cross_sectional_summary_id INTEGER)
+        """)
+        parameters = tuple(value.isoformat(" ", timespec="microseconds")
+                           if isinstance(value, datetime) else value for value in args)
+        rows = connection.execute(sql.replace("<=>", "IS").replace("%s", "?"), parameters).fetchall()
+        assert [row["factor_id"] for row in rows] == [1, 2]
+        assert all(row["metric_id"] is None and row["validity_status"] == "unknown" for row in rows)
+    finally:
+        connection.close()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -59,6 +60,16 @@ SUMMARY_KEYS = (
     "return_bar_interval", "forward_return_bars", "universe_key", "symbol",
     "window_scope", "scoring_version",
 )
+
+_DISCOVERY_PAGE_SIZE = 16
+_DISCOVERY_MAX_CANDIDATES = 256
+_SCOPE_BASELINE_ROW_LIMIT = 50_000
+_SLICE_ID_WINDOW = 8192
+_SLICE_DISCOVERY_PAGES = 32
+
+
+class SampleDiscoveryExhausted(RuntimeError):
+    """A bounded search was incomplete; this is not proof that natural data is absent."""
 
 
 @dataclass(frozen=True)
@@ -119,11 +130,69 @@ class Factor4ReadRepository:
                 tx.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
                 try:
                     yield tx
-                finally:
+                except BaseException:
+                    try:
+                        tx.execute("ROLLBACK")
+                    except BaseException:
+                        pass
+                    raise
+                else:
                     tx.execute("ROLLBACK")
+        except SampleDiscoveryExhausted:
+            raise
         except Exception as exc:
             # Driver text may contain a connection string or password.
-            raise RuntimeError(f"Factor4 read-only database access failed: {type(exc).__name__}") from None
+            errno = getattr(exc, "errno", None)
+            code = f" errno={errno}" if isinstance(errno, int) else ""
+            raise RuntimeError(f"Factor4 read-only database access failed: {type(exc).__name__}{code}") from None
+
+    @staticmethod
+    def _summary_candidates(
+        tx: DatabaseTransaction, sub_flag: int, ic_scope: str, symbol_clause: str,
+        calculation_mode: str | None, minimum_factors: int,
+    ) -> Iterator[dict[str, Any]]:
+        """Page covering-index candidates; completed membership is checked separately.
+
+        The historical factor count is only a necessary lower bound, never the
+        oracle. It deliberately does not filter by metric values or cap the count:
+        unfinished runs may add members that must not exclude a completed scope.
+        """
+        group = ", ".join(SUMMARY_KEYS)
+        prefix_keys = SUMMARY_KEYS[:7]
+        prefix = ", ".join(prefix_keys)
+        mode_clause = " AND calculation_mode=%s" if calculation_mode is not None else ""
+        params = (sub_flag, ic_scope, *((calculation_mode,) if calculation_mode is not None else ()), minimum_factors)
+        profiles = tx.fetch_all(f"""SELECT /*+ MAX_EXECUTION_TIME(20000) */ {prefix}
+            FROM factor_ic_summary_metrics
+            WHERE is_sub_factor_id=%s AND ic_scope=%s {mode_clause}
+            GROUP BY {prefix} HAVING COUNT(DISTINCT factor_id)>=%s
+            ORDER BY {prefix} LIMIT %s""", (*params, _DISCOVERY_MAX_CANDIDATES + 1))
+        # Round-robin profiles before their next symbol/window. A large universe
+        # in the first interval must not consume the entire candidate budget.
+        pending = deque((profile, 0, [], False) for profile in profiles[:_DISCOVERY_MAX_CANDIDATES])
+        inspected = 0
+        while pending and inspected < _DISCOVERY_MAX_CANDIDATES:
+            profile, offset, buffered, exhausted = pending.popleft()
+            if not buffered:
+                candidates = tx.fetch_all(f"""SELECT /*+ MAX_EXECUTION_TIME(20000) */ {group}
+                FROM factor_ic_summary_metrics
+                WHERE is_sub_factor_id=%s AND {symbol_clause}
+                  AND {' AND '.join(key + ' <=> %s' for key in prefix_keys)}
+                GROUP BY {group} HAVING COUNT(DISTINCT factor_id)>=%s
+                ORDER BY {group} LIMIT %s OFFSET %s""",
+                    (sub_flag, *(profile[key] for key in prefix_keys), minimum_factors,
+                     _DISCOVERY_PAGE_SIZE + 1, offset))
+                buffered = candidates[:_DISCOVERY_PAGE_SIZE]
+                exhausted = len(candidates) <= _DISCOVERY_PAGE_SIZE
+                offset += _DISCOVERY_PAGE_SIZE
+            if buffered:
+                inspected += 1
+                yield buffered.pop(0)
+            if buffered or not exhausted:
+                pending.append((profile, offset, buffered, exhausted))
+        if pending or len(profiles) > _DISCOVERY_MAX_CANDIDATES:
+            raise SampleDiscoveryExhausted(
+                f"BLOCKED_SAMPLE_DISCOVERY: summary candidate budget={_DISCOVERY_MAX_CANDIDATES} exhausted")
 
     def catalog_subset(self, kind: Kind) -> CatalogSubset | None:
         """按实体类型发现 4～20 个目录成员的小分区；返回 None 表示无前置，DB 错误安全透传。"""
@@ -177,8 +246,10 @@ class Factor4ReadRepository:
 
         Explicit batch_uid/factor_ref must be supplied together; their values are
         bound parameters, and a missing catalog entity/batch returns None. The
-        historical discovery behavior is preserved when both are omitted. Invalid
-        kind/ref raises ValueError and read-only database failures are sanitized.
+        Automatic current/historical discovery accepts published success batches,
+        or partial_fail only with the frozen per_factor_incremental declaration;
+        it never changes individual metric statuses. Invalid kind/ref raises
+        ValueError and read-only database failures are sanitized.
         """
         if kind not in _TABLES:
             raise ValueError("unsupported factor kind")
@@ -202,7 +273,11 @@ class Factor4ReadRepository:
                        b.publication_uid, b.publish_version, b.is_active, b.status,
                        b.publish_status, b.score_rule_version, b.published_at
                 FROM market_environment_eval_batch b
-                WHERE b.is_active=%s AND b.status='success'
+                WHERE b.is_active=%s AND (
+                    b.status='success' OR (b.status='partial_fail'
+                      AND JSON_UNQUOTE(JSON_EXTRACT(b.evaluation_config,'$.publication_mode'))
+                          ='per_factor_incremental'))
+                  AND b.publish_status='published'
                   AND b.publication_uid IS NOT NULL
                   AND EXISTS (SELECT 1 FROM market_environment_factor_metric m
                               WHERE m.eval_batch_id=b.id AND m.factor_type=%s)
@@ -314,10 +389,11 @@ class Factor4ReadRepository:
 
     def summary_sample(self, shape: str, kind: Kind = "sub_factor", *, calculation_mode: str | None = None,
                        minimum_factors: int = 3) -> SummarySample | None:
-        """发现 TS 币种/TS 汇总/CS 汇总完整小分区；缺前置返回 None，非法形态 ValueError。
+        """发现 TS 币种/TS 汇总/CS 汇总完整小分区；无自然样本 None，非法形态 ValueError。
 
         同一只读事务捕获数据库时钟、全候选最新汇总和公式证据；数据库异常安全透传。
-        不预先剔除 null 指标，防止把旧 Run 非空值当成最新结果。
+        仅发现阶段分页；候选预算耗尽抛 SampleDiscoveryExhausted，最终基线不截断。
+        不预先剔除最新 null 指标，防止把旧 Run 非空值当成最新结果。
         """
         shapes = {"ts_symbol": ("time_series", "m.symbol<>''"),
                   "ts_aggregate": ("time_series", "m.symbol=''"),
@@ -326,29 +402,32 @@ class Factor4ReadRepository:
             raise ValueError("unsupported summary shape or kind")
         ic_scope, symbol_clause = shapes[shape]
         sub_flag = _TABLES[kind][2]
-        group = ", ".join("m." + key for key in SUMMARY_KEYS)
+        predicate = " AND ".join("m." + key + " <=> %s" for key in SUMMARY_KEYS)
         with self._snapshot() as tx:
             as_of = self._clock(tx)
             cutoff = as_of.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
-            mode_clause = " AND m.calculation_mode=%s" if calculation_mode is not None else ""
-            choice_parameters = (sub_flag, ic_scope, cutoff, *((calculation_mode,) if calculation_mode is not None else ()), minimum_factors)
-            scope = tx.fetch_one(f"""
-                SELECT {group}, COUNT(DISTINCT m.factor_id) AS factor_count,
-                       MAX(r.completed_at) AS latest_completed
-                FROM factor_ic_summary_metrics m
-                JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
-                WHERE m.is_sub_factor_id=%s AND m.ic_scope=%s AND {symbol_clause}
-                  AND r.completed_at<=%s {mode_clause}
-                GROUP BY {group}
-                HAVING factor_count BETWEEN %s AND 20
-                   AND COUNT(DISTINCT CASE WHEN m.mean_ic IS NOT NULL
-                         AND m.rank_is_icir IS NOT NULL AND m.rank_is_icir<>0
-                         THEN m.factor_id END)=factor_count
-                ORDER BY factor_count, latest_completed DESC, {group} LIMIT 1
-            """, choice_parameters)
+            scope = None
+            for candidate in self._summary_candidates(tx, sub_flag, ic_scope,
+                    symbol_clause.replace("m.", ""), calculation_mode, minimum_factors):
+                params = (sub_flag, *(candidate[key] for key in SUMMARY_KEYS), cutoff)
+                members = tx.fetch_all(f"""SELECT DISTINCT m.factor_id
+                    FROM factor_ic_summary_metrics m
+                    JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
+                    WHERE m.is_sub_factor_id=%s AND {predicate} AND r.completed_at<=%s
+                    LIMIT 21""", params)
+                if not minimum_factors <= len(members) <= 20:
+                    continue
+                qualified = tx.fetch_all(f"""SELECT DISTINCT m.factor_id
+                    FROM factor_ic_summary_metrics m
+                    JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
+                    WHERE m.is_sub_factor_id=%s AND {predicate} AND r.completed_at<=%s
+                      AND m.mean_ic IS NOT NULL AND m.rank_is_icir IS NOT NULL AND m.rank_is_icir<>0
+                    LIMIT 21""", params)
+                if {row["factor_id"] for row in qualified} == {row["factor_id"] for row in members}:
+                    scope = candidate
+                    break
             if scope is None:
                 return None
-            predicate = " AND ".join("m." + key + "=%s" for key in SUMMARY_KEYS)
             params = (sub_flag, *(scope[key] for key in SUMMARY_KEYS), cutoff)
             rows = tx.fetch_all(f"""
                 SELECT ranked.* FROM (
@@ -375,9 +454,10 @@ class Factor4ReadRepository:
                                  tuple(rows), tuple(formulas))
 
     def metric_scope_snapshot(self, ic_scope: str, kind: Kind = "sub_factor") -> MetricScopeSnapshot | None:
-        """发现端点可筛选的 interval/universe 分区并读取全部历史；无样本 None，非法输入 ValueError。
+        """发现公开 interval/universe 分区并完整读取历史；无样本 None，非法输入 ValueError。
 
-        优先 scope 较少的分区，让无 cursor 的端点也可全量对账；不使用 GROUP_CONCAT。
+        候选仅用覆盖索引，不跨全库关联/聚合。完整读取超过预算时换候选；若没有
+        完整基线则抛 SampleDiscoveryExhausted，不返回被 LIMIT 截断的历史或伪报无样本。
         run_completed_at 属于上海生命周期时间，metric_period_end 为 UTC 数据时间。
         """
         if ic_scope not in {"time_series", "cross_sectional"} or kind not in _TABLES:
@@ -386,32 +466,59 @@ class Factor4ReadRepository:
         group = ", ".join("m." + key for key in SUMMARY_KEYS)
         with self._snapshot() as tx:
             as_of = self._clock(tx)
-            choice = tx.fetch_one(f"""
-                SELECT scopes.factor_bar_interval, scopes.universe_key, COUNT(*) AS scope_count
-                FROM (
-                    SELECT {group} FROM factor_ic_summary_metrics m
-                    JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
-                    WHERE m.is_sub_factor_id=%s AND m.ic_scope=%s AND r.completed_at IS NOT NULL
-                    GROUP BY {group}
-                ) scopes
-                GROUP BY scopes.factor_bar_interval, scopes.universe_key
-                ORDER BY (COUNT(*) BETWEEN 2 AND 100) DESC, COUNT(*),
-                         scopes.factor_bar_interval, scopes.universe_key LIMIT 1
-            """, (sub_flag, ic_scope))
-            if choice is None:
-                return None
-            rows = tx.fetch_all(f"""
-                SELECT {group}, m.factor_id, m.run_id, r.completed_at AS run_completed_at,
-                       MAX(m.period_end) AS metric_period_end
-                FROM factor_ic_summary_metrics m
-                JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
-                WHERE m.is_sub_factor_id=%s AND m.ic_scope=%s AND m.factor_bar_interval=%s
-                  AND m.universe_key=%s AND r.completed_at IS NOT NULL
-                GROUP BY {group}, m.factor_id, m.run_id, r.completed_at
-            """, (sub_flag, ic_scope, choice["factor_bar_interval"], choice["universe_key"]))
-            filters = {"ic_scope": ic_scope, "interval": choice["factor_bar_interval"],
-                       "universe_key": choice["universe_key"]}
-            return MetricScopeSnapshot(kind, as_of, filters, tuple(rows))
+            fallback: MetricScopeSnapshot | None = None
+            fallback_size = 0
+            oversized = False
+            for offset in range(0, _DISCOVERY_MAX_CANDIDATES, _DISCOVERY_PAGE_SIZE):
+                choices = tx.fetch_all("""SELECT /*+ MAX_EXECUTION_TIME(20000) */ DISTINCT
+                    universe_key, ic_scope, factor_bar_interval FROM factor_ic_summary_metrics
+                    WHERE ic_scope=%s ORDER BY universe_key, ic_scope, factor_bar_interval
+                    LIMIT %s OFFSET %s""", (ic_scope, _DISCOVERY_PAGE_SIZE + 1, offset))
+                for choice in choices[:_DISCOVERY_PAGE_SIZE]:
+                    rows = tx.fetch_all(f"""SELECT {group}, m.factor_id, m.run_id,
+                        r.completed_at AS run_completed_at, m.period_end AS metric_period_end
+                        FROM factor_ic_summary_metrics m
+                        JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
+                        WHERE m.is_sub_factor_id=%s AND m.ic_scope=%s AND m.factor_bar_interval=%s
+                          AND m.universe_key=%s AND r.completed_at IS NOT NULL LIMIT %s""",
+                        (sub_flag, ic_scope, choice["factor_bar_interval"], choice["universe_key"],
+                         _SCOPE_BASELINE_ROW_LIMIT + 1))
+                    if len(rows) > _SCOPE_BASELINE_ROW_LIMIT:
+                        oversized = True
+                        continue
+                    if not rows:
+                        continue
+                    # The full raw partition was read. Reproduce SQL MAX(period_end)
+                    # per scope/factor/run without server-side global materialization.
+                    grouped: dict[tuple[Any, ...], dict[str, Any]] = {}
+                    scopes: set[tuple[Any, ...]] = set()
+                    for row in rows:
+                        identity = tuple(row[key] for key in SUMMARY_KEYS)
+                        scopes.add(identity)
+                        key = (*identity, row["factor_id"], row["run_id"], row["run_completed_at"])
+                        previous = grouped.get(key)
+                        end = row["metric_period_end"]
+                        if previous is None or (end is not None and (
+                                previous["metric_period_end"] is None or end > previous["metric_period_end"])):
+                            grouped[key] = row
+                    filters = {"ic_scope": ic_scope, "interval": choice["factor_bar_interval"],
+                               "universe_key": choice["universe_key"]}
+                    snapshot = MetricScopeSnapshot(kind, as_of, filters, tuple(grouped.values()))
+                    if 2 <= len(scopes) <= 100:
+                        return snapshot
+                    if fallback is None or len(scopes) < fallback_size:
+                        fallback, fallback_size = snapshot, len(scopes)
+                if len(choices) <= _DISCOVERY_PAGE_SIZE:
+                    if fallback is not None:
+                        return fallback
+                    if oversized:
+                        raise SampleDiscoveryExhausted(
+                            f"BLOCKED_SAMPLE_DISCOVERY: no complete scope baseline within {_SCOPE_BASELINE_ROW_LIMIT} rows")
+                    return None
+            if fallback is not None:
+                return fallback
+            raise SampleDiscoveryExhausted(
+                f"BLOCKED_SAMPLE_DISCOVERY: scope candidate budget={_DISCOVERY_MAX_CANDIDATES} exhausted")
 
     def summaries_at(self, sample: SummarySample, as_of: datetime) -> SummarySample:
         """Read each factor's latest completed row at a supplied aware PIT boundary.
@@ -496,7 +603,9 @@ class Factor4ReadRepository:
     def research_catalog_snapshot(self, sample: SummarySample) -> ResearchCatalogSnapshot:
         """Read typed catalog members with latest exact-scope metrics and linked validity.
 
-        Missing summaries and validity remain explicit unknown members. Only slim
+        Catalog creation and completed metrics share the sample's fixed as-of;
+        later-created factors cannot enter this historical oracle. Missing
+        summaries and validity remain explicit unknown members. Only slim
         final result columns are read, not formula inputs or OOS arrays. Multiple
         matching validity rows are retained and counted as oracle ambiguity instead
         of picking an arbitrary status. Invalid scope/kind raises ValueError;
@@ -525,8 +634,10 @@ class Factor4ReadRepository:
                 FROM {table} catalog LEFT JOIN ranked latest ON latest.factor_id=catalog.id AND latest.rn=1
                 LEFT JOIN factor_validity_status v ON v.is_sub_factor_id=%s AND v.factor_id=catalog.id
                     AND v.run_id=latest.run_id AND v.{scope}_summary_id=latest.metric_id
-                WHERE catalog.factor_bar_interval=%s ORDER BY catalog.id,v.id""",
-                (flag, *(sample.scope[key] for key in SUMMARY_KEYS), cutoff, flag, sample.scope["factor_bar_interval"]))
+                WHERE catalog.factor_bar_interval=%s AND catalog.created_at<=%s
+                ORDER BY catalog.id,v.id""",
+                (flag, *(sample.scope[key] for key in SUMMARY_KEYS), cutoff, flag,
+                 sample.scope["factor_bar_interval"], cutoff))
         identities = [row["factor_id"] for row in rows]
         return ResearchCatalogSnapshot(sample, tuple(rows), len(identities) - len(set(identities)))
 
@@ -775,22 +886,57 @@ class Factor4ReadRepository:
         """Discover an exact persisted slice scope, optionally symbol or aggregate only.
 
         Returns None without natural data; invalid selectors raise ValueError and DB
-        failures propagate sanitized. Symbol identity is preserved in both queries.
+        failures propagate sanitized. Candidate ID windows are bounded; exhausting
+        them raises SampleDiscoveryExhausted. The chosen scope's slices are complete
+        and its actual slice count must meet min_rows, regardless of summary counts.
         """
         if scope not in {"time_series", "cross_sectional"} or kind not in _TABLES or symbol_mode not in {"any", "symbol", "aggregate"} or isinstance(min_rows, bool) or not isinstance(min_rows, int) or not 1 <= min_rows <= 100:
             raise ValueError("unsupported slice scope or kind")
         symbol_filter = {"any": "1=1", "symbol": "COALESCE(m.symbol,'')<>''",
                          "aggregate": "COALESCE(m.symbol,'')=''"}[symbol_mode]
+        keys = ("run_id", "factor_id", "is_sub_factor_id", "ic_scope", "calculation_mode",
+                "factor_bar_interval", "factor_window_bars", "return_bar_interval", "forward_return_bars",
+                "universe_key", "window_scope", "symbol")
+        projection = ", ".join("m." + key for key in keys)
+        slice_where = " AND ".join(key + " <=> %s" for key in keys if key != "symbol")
+        slice_where += " AND COALESCE(symbol,'')=COALESCE(%s,'')"
         with self._snapshot() as tx:
-            summary = tx.fetch_one(f"""SELECT m.* FROM factor_ic_summary_metrics m
-                JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
-                WHERE m.is_sub_factor_id=%s AND m.ic_scope=%s AND {symbol_filter} AND m.slice_count >= %s
-                  AND (%s=1 OR m.window_scope='rolling')
-                  AND EXISTS (SELECT 1 FROM factor_ic_slice_metrics s WHERE s.run_id=m.run_id AND s.factor_id=m.factor_id AND s.is_sub_factor_id=m.is_sub_factor_id AND s.ic_scope=m.ic_scope AND s.calculation_mode=m.calculation_mode AND s.factor_bar_interval=m.factor_bar_interval AND s.factor_window_bars=m.factor_window_bars AND s.return_bar_interval=m.return_bar_interval AND s.forward_return_bars=m.forward_return_bars AND s.universe_key=m.universe_key AND s.window_scope=m.window_scope AND COALESCE(s.symbol,'')=COALESCE(m.symbol,''))
-                ORDER BY m.updated_at DESC, m.id DESC LIMIT 1""", (_TABLES[kind][2], scope, min_rows, min_rows))
-            if summary is None: return None
-            rows = tx.fetch_all("""SELECT * FROM factor_ic_slice_metrics WHERE run_id=%s AND factor_id=%s AND is_sub_factor_id=%s AND ic_scope=%s AND calculation_mode=%s AND factor_bar_interval=%s AND factor_window_bars=%s AND return_bar_interval=%s AND forward_return_bars=%s AND universe_key=%s AND window_scope=%s AND COALESCE(symbol,'')=COALESCE(%s,'') ORDER BY as_of_time, id""", tuple(summary.get(k) for k in ("run_id","factor_id","is_sub_factor_id","ic_scope","calculation_mode","factor_bar_interval","factor_window_bars","return_bar_interval","forward_return_bars","universe_key","window_scope","symbol")))
-            return SliceSample(summary, tuple(rows))
+            maximum = tx.fetch_one("SELECT MAX(id) AS id FROM factor_ic_summary_metrics")
+            upper = int((maximum or {}).get("id") or 0)
+            completed_runs: dict[str, bool] = {}
+            for _ in range(_SLICE_DISCOVERY_PAGES):
+                if upper <= 0:
+                    return None
+                lower = max(0, upper - _SLICE_ID_WINDOW)
+                candidates = tx.fetch_all(f"""SELECT m.id, {projection}
+                    FROM factor_ic_summary_metrics m
+                    WHERE m.id>%s AND m.id<=%s AND m.is_sub_factor_id=%s AND m.ic_scope=%s
+                      AND {symbol_filter} AND m.slice_count>=%s
+                      AND (%s=1 OR m.window_scope='rolling')
+                    ORDER BY m.id DESC LIMIT 64""", (lower, upper, _TABLES[kind][2], scope, min_rows, min_rows))
+                for candidate in candidates:
+                    run_id = candidate["run_id"]
+                    if run_id not in completed_runs:
+                        completed_runs[run_id] = tx.fetch_one("""SELECT run_id FROM factor_ic_runs
+                            WHERE run_id=%s AND status='completed'""", (run_id,)) is not None
+                    if not completed_runs[run_id]:
+                        continue
+                    params = tuple(candidate[key] for key in keys)
+                    present = tx.fetch_all(f"SELECT id FROM factor_ic_slice_metrics WHERE {slice_where} LIMIT %s",
+                                           (*params, min_rows))
+                    if len(present) < min_rows:
+                        continue
+                    summary = tx.fetch_one("SELECT * FROM factor_ic_summary_metrics WHERE id=%s", (candidate["id"],))
+                    rows = tx.fetch_all(f"SELECT * FROM factor_ic_slice_metrics WHERE {slice_where} ORDER BY as_of_time, id", params)
+                    if summary is not None and len(rows) >= min_rows:
+                        return SliceSample(summary, tuple(rows))
+                # A full page may leave candidates in this same ID window. Continue
+                # below the last ID rather than jumping past unexamined summaries.
+                upper = int(candidates[-1]["id"]) - 1 if len(candidates) == 64 else lower
+            if upper <= 0:
+                return None
+            raise SampleDiscoveryExhausted(
+                f"BLOCKED_SAMPLE_DISCOVERY: slice ID-page budget={_SLICE_DISCOVERY_PAGES} exhausted")
 
     def slices_for_summary(self, summary: dict[str, Any], *, discover_symbol: bool = False) -> SliceSample | None:
         """Read exact-run slices for a persisted summary, optionally select a real symbol.
@@ -807,9 +953,11 @@ class Factor4ReadRepository:
         with self._snapshot() as tx:
             selected = dict(summary)
             if discover_symbol:
-                profile = tx.fetch_one(f"""SELECT COALESCE(symbol,'') AS symbol
+                profile = tx.fetch_one(f"""SELECT grouped_symbols.symbol FROM (
+                    SELECT COALESCE(symbol,'') AS symbol
                     FROM factor_ic_slice_metrics WHERE {where}
-                    GROUP BY COALESCE(symbol,'') ORDER BY (COALESCE(symbol,'')<>'' ) DESC, symbol LIMIT 1""", parameters)
+                    GROUP BY COALESCE(symbol,'')) AS grouped_symbols
+                    ORDER BY (grouped_symbols.symbol<>'') DESC, grouped_symbols.symbol LIMIT 1""", parameters)
                 if profile is None:
                     return None
                 selected["symbol"] = profile["symbol"]

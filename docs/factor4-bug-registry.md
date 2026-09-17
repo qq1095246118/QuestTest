@@ -12,6 +12,174 @@
 本次失败已区分候选、正式追溯证据缺口、QA 证据缺口和判定器问题，不直接计为六个产品 Bug。
 最新结果及每项复现见 [本轮复跑记录](factor4-result-live-20260907-rerun.md)；下方“当前数量”仍为历史登记口径，不用于这次统计。
 
+## 2026-09-14 全量续跑完成后的最新状态
+
+本次全量经用户暂停后续跑完成，171函数、691唯一实例、30文件；按本日每节点最新正式结果汇总为 **403 PASSED / 84 FAILED / 9 ERROR / 195 SKIPPED**。所有节点均有本轮终态，没有使用9月11日结果填补，也不将跳过算通过。原暂停计数漏了含空格参数的1个PASS，已从596校正为597。完整逐文件、逐节点结果及复现见 [本轮完成报告](factor4-production-full-completed-20260914.md)。本节是生产最新验收口径，下方旧日期结果保留历史含义。
+
+当前确认未关闭4个业务标题，其中新增1个：
+
+- **Backend TS 指标最小查询超时**：固定名称不变；本轮有效登录下最小请求46.134秒HTTP500、查询失败，症状由旧ReadTimeout改变。
+- **DPO 公式错误地位移均线而非价格序列**：161106当前执行公式仍位移均线，19:38—19:40复验；仅当前定义证据。
+- **IV/RV 因子定义与实际执行公式及输入字段不一致**：161628/161629/161630当前定义仍与close滚动标准差执行式冲突；仅当前定义证据。
+- **环境标签查询遗漏当前已发布的有效路由**：新增，详情如下。
+
+原精确请求验收通过：**TS 指标范围查询超时，使用端链路无法开始**（历史/当前as_of的1h/all最小请求均正常）；**环境指标最小分页查询仍超过响应大小限制**（原batch/因子/label/维度精确返回原metric2381）。后者当前tags原样本为空，不能扩展为原非空tags响应已独立验收。**Backend 推荐接口查询有效发布结果返回 HTTP 500**本轮正式用例继续通过。
+
+本地running增量发布选择器过严导致的3ERROR/3生命周期FAIL不计业务Bug；feedback表前置4ERROR、DB取样errno3024的2ERROR+2FAIL、JSON-only错误解析、规范/兼容性及历史DEFERRED继续分开记录。细节和证据边界见本轮报告，原始终态不因裁决改成PASS。
+
+### 环境标签查询遗漏当前已发布的有效路由
+
+- 英文索引：`F4-ENV-TAGS-MISSING-PUBLISHED-ELIGIBLE-ROUTE`；状态：`CONFIRMED`；环境：生产；登记日期：2026-09-14。
+- 模块：MCP环境标签读取。当前有效路由已经按因子增量发布，MCP同publication却返回空标签，使用者无法发现该因子的WIDE_RANGE路由。
+- 复现：完成生产MCP初始化，调用`factor_get_environment_tags`，参数`{"factor_ref":"sub_factor:1435649","market_scope":"all","route_profile_key":"default"}`。
+- 预期：包含该因子的有效WIDE_RANGE route；实际HTTP200/isError=false、returned_count=0/items=[]，publication仍对应batch11。
+- DB前后核查：19:42:14—19:42:17批次/route身份稳定，batch11为running/per_factor_incremental/published/active；route14580同ref、WIDE_RANGE、active=1/eligible=1、rank5、score78.856103。关联metric9918同batch/ref/label、CS/success/is_valid1、无error_code；公开detail及名称search均返回相同因子。
+- request_id：`717565ea-ea74-4491-967c-9618e869ebb4`；publication_uid：`df8596a9-463e-4d87-bf97-17d8af27b58e`。
+- 正式入口：`tests/cases/factor4/test_migrated_readonly_scripts.py::test_environment_tags_match_active_routes`，使用`--live --env production`；自然取样会随发布变化，精确复现使用上方原参数。
+- 证据：[本轮原请求及DB前后核对](../reports/factor4-production-resume-error-triage-20260914-review.json)。不能因为running而把合法增量发布排除；这与本地批次选择器过严是两个分别取证的问题。
+
+
+## 2026-09-11 本地取样优化后的定向回归
+
+后续最小复核已完成：上述 124 实例中的 9 个 FAIL 未新增确认业务 Bug。4 个有效性状态差异的代表请求证实仅 null/unknown 表达不同，成员/指标/统计一致；3 个历史 scope 差异归为“历史 TS 指标范围查询的修订可见性规则不明确”，因当前记录在历史 as-of 之后已更新，尚不能证明旧时点漏数据；“Slice 结束时间边界错误”1 个仍复现但维持用户指定 DEFERRED；“参数校验错误的文本响应被误判为 MCP 返回格式错误”1 个为既有本地解析问题。原始 9 FAIL 终态不改为 PASS，既有中文 Bug 名称和未复验的历史问题状态不变。完整请求和裁决见 [本轮最小复核](factor4-sampling-adjustment-20260911.md#失败现象的后续最小复核)。
+
+本地取样改为覆盖索引候选发现及精确范围完整对账，异常清理保留最初错误。8 类生产 Repository 取样均成功；随后重新执行此前 124 个阻断实例（25 函数、6 模块），结果为 **96 passed、9 failed、0 errors、19 skipped**，耗时约 6 分钟。本地 DB 取样/基线阻断及搜索预算耗尽均为 0。剩余失败为有效性成员状态差异 4 个、历史 scope 数量差异 3 个、切片边界错误 1 个、切片响应解析失败 1 个；这些是待核实断言现象，不直接新增 9 个产品 Bug，也不变更既有固定中文标题。跳过保留样本及契约缺口。详见 [取样优化与本轮结果](factor4-sampling-adjustment-20260911.md)。此次使用动态新样本，不据此关闭未做精确复现的历史问题；以下各轮原始结果保留。
+
+## 2026-09-11 13:03 DB 阻断实例复跑
+
+在推荐 HTTP 500 已验收修复后，124 个 DB 阻断实例已单独重跑，结果为 13 failed、109 errors、2 skipped，0 passed。122 个仍在相同 DB 入口/驱动异常签名处阻断；两个 CS 组合筛选已读到 DB 基线，但缺独立双指标筛选样本，尚未发送目标 MCP 筛选请求。本次没有新增业务结果 Bug，也不将不同轮次混入下方 691 实例原始统计。代表性只读诊断进一步捕获查询阶段的 2013/HY000 连接丢失，随后回滚报错掩盖了最初异常；具体断开原因尚未定位。详见 [DB 阻断复跑结果](factor4-production-blocked-rerun-20260911.md)。
+
+## 2026-09-11 日间重新全量执行
+
+按用户要求在昨夜发布后重新启动一轮独立生产回归，10:56–12:08 执行全部 171 个测试函数 / 691 个实例，最终 **329 passed、115 failed、113 errors、134 skipped**。所有实例均来自本轮新进程，没有用旧结果填补；业务验收仍存在阻断，不能称为全部通过。
+
+本轮新请求再次确认原有六个固定中文标题，名称不变：
+
+- Backend 推荐接口查询有效发布结果返回 HTTP 500
+- Backend TS 指标最小查询超时
+- 环境指标最小分页查询仍超过响应大小限制
+- TS 指标范围查询超时，使用端链路无法开始
+- DPO 公式错误地位移均线而非价格序列
+- IV/RV 因子定义与实际执行公式及输入字段不一致
+
+前轮 122 个 DB 取样/基线阻断实例本轮未恢复，另有 2 个 CS 基线读取失败，总计 124 个（15 failed、109 errors）；不作为 124 个产品 Bug。四个 children 游标用例本轮恢复通过，不能再沿用上轮该项失败证据。本轮完整统计、请求复现、最新 request_id、样本/契约缺口及两轮转换见 [重新全量结果](factor4-production-rerun-20260911.md)。以下 2026-09-10 与测试环境记录保留历史口径。
+
+## 2026-09-10 生产回归新增固定名称
+
+2026-09-11 全量结束：171 个测试函数、691 个实例，最终 328 passed、117 failed、113 errors、133 skipped。逐节点复核确认 6 类业务 Bug（包含下方新名称及历史 DPO、IV/RV 两个原名称）；原始失败数量不等于 Bug 数量，样本/契约缺口及本地用例问题另列。当前完整结果与复现步骤见 [生产全量结果](factor4-production-full-20260910.md)，不改写下方测试环境历史数量。
+
+### Backend 推荐接口查询有效发布结果返回 HTTP 500
+
+- 状态：FIX_VERIFIED，生产；2026-09-11 12:21（Asia/Shanghai）在用户告知修复后定向验收。原最小请求单次 2.026 秒返回 HTTP 200、success=true；Backend/MCP/DB 推荐对账正式用例 1 passed。当前为 NARROW_RANGE / NO_ELIGIBLE_FACTOR / items=[]，验收范围是原 HTTP 500 及当前空结果一致性，不代表非空推荐排名已覆盖。
+- 最新证据：[修复验收](../reports/factor4-production-recommendation-fixcheck-20260911.json)、[正式 JUnit](../reports/factor4-production-recommendation-fixcheck-20260911.xml)。此前 691 实例报告保留原始结果；124 个本地 DB 取样/基线阻断不依赖此推荐端点，本次未重跑，不能随此条修复一并关闭。
+- 修复前，有效 Backend 身份下，`GET /api/v1/market-environment/recommendations?market_scope=all&route_profile_key=default&limit=1` 返回 HTTP 500；数据库存在 active published 的增量发布 batch 7。指定 as_of、limit 200 或 1，以及省略 as_of 均重现。
+- 预期：返回对应发布推荐，或有明确业务语义的正常空结果；不能对有效读取请求返回内部错误。
+- 实际：`success=false`，`error=操作失败，请稍后重试`。最小无 as_of 请求的 request_id：`54c2c6c7-1716-4603-a99b-a3468e2ffc85`。
+- 影响：Backend 推荐读取无法完成；不直接推断 MCP 推荐也失败，底层根因待服务日志定位。
+- 正式入口：`tests/cases/factor4/test_backend_three_way_business.py::test_backend_recommendations_publication_order_and_scores_match_mcp_database`，参数 `--live --env production`。
+- 记录及完整脱敏证据见 [生产回归记录](factor4-production-full-20260910.md)。不改写下方历史测试环境数量。
+
+### 环境指标最小分页查询仍超过响应大小限制
+
+- **英文索引**：`F4-ENV-MINIMUM-READ-RESPONSE-TOO-LARGE`
+- **状态 / 环境 / 登记日期**：`CONFIRMED` / 生产 / `2026-09-11`（Asia/Shanghai）。这是使用端单因子正常查询被阻断的功能问题，内部根因尚未定位。
+- **问题说明**：用户指定一个真实因子、一个已发布批次、一个环境标签、一个 TS/CS 维度，并将 `limit` 设为最小值 `1`，仍只能收到 `RESPONSE_TOO_LARGE`，无法取得这条已经存在且有效的指标。实时工具 Schema 没有 `fields`、`detail_level` 等可进一步缩小输出的参数，不能通过正常调整请求避开。
+- **数据库证据**：生产 `all/default` 当前 active published batch `7`，`batch_uid=3603f724-9a14-4c6a-a670-aef51dc19c12`，状态 `partial_fail`，冻结配置明确声明 `publication_mode=per_factor_incremental`。以下请求唯一对应 `market_environment_factor_metric.id=2381`：`factor_ref=sub_factor:149`、`label_code=WIDE_RANGE`、`evaluation_type=time_series`、`metric_status=success`、`is_valid=1`。该行 `metric_payload` 为 `38,796` 字节；本次只读查询读取身份、状态和 `OCTET_LENGTH`，未拉取完整 payload。批次其他指标失败不改变这条指标已经成功且有效的事实。
+- **复现步骤**：使用现有独立生产配置连接 `https://factor-frontend.questvector.ai/mcp/factor-data`，正常完成 MCP `initialize` 和 `notifications/initialized`；然后发送以下完整 `tools/call` 请求。生产鉴权从本机配置读取，不在报告中写入完整 Token。
+
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": "env-minimum-metric-repro",
+    "method": "tools/call",
+    "params": {
+      "name": "factor_get_environment_metrics",
+      "arguments": {
+        "factor_ref": "sub_factor:149",
+        "market_scope": "all",
+        "route_profile_key": "default",
+        "batch_uid": "3603f724-9a14-4c6a-a670-aef51dc19c12",
+        "label_code": "WIDE_RANGE",
+        "evaluation_type": "time_series",
+        "limit": 1
+      }
+    }
+  }
+  ```
+
+- **预期 / 实际**：预期成功返回上述唯一指标，保留其批次和维度身份；实际 `HTTP 200`、工具 `isError=true`、`error.code=RESPONSE_TOO_LARGE`、`error.details.max_response_bytes=2621440`（`2,621,440` 字节），没有指标结果。该精确请求耗时 `0.835` 秒，不属于读取超时。原正常基线仅传单因子和 `limit=1` 时也复现，失败发生在异常参数循环之前。
+- **同类影响点：环境标签查询**。同一因子的下列正常请求也返回 `HTTP 200`、`isError=true`、`RESPONSE_TOO_LARGE`。实时 `factor_get_environment_tags` Schema 只允许 `factor_ref / market_scope / route_profile_key`，没有分页、标签筛选或字段裁剪参数，因此也没有可用的请求缩小方式。
+
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": "env-minimum-tags-repro",
+    "method": "tools/call",
+    "params": {
+      "name": "factor_get_environment_tags",
+      "arguments": {
+        "factor_ref": "sub_factor:149",
+        "market_scope": "all",
+        "route_profile_key": "default"
+      }
+    }
+  }
+  ```
+
+- **正式用例入口**：`tests/cases/factor4/test_protocol_deferred_business.py::test_protocol_schema_legal_and_invalid_boundaries[factor_get_environment_metrics]`、`[factor_get_environment_tags]`，使用 `--live --env production --include-factor4-deferred`。虽然入口属于协议专项，本条仅确认其最初合法业务读取失败，不把后续未执行的边界断言计为覆盖。
+- **证据**：[最小请求与 Schema/DB 摘要](../reports/factor4-production-selector-response-size-20260910.json)、[6 节点定向 JUnit](../reports/factor4-production-selector-rerun-20260910.xml)、[定向日志](../reports/factor4-production-selector-rerun-20260910.log)。报告文件保留原 `20260910` 名称，定向结果仍为 `3 passed / 3 failed`；本条不改写原始执行状态，也不把另一个推荐负向文本解析失败并入产品 Bug。
+- **结论边界**：这是单因子、最小合法读取仍不可用，不是批量导出预算或 50 因子请求过大。尚未定位响应膨胀来源，不能仅凭单行 payload 大小推断服务端返回了全部批次数据；指标和标签暂登记同一功能问题的两个影响点，不宣称已证明同一内部根因。
+
+### TS 指标范围查询超时，使用端链路无法开始
+
+- **英文索引**：`F4-TS-METRIC-SCOPE-QUERY-TIMEOUT`
+- **状态 / 环境 / 登记日期**：`CONFIRMED` / 生产 / `2026-09-11`（Asia/Shanghai）。这是正常单次业务读取被阻断，未执行压力或性能专项。
+- **问题说明**：使用端先查询可用 TS 指标范围，再根据返回的维度进行因子搜索或排名。生产 `factor_list_metric_scopes` 对真实存在的 `sub_factor / time_series / 1h / all` 范围返回服务端数据库查询超时；即使只请求 `limit=1` 也不能返回可用范围，后续用户链路无法开始。
+- **真实数据前置**：只读数据库按截至时点最近完成的 Run 取样，`ts_symbol` 和 `ts_aggregate` 均返回真实 scope，耗时分别为 `2.320` 秒、`2.475` 秒。两者都是 `time_series / direct / 1h / factor_window_bars=5 / return_bar_interval=1h / forward_return_bars=1 / universe_key=all / window_scope=min_window / scoring_version=v20260820_ts_rolling_blocks`；币种样本为 `TAOUSDT`，聚合样本为 `symbol=''`。本条不依赖全表统计，也不是无 TS 数据。
+- **复现步骤**：使用独立生产配置连接 `https://factor-frontend.questvector.ai/mcp/factor-data`，完成 MCP `initialize` 和 `notifications/initialized`，然后发送以下最小请求。鉴权读取本机生产配置，不在报告中重复完整 Token。
+
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": "ts-scope-timeout-repro",
+    "method": "tools/call",
+    "params": {
+      "name": "factor_list_metric_scopes",
+      "arguments": {
+        "kind": "sub_factor",
+        "ic_scope": "time_series",
+        "interval": "1h",
+        "universe_key": "all",
+        "as_of": "2026-09-10T16:04:13.196246+00:00",
+        "limit": 1
+      }
+    }
+  }
+  ```
+
+- **预期 / 实际**：预期按范围返回最多一条可用 scope；实际耗时 `20.205` 秒后返回 `HTTP 200`、`isError=true`、`error.code=QUERY_TIMEOUT`、`error.message=Database query exceeded the configured execution time`、`error.details.dependency=reader_db`、`error.details.timeout_seconds=20`、`retryable=true`。`request_id=8d47d543-d0ae-49b0-9d39-4a8d2780817a`。相同请求将 `limit` 改为 `100` 时也失败，耗时 `20.260` 秒，`request_id=d77abc33-18c2-4d8d-b7d8-7341cb8b2ec9`。
+- **正式用例入口**：`tests/cases/factor4/test_consumer_journey_business.py::test_public_scope_selection_replays_selected_result_and_evidence` 的 `[ts_symbol-search]`、`[ts_symbol-rank]`、`[ts_aggregate-search]`、`[ts_aggregate-rank]`，参数 `--live --env production`。四条正式执行保持 `SKIPPED / BLOCKED_DEPENDENCY: QUERY_TIMEOUT`，人工裁决为已确认服务功能阻塞；不修改为通过，不声称搜索、排名、metrics、validity、formula、slices 已完成验证。
+- **证据**：[4 节点 JUnit](../reports/factor4-production-consumer-ts-rerun-20260910.xml)、[完整命令与最小请求记录](../reports/factor4-production-consumer-ts-rerun-20260910.log)。文件名称沿用父任务 `20260910`，实际定向执行开始于 `2026-09-11T00:00:21+08:00`。
+- **结论边界**：原本本地 `initial_scope` 的全量 JOIN 排序问题已修正，本条来自随后独立的公开 MCP 正常请求。当前只能确认服务端 reader_db 查询超时，不能据此断言内部 SQL/索引根因或因子排名数值错误；也不重开历史已关闭的“币种级 time-series 排名完全不可用”。
+
+### Backend TS 指标最小查询超时
+
+- **英文索引**：`F4-BACKEND-TS-MINIMUM-SUMMARY-TIMEOUT`
+- **状态 / 环境 / 登记日期**：`CONFIRMED` / 生产 / `2026-09-11`（Asia/Shanghai）。这是正常单次最小指标读取未能返回，不是压力或性能专项。
+- **问题说明**：用户请求一条子因子的 TS 汇总指标，Backend 对合法 `ic_scope=time_series / is_sub_factor_id=true / limit=1` 查询持续不能在客户端 60 秒时限内返回。公开 OpenAPI 明确支持这三个参数，`factor_id` 为可选项；本次没有发送未知筛选字段。
+- **复现步骤**：使用独立生产 Backend JWT，在同一个客户端依次执行下面两条只读请求，关闭自动重试并设单次读取超时为 60 秒。第一条 CS 查询为连接及认证对照；第二条只将维度换为 TS。鉴权从本机生产配置读取，不在报告中重复完整 Token。
+
+  ```text
+  GET https://factor-backend.questvector.ai/api/v1/factor-ic/summary-metrics?is_sub_factor_id=true&ic_scope=cross_sectional&limit=1
+  GET https://factor-backend.questvector.ai/api/v1/factor-ic/summary-metrics?is_sub_factor_id=true&ic_scope=time_series&limit=1
+  ```
+
+- **预期 / 实际**：预期合法最小查询返回一条对应维度的结果或有明确语义的正常空页。实际 CS 对照 `HTTP 200`，`11.509` 秒返回一条真实结果，summary `4355073`、`sub_factor:2109022`；随后的 TS 在 `2026-09-10T16:52:22.230406+00:00` 开始，`60.010` 秒后触发 `requests.exceptions.ReadTimeout`，没有收到 HTTP 响应。此处不能写成服务端返回 HTTP 500 或 `QUERY_TIMEOUT`；未收到服务端 request_id。
+- **正式回归证据**：`test_backend_summary_identity_values_and_period_instants_match_mcp_database[time_series]` 同请求按项目配置共尝试三次，分别 `60.337 / 60.904 / 60.422` 秒超时，停在第一步 Backend 查询，未进行 DB 样本读取或 MCP 对账。同轮 `[cross_sectional]` 已通过原有同一 summary 的 Backend/MCP/DB 身份、数值和显式 period 时间断言。两节点原始结果保持 `1 PASSED / 1 FAILED`，不将 TS 改成通过。
+- **正式复现入口**：`python3 -m pytest 'tests/cases/factor4/test_backend_three_way_business.py::test_backend_summary_identity_values_and_period_instants_match_mcp_database[time_series]' --live --env production -v --tb=short`。命令按现有配置可能自动重试；无重试最小请求及 CS 对照单独保存在诊断文件中。
+- **证据**：[原始 pytest 输出](../reports/factor4-production-backend-summary-final-20260910.log)、[两节点 JUnit](../reports/factor4-production-backend-summary-final-20260910.xml)、[无重试请求与同连接 CS 对照](../reports/factor4-production-backend-summary-diagnostic-20260910.json)、[实时 OpenAPI 契约和取样修正](../reports/factor4-production-backend-summary-contract-20260910.json)。
+- **结论边界**：本次两条用例已改用公开返回结果定位 DB，移除了“因子全历史不超过 20 条”的本地取样前置，原有数据断言保留。当前 TS 失败发生在公开查询本身，不能归为本地样本发现失败，也不能推断因子数值错误。它与 MCP 的“TS 指标范围查询超时，使用端链路无法开始”属于不同端点和请求，目前没有证据确认两者内部根因相同。
+
 ## 2026-09-07 结果级复跑固定名称
 
 | 固定中文标题 | 本轮裁决 |
@@ -169,6 +337,26 @@ Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发
 - **复现步骤**：读取每个因子的 detail、immutable formula evidence 和最新 completed run；用独立序列 `close[i] = 100 + i^2/17 + 0.13*(i mod 7)` 重算两种公式并比较 warmup 后输出。
 - **最新证据**：`reports/factor4-deep/20260904T071236Z-dpo-formula-recheck/report.json`。
 - **边界**：本 Bug 不包含历史 VWAP 观察项；VWAP 另按 `DEFERRED` 记录。
+- **2026-09-10 生产定向复核**：`CONFIRMED`。本次精确核对的生产样本是 `sub_factor:161106`，名称为 `dpo_mean_reversion_tf_1h_n_60`，声明窗口 `n=60`；未把测试环境另两个历史 ID 的结论自动外推到生产。生产 MCP 与最新 DB detail `169781` 的公式一致，detail 的 `updated_at` 原值为 `2026-09-10 07:03:27`。
+- **生产实际字段**：`formula_summary="factor = -DPO(close,n)"`；`calc_logic="-(close - mean(close, (60 + 0)).shift(((60 + 0)) // 2 + 1))"`；`params.fields=["close"]`；`params.window=60`。当前可执行表达式仍对均线位移 31 bars；按既有 DPO 验收定义应为 `mean(close, 60) - close.shift(31)`。
+- **生产 MCP 复现参数**：完成 initialize 后，向生产 `/mcp/factor-data` 发送以下 `tools/call`；使用独立生产配置鉴权，不在报告中写入 Token。
+
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "factor_get_details_batch",
+      "arguments": {
+        "factor_refs": ["sub_factor:161106"],
+        "detail_level": "executable"
+      }
+    }
+  }
+  ```
+
+- **生产验证步骤及结论边界**：本次实际在同一个 4 因子请求中查询该因子及下方 3 个 IV/RV 因子，返回 `HTTP 200`、`isError=false`。检查 `data.items[].data` 的名称、摘要、`calc_logic` 和输入字段，并与 `sub_factors` 定义及按 `updated_at DESC,id DESC` 选出的最新 `factors_details` 对账，即可确认当前公开公式错误；不是仅 `normalized_formula` 元数据陈旧。R0 正式失败见 `reports/factor4-production-remaining-20260910.xml`。当前发布 metric 与 immutable formula 的强绑定证据不足，本次不能据此断言已发布数值、score 或 rank 使用了错误公式，也不以历史合成序列数值代替生产数值验收。
 
 ### 固定周期因子公式未应用声明窗口
 
@@ -264,6 +452,26 @@ Backend 指标周期时间戳时区转换错误（整体偏移 8 小时）；发
 - **复现步骤**：分别读取 detail summary、definition、executable formula、raw schema 和 metrics；核对定义字段集合与执行字段集合，并检查 active route 是否仍指向该定义。
 - **最新证据**：`reports/factor4-deep/20260904T071317Z-iv-rv-definition-recheck/report.json`。
 - **边界**：这是 3 个 tenor 变体的同一根因，不拆成 3 个 Bug；缺少真实 IV/RV 源数据是运行阻断的一部分，但不抹去定义与执行证据已经冲突的事实。
+- **2026-09-10 生产定向复核**：`CONFIRMED`。本次核对生产名称与 ID 的对应关系：`sub_factor:161628` 为 `iv_rv_premium_tf_1h_tenor_30d`、`161629` 为 `iv_rv_premium_tf_1h_tenor_7d`、`161630` 为 `iv_rv_premium_tf_1h_tenor_90d`。最新 DB detail 分别为 `170303/170304/170305`，`updated_at` 原值依次为 `2026-09-10 07:29:18`、`2026-09-10 07:29:19`、`2026-09-10 07:29:12`；不是测试环境固定 ID 误配。
+- **生产实际字段**：三者均返回 `formula_summary="factor = ATM_IV - realized_vol"`、`calc_logic="close.pct_change().rolling(window).std()"`、`params.fields=["close"]`；`params.window` 分别为 `tenor=30d`、`tenor=7d`、`tenor=90d`。生产 MCP executable 与最新 DB detail 完全一致。实际表达式只计算 close 收益率的滚动标准差，缺少 IV 输入及 IV−RV 运算，无法实现所声明的差值公式。
+- **生产 MCP 复现参数**：完成 initialize 后，向生产 `/mcp/factor-data` 发送以下 `tools/call`，鉴权读取独立生产配置。
+
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "factor_get_details_batch",
+      "arguments": {
+        "factor_refs": ["sub_factor:161628", "sub_factor:161629", "sub_factor:161630"],
+        "detail_level": "executable"
+      }
+    }
+  }
+  ```
+
+- **生产验证步骤及结论边界**：本次实际与上方 DPO 合并为 4 因子有界请求，`HTTP 200`、`isError=false`，三个 IV/RV executable 均可读取。逐项检查 `data.items[].data` 的定义摘要、`calc_logic` 和 `params.fields`，再与同 ID 的数据库定义和最新详情对账。R0 正式公式失败见 `reports/factor4-production-remaining-20260910.xml`；该报告中 `161629/161630` 的 MCP projection missing 在本次定向复核中不复现，不另计产品 Bug。当前发布 metric 到公式证据的强链接不足，本次确认的是当前定义与公开执行公式矛盾；不能将未绑定的历史 evidence 当作当前批次执行证据，也不能推断已发布因子数值、score 或 rank 已受影响。
 
 ## 待契约确认的候选（不计 Bug）
 

@@ -570,6 +570,8 @@ class Factor4SummaryService:
         response cannot be mistaken for a complete reconciliation.
         An explicit aware time_range comes from the consumer's public metric period;
         sample.rows must already be the independent expected subset for that range.
+        Progress is bounded by unique nonempty cursors and the independent expected
+        row count, not a fixed page ceiling. Declared endpoint errors still propagate.
         Invalid time ranges raise ValueError; transport/contract errors propagate.
         """
         summary, expected = sample.summary, sample.rows
@@ -578,7 +580,6 @@ class Factor4SummaryService:
                                       as_of=as_of, time_range=time_range)
         requested = args["limit"]
         actual_rows: list[dict[str, Any]] = []
-        pages = 0
         seen_cursors: set[str] = set()
         issues: list[str] = []
         while True:
@@ -595,12 +596,16 @@ class Factor4SummaryService:
                     elif str(actual_scope[key]) != str(args[key]):
                         issues.append(f"slices:resolved_scope={key}")
             actual_rows.extend(page.items)
-            pages += 1
             cursor = page.meta.get("next_cursor")
             if not cursor:
                 break
-            if not isinstance(cursor, str) or cursor in seen_cursors or not page.items or pages >= 50:
+            if not isinstance(cursor, str) or cursor in seen_cursors or not page.items:
                 raise ReadContractError("slices cursor did not advance within safety bound")
+            # A nonempty page must eventually exceed the finite DB oracle if a
+            # server keeps inventing fresh cursors. Preserve the actual collection
+            # mismatch below rather than claiming that its cursor failed to move.
+            if len(actual_rows) > len(expected):
+                break
             seen_cursors.add(cursor)
             args["cursor"] = cursor
         actual = actual_rows

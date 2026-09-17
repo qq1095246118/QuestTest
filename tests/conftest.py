@@ -43,7 +43,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--env",
         action="store",
         default=None,
-        help="Environment configuration name under config/, for example test or staging.",
+        help="Environment configuration name under config/; Factor 4.0 supports test or production.",
     )
     parser.addoption(
         "--live",
@@ -53,7 +53,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
     parser.addoption(
         "--include-factor4-deferred", action="store_true", default=False,
-        help="Explicitly include migrated Factor 4.0 exception/compatibility/performance cases; live/test gates still apply.",
+        help="Explicitly include migrated Factor 4.0 exception/compatibility/performance cases; explicit live/environment gates still apply.",
     )
     parser.addoption(
         "--include-factor4-internal-calculation", action="store_true", default=False,
@@ -149,10 +149,10 @@ def factor_data_mcp_api(
     settings: Settings,
     pytestconfig: pytest.Config,
 ) -> FactorDataMCPAPI:
-    """创建 Factor 4.0 计算专项使用的测试环境 MCP 客户端。
+    """创建 Factor 4.0 使用的独立环境 MCP 只读客户端。
 
     参数 ``settings`` 提供 Factor Data MCP URL、Token 和 HTTP 策略，``pytestconfig`` 用于强制检查显式
-    ``--live --env test``。返回尚未初始化会话的 ``FactorDataMCPAPI``，由 Service 统一完成握手和业务读取；缺少测试
+    ``--live --env test|production``。返回尚未初始化会话的 ``FactorDataMCPAPI``，由 Service 统一完成握手和业务读取；缺少
     配置时以 ``BLOCKED_ENV`` 跳过，环境、URL 或端点不安全时直接失败。网络和协议异常由 API/Service 原样传播。
     """
 
@@ -167,6 +167,7 @@ def factor_data_mcp_api(
     parsed = _validate_factor4_mcp_url(
         mcp_url,
         settings.environment_safety.allowed_hosts,
+        environment=settings.environment,
     )
 
     api_settings = replace(
@@ -185,11 +186,11 @@ def factor4_calculation_repository(
     settings: Settings,
     pytestconfig: pytest.Config,
 ) -> Factor4CalculationRepository:
-    """创建 Factor 4.0 计算专项的测试数据库只读 Repository。
+    """创建 Factor 4.0 当前环境数据库只读 Repository。
 
-    参数 ``settings`` 提供测试库连接，``pytestconfig`` 强制检查显式 ``--live --env test``。返回通过
+    参数 ``settings`` 提供独立环境连接，``pytestconfig`` 强制检查显式 ``--live --env test|production``。返回通过
     ``DatabaseClient`` 构造的 ``Factor4CalculationRepository``；驱动或连接配置缺失时以 ``BLOCKED_ENV`` 跳过，
-    非测试环境直接失败。Repository 自身负责在一致性只读事务中读取，不在 Fixture 中执行 SQL。
+    配置与所选环境不一致时失败。Repository 自身负责一致性只读事务；production 另有 DB 客户端只读保护。
     """
 
     _validate_factor4_calculation_live_environment(settings, pytestconfig)
@@ -203,11 +204,12 @@ def factor4_calculation_repository(
         settings.database.password,
     )
     if not all(required):
-        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项的测试 MySQL 配置不完整")
-    _validate_test_host(
+        pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项的 MySQL 配置不完整")
+    _validate_factor4_host(
         settings.database.host,
         settings.environment_safety.allowed_database_hosts,
         "Factor 4.0 数据库",
+        environment=settings.environment,
     )
     return Factor4CalculationRepository(DatabaseClient.from_settings(settings.database))
 
@@ -305,6 +307,38 @@ def privileged_api_settings(privileged_account: AuthenticatedAccount) -> ApiSett
     """
 
     return privileged_account.api_settings
+
+
+@pytest.fixture(scope="session")
+def factor4_backend_api_settings(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+    request: pytest.FixtureRequest,
+) -> ApiSettings:
+    """为 Factor 4.0 提供与 MCP/DB 同环境的独立 Backend 认证配置。
+
+    输入环境配置、显式 live 选项及 fixture 请求；test 复用原测试账号，production 仅使用自身
+    Backend 地址与 JWT 或完整账号密码，不回退测试账号。返回已认证的 API 配置；缺配置以
+    ``BLOCKED_ENV`` 跳过，跨环境地址或认证失败终止。此 fixture 不执行业务写入。
+    """
+    _validate_factor4_calculation_live_environment(settings, pytestconfig)
+    if settings.environment == "test":
+        return request.getfixturevalue("privileged_api_settings")
+    credentials = settings.authentication.privileged
+    if not settings.api.base_url or not (
+        settings.api.auth_token or (credentials.email and credentials.password)
+    ):
+        pytest.skip(
+            "BLOCKED_ENV: production Backend 缺少独立 api.base_url 及 JWT 或完整登录账号；不使用测试环境配置"
+        )
+    _validate_factor4_backend_url(settings.api.base_url, settings.environment_safety.allowed_hosts)
+    account = _authenticate_account(
+        settings.api,
+        None if settings.api.auth_token else credentials,
+        "production Factor 4.0 Backend",
+        required_permissions=set(),
+    )
+    return account.api_settings
 
 
 @pytest.fixture(scope="session")
@@ -872,29 +906,34 @@ def _validate_factor4_calculation_live_environment(
     settings: Settings,
     pytestconfig: pytest.Config,
 ) -> None:
-    """强制 Factor 4.0 计算专项只能通过显式命令访问测试环境。
+    """强制 Factor 4.0 通过显式命令访问所选 test 或 production 环境。
 
     参数 ``settings`` 是已加载配置，``pytestconfig`` 提供原始 ``--live`` 和 ``--env`` 命令选项。不返回值；未传
-    ``--live`` 时以 ``BLOCKED_ENV`` 跳过，未显式传入 ``--env test`` 或加载结果不是 test 时直接失败。该专项不接受
+    ``--live`` 时以 ``BLOCKED_ENV`` 跳过，未显式选择受支持环境或加载结果不一致时失败。production
+    必须启用数据库只读配置。该专项不接受
     ``AUTOMATION_LIVE=true`` 或配置默认值替代命令行确认，防止意外连接外部环境。
     """
 
     if not bool(pytestconfig.getoption("--live")):
         pytest.skip("BLOCKED_ENV: Factor 4.0 live 专项必须显式传入 --live")
     selected_environment = pytestconfig.getoption("--env")
-    if not isinstance(selected_environment, str) or selected_environment.strip().lower() != "test":
-        pytest.fail("Factor 4.0 live 专项必须显式传入 --env test", pytrace=False)
-    if settings.environment.strip().lower() != "test":
-        pytest.fail("Factor 4.0 live 专项只允许加载 test 环境配置", pytrace=False)
+    if not isinstance(selected_environment, str) or selected_environment not in {"test", "production"}:
+        pytest.fail("Factor 4.0 live 专项必须显式传入 --env test 或 --env production", pytrace=False)
+    if settings.environment != selected_environment:
+        pytest.fail("Factor 4.0 live 专项所选环境与加载配置不一致", pytrace=False)
+    if selected_environment == "production" and not settings.database.read_only:
+        pytest.fail("Factor 4.0 production 数据库必须启用 read_only", pytrace=False)
 
 
 def _validate_factor4_mcp_url(
     mcp_url: str,
     allowed_hosts: tuple[str, ...],
+    *,
+    environment: str = "test",
 ) -> ParseResult:
-    """Validate and parse the Factor Data MCP test URL before any request.
+    """Validate and parse the Factor Data MCP URL for the selected environment.
 
-    参数 ``mcp_url`` 是配置中的 MCP 地址，``allowed_hosts`` 是测试环境的裸主机白名单。
+    参数 ``mcp_url`` 是 MCP 地址，``allowed_hosts`` 是所选环境的裸主机白名单，``environment`` 指定环境。
     返回已验证的 ``ParseResult``；scheme、主机、路径、查询参数、端口和用户信息不符合
     测试边界时通过 ``pytest.fail`` 终止。该函数不发起网络请求，也不会把 URL 中的凭据
     写入异常消息。
@@ -911,7 +950,7 @@ def _validate_factor4_mcp_url(
         _ = parsed.port
     except ValueError:
         pytest.fail("Factor Data MCP URL 的端口无效", pytrace=False)
-    _validate_test_host(parsed.hostname, allowed_hosts, "Factor Data MCP")
+    _validate_factor4_host(parsed.hostname, allowed_hosts, "Factor Data MCP", environment=environment)
     if (
         parsed.path.rstrip("/") != "/mcp/factor-data"
         or parsed.params
@@ -919,10 +958,63 @@ def _validate_factor4_mcp_url(
         or parsed.fragment
     ):
         pytest.fail(
-            "Factor Data MCP URL 必须精确指向测试环境 /mcp/factor-data，且不得包含参数或查询串",
+            "Factor Data MCP URL 必须精确指向 /mcp/factor-data，且不得包含参数或查询串",
             pytrace=False,
         )
     return parsed
+
+
+def _validate_factor4_backend_url(base_url: str, allowed_hosts: tuple[str, ...]) -> ParseResult:
+    """校验 production Backend 精确 HTTPS 地址，不发送请求。
+
+    输入配置 URL 与主机白名单；返回解析结果。用户信息、非法端口、非 /api/v1 路径、
+    查询串或跨环境主机通过 pytest.fail 阻断，诊断不回显完整 URL。
+    """
+    parsed = urlparse(base_url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        pytest.fail("production Backend 必须是有效 HTTPS 地址", pytrace=False)
+    if parsed.username is not None or parsed.password is not None:
+        pytest.fail("production Backend URL 不得包含用户信息", pytrace=False)
+    try:
+        _ = parsed.port
+    except ValueError:
+        pytest.fail("production Backend URL 的端口无效", pytrace=False)
+    _validate_factor4_host(parsed.hostname, allowed_hosts, "Factor 4.0 Backend", environment="production")
+    if parsed.path.rstrip("/") != "/api/v1" or parsed.params or parsed.query or parsed.fragment:
+        pytest.fail("production Backend 必须精确指向 /api/v1 且不含参数", pytrace=False)
+    return parsed
+
+
+def _validate_factor4_host(
+    host: str | None,
+    allowed_hosts: tuple[str, ...],
+    component: str,
+    *,
+    environment: str,
+) -> None:
+    """只允许 Factor 4.0 访问当前环境显式登记的裸主机。
+
+    输入主机、独立白名单、诊断组件及环境名；test 保留原生产域名拦截，production 拒绝
+    测试主机及空或未登记主机。无返回值，边界错误通过 pytest.fail 终止，不执行 I/O。
+    """
+    if environment == "test":
+        _validate_test_host(host, allowed_hosts, component)
+        return
+    if environment != "production":
+        pytest.fail("Factor 4.0 不支持该环境", pytrace=False)
+    normalized_host = str(host or "").strip().lower().rstrip(".")
+    normalized_allowed = {str(value).strip().lower().rstrip(".") for value in allowed_hosts if str(value).strip()}
+    if not normalized_host or not normalized_allowed:
+        pytest.fail(f"{component} 缺少 production 主机或独立白名单", pytrace=False)
+    if any(
+        value in {"test-factor-frontend.questvector.ai", "test-factor-backend.questvector.ai", "43.167.190.122"}
+        or value.startswith(("test-", "test.", "localhost"))
+        or value.endswith(".test")
+        for value in normalized_allowed | {normalized_host}
+    ):
+        pytest.fail(f"{component} production 配置混入测试环境主机", pytrace=False)
+    if normalized_host not in normalized_allowed:
+        pytest.fail(f"{component} 主机不在 production 白名单中: {normalized_host}", pytrace=False)
 
 
 _PRODUCTION_HOSTS = frozenset(

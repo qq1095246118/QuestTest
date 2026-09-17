@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from db.client import DatabaseClient
+from db.json_payload import decode_mysql_compressed_json
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,8 @@ class Factor4LifecycleRepository:
                     batches = tx.fetch_all("""
                         SELECT id, batch_uid, idempotency_key, market_scope, route_profile_key,
                                label_kind, start_date, end_date, as_of_time, environment_snapshot,
-                               environment_snapshot_hash, factor_set_snapshot_hash, factor_set_snapshot,
+                               environment_snapshot_hash, factor_set_snapshot_hash,
+                               COMPRESS(CAST(factor_set_snapshot AS CHAR)) AS factor_set_snapshot,
                                evaluation_config, evaluation_config_version, score_rule_version,
                                code_version, status, publish_status, publication_uid, publish_version,
                                release_manifest_hash, is_active, active_scope_key, started_at, finished_at,
@@ -57,6 +59,11 @@ class Factor4LifecycleRepository:
                                insufficient_metric_count, failed_metric_count
                         FROM market_environment_eval_batch ORDER BY id
                     """)
+                    batches = [
+                        {**row, "factor_set_snapshot": decode_mysql_compressed_json(row["factor_set_snapshot"])}
+                        if "factor_set_snapshot" in row else row
+                        for row in batches
+                    ]
                     metrics = tx.fetch_all("""
                         SELECT id, eval_batch_id, factor_ref, factor_type, factor_id, factor_version,
                                market_scope, label_kind, label_code, evaluation_type, metric_status,

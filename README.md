@@ -17,7 +17,7 @@ api、db、service -> config
 - `api/`：资源或领域级 HTTP 请求封装，不放业务断言。
 - `db/`：连接、事务、参数化查询和按实体组织的 Repository。
 - `tools/`：无业务含义的断言、测试数据、时间和文件工具。
-- `config/`：默认、测试和预发环境配置；测试环境可以保留已授权的测试凭据，生产凭据仍只能通过环境变量或密钥服务注入。
+- `config/`：默认、测试、预发和独立生产配置；生产秘密仅保存在 Git 忽略的本机覆盖文件或运行时环境变量中。
 - `reports/`：运行生成的 JUnit XML，不提交报告内容。
 
 ## 安装
@@ -54,7 +54,7 @@ export AUTOMATION_TEST_ALLOWED_HOSTS='test-factor-backend.questvector.ai,test-fa
 export AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS='43.167.190.122'
 ```
 
-当前项目只运行测试环境，`config/test.yaml` 保留已授权的测试地址、账号和数据库配置；不要把这些配置复制到生产环境。生产密码、Token 和数据库写入凭据只能通过环境变量或密钥服务注入。DB 写操作仅允许测试环境，并且测试必须清理自身创建的数据。
+项目支持测试环境及 Factor 4.0 生产只读回归。`config/test.yaml` 保留已授权的测试配置，生产独立使用 `config/production.yaml`，不会继承测试账号。已授权生产凭据可放在 Git 忽略的 `config/production.local.yaml`（建议权限 600），或由环境变量/密钥服务注入。DB 业务写操作及组合因子写流程仍仅允许测试环境；production DB 配置强制只读。
 
 运行真实用例时，框架会分别使用有权限和无权限账号调用 `POST /auth/login` 获取 JWT，再通过 `GET /me` 校验账号身份。JWT 只保存在当前 pytest 进程内；正常业务响应为 `401` 时不会自动重新登录。`AUTOMATION_API_AUTH_TOKEN` 仅保留为有权限账号的临时调试回退，不能替代无权限账号。
 
@@ -71,9 +71,23 @@ export AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS='43.167.190.122'
 
 默认命令不会访问真实接口或数据库。
 
-Factor 4.0 当前默认验收范围为已持久化计算结果到准入、评分、排名、路由及 MCP 输出，不重算原始公式、IC 或收益。真实执行只允许显式使用 `--live --env test`，不会接受 `AUTOMATION_LIVE=true` 或默认环境名代替这两个命令行门禁。MCP URL 必须精确指向测试环境的 `/mcp/factor-data`，数据库必须是测试 MySQL。可以使用 `config/test.yaml` 中已授权的测试配置，也可以通过 `AUTOMATION_FACTOR_DATA_MCP_URL`、`AUTOMATION_FACTOR_DATA_MCP_TOKEN` 和 `AUTOMATION_DB_*` 覆盖：
+Factor 4.0 当前默认验收范围为已持久化计算结果到准入、评分、排名、路由及 MCP 输出，不重算原始公式、IC 或收益。真实执行必须显式使用 `--live --env test` 或 `--live --env production`，不会接受 `AUTOMATION_LIVE=true` 或默认环境名代替。MCP URL 必须精确指向所选环境的 `/mcp/factor-data`。可通过 `AUTOMATION_FACTOR_DATA_MCP_URL`、`AUTOMATION_FACTOR_DATA_MCP_TOKEN` 和 `AUTOMATION_DB_*` 覆盖独立环境配置。
 
-live 请求还会逐一匹配 `environment_safety.allowed_hosts` 和 `environment_safety.allowed_database_hosts` 白名单；命中生产域名、未登记主机或空白白名单会在发出请求前阻断。通过环境变量覆盖地址时，必须同步设置 `AUTOMATION_TEST_ALLOWED_HOSTS` 或 `AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS`，白名单只接受裸主机名，不接受 URL、路径或通配符。
+live 请求逐一匹配所选环境的 `environment_safety.allowed_hosts` 和 `environment_safety.allowed_database_hosts`；未登记或跨环境主机在请求前阻断。测试环境白名单变量为 `AUTOMATION_TEST_ALLOWED_HOSTS` / `AUTOMATION_TEST_ALLOWED_DATABASE_HOSTS`，生产为 `AUTOMATION_PRODUCTION_ALLOWED_HOSTS` / `AUTOMATION_PRODUCTION_ALLOWED_DATABASE_HOSTS`，只接受裸主机名。
+
+生产全量 4.0 回归（包括保留专项，不触发服务端计算或写入）：
+
+```bash
+python3 -u -m pytest tests/cases/factor4 --live --env production \
+  --include-factor4-internal-calculation --include-factor4-technical --include-factor4-deferred \
+  -v --tb=short -rs -o junit_family=xunit1 \
+  --junitxml=reports/factor4-production-full.xml
+```
+
+其中 6 个 Backend 三方对账实例另外需要同环境的 `api.base_url` 与独立 Backend JWT 或登录账号；
+缺少时只将这些实例记为 `BLOCKED_ENV`，不会拿 MCP PAT 替代 Backend JWT，也不会回退测试 Backend。
+只读 DB 连接在服务端设置 session read only，并在客户端拒绝业务写 SQL；已有测试环境事务和清理流程不受影响。
+生产配置默认开启 `database.compress: true`，通过 MySQL Connector/Python 压缩数据库传输；可用 `AUTOMATION_DB_COMPRESS=false` 关闭，`driver` 始终为 `mysql`，测试环境默认关闭。
 
 ```bash
 # 仅运行 Factor 4.0 R0 结果级检查（不触发数学扫描）
@@ -100,7 +114,7 @@ live 请求还会逐一匹配 `environment_safety.allowed_hosts` 和 `environmen
 默认选中用例数量以 `python3 -m pytest tests/cases/factor4 --collect-only -qq` 为准；
 脚本迁移、参数化实例、离线单元测试和真实环境通过数量分别统计，不能相互替代。
 已实现但按原测试范围暂缓的异常、兼容和并发用例带 `factor4_deferred` 标记，默认在 Fixture 前跳过；
-只有明确决定重新纳入该范围时才添加 `--include-factor4-deferred`，测试环境门禁仍然生效。
+只有明确决定重新纳入该范围时才添加 `--include-factor4-deferred`，显式 live/环境门禁仍然生效。
 
 原始计算专项标记为 `factor4_internal_calculation`，技术专项标记为 `factor4_technical`，默认在 Fixture 初始化前
 `deselected`，不计作缺数据、未完成或通过。两类开关独立，开启原有 deferred 开关不会顺带执行它们；历史专项代码不删除。

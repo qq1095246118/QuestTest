@@ -9,6 +9,7 @@ description = "Layered API automation test framework"
 requires-python = ">=3.12"
 dependencies = [
     "PyMySQL>=1.1,<2",
+    "mysql-connector-python>=9.2,<10",
     "PyYAML>=6,<7",
     "requests>=2.32,<3",
 ]

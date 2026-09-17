@@ -5,7 +5,36 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="因子库4.0测试用例">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/factor4_backend_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/factor4_backend_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/client.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_auxiliary_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_auxiliary_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_calculation_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_calculation_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_consumer_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_consumer_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_formula_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_formula_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_lifecycle_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_lifecycle_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_publication_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_publication_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/db/factor4_read_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/factor4_read_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/automation-test-framework-design.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/automation-test-framework-design.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/factor4-bug-registry.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/factor4-bug-registry.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor4_backend_reconciliation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_backend_reconciliation_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor4_lifecycle_closure_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_lifecycle_closure_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/service/factor4_summary_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/service/factor4_summary_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_backend_three_way_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_backend_three_way_business.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/cases/factor4/test_cross_read_business.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/factor4/test_cross_read_business.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/conftest.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/conftest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_database_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_database_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_backend_reconciliation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_backend_reconciliation_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_calculation_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_calculation_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_lifecycle_closure_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_lifecycle_closure_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_summary_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_summary_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_factor4_summary_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_factor4_summary_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_live_environment_gate.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_live_environment_gate.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -149,7 +178,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789010165768</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="因子库4.0测试用例">
+      <option name="closed" value="true" />
+      <created>1789040497026</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1789040497026</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

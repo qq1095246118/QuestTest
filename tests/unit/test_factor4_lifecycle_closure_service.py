@@ -209,6 +209,64 @@ def test_unsuccessful_terminal_records_and_active_pointer_agree(outcome: str) ->
     assert not Service.check_unsuccessful_publication_final_state(snapshot, outcome).issues
 
 
+@pytest.mark.parametrize("config", [
+    {"publication_mode": "per_factor_incremental"},
+    '{"publication_mode":"per_factor_incremental"}',
+])
+def test_failed_history_can_coexist_with_explicit_incremental_partial_publication(config: Any) -> None:
+    """A valid current incremental publication does not invalidate inactive failed history."""
+    snapshot = _recalculations()
+    snapshot.batches[0]["status"] = "failed"
+    snapshot.batches[1].update(status="partial_fail", evaluation_config=config)
+    check = Service.check_unsuccessful_publication_final_state(snapshot, "failed")
+    assert check.checked_count == 1
+    assert not check.issues
+
+
+@pytest.mark.parametrize("config,publish_status", [
+    ({}, "published"),
+    ({"publication_mode": "atomic"}, "published"),
+    ("invalid-json", "published"),
+    ({"publication_mode": "per_factor_incremental"}, "unpublished"),
+])
+def test_partial_failure_requires_explicit_incremental_mode_and_publication(config: Any, publish_status: str) -> None:
+    """Unknown mode and unpublished state cannot use the incremental exception."""
+    snapshot = _recalculations()
+    snapshot.batches[1].update(status="partial_fail", evaluation_config=config, publish_status=publish_status)
+    check = Service.check_unsuccessful_publication_final_state(snapshot, "cancelled")
+    assert "batch:id=2:active_nonpublished_terminal" in check.issues
+
+
+@pytest.mark.parametrize("mutation,expected", [
+    ("failed", "batch:id=2:active_nonpublished_terminal"),
+    ("missing_pointer", "batch:id=2:active_scope_pointer_missing"),
+    ("wrong_publication", "route:id=22:active_pointer_identity"),
+    ("inactive_owner", "route:id=22:active_route_without_active_batch"),
+])
+def test_incremental_publication_retains_terminal_and_pointer_invariants(mutation: str, expected: str) -> None:
+    """The incremental exception cannot hide actual terminal or route-ownership violations."""
+    snapshot = _recalculations()
+    snapshot.batches[1].update(status="partial_fail", evaluation_config={"publication_mode": "per_factor_incremental"})
+    if mutation == "failed":
+        snapshot.batches[1]["status"] = "failed"
+    elif mutation == "missing_pointer":
+        snapshot.batches[1]["active_scope_key"] = None
+    elif mutation == "wrong_publication":
+        snapshot.routes[1]["publication_uid"] = "stale"
+    else:
+        snapshot.batches[1].update(is_active=False, active_scope_key=None)
+    assert expected in Service.check_unsuccessful_publication_final_state(snapshot, "cancelled").issues
+
+
+@pytest.mark.parametrize("outcome", ["cancelled", "rolled_back"])
+def test_incremental_publication_does_not_replace_missing_unsuccessful_sample(outcome: str) -> None:
+    """A real outcome remains necessary even if all current pointers are consistent."""
+    snapshot = _recalculations()
+    snapshot.batches[1].update(status="partial_fail", evaluation_config={"publication_mode": "per_factor_incremental"})
+    with pytest.raises(ReadPrecondition, match=f"no persisted {outcome}"):
+        Service.check_unsuccessful_publication_final_state(snapshot, outcome)
+
+
 def test_physical_route_without_profile_column_uses_owning_batch_profile() -> None:
     snapshot = _recalculations()
     snapshot.batches[0]["publish_status"] = "failed"

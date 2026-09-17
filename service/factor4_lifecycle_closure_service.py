@@ -198,6 +198,8 @@ class Factor4LifecycleClosureService:
         ``outcome`` must be failed/cancelled/rolled_back, otherwise ``ValueError``.
         Returns persisted final-state inconsistencies; absence of that real outcome
         raises ``ReadPrecondition`` only after active-pointer failures are retained.
+        A published partial-failure batch is allowed only when its frozen config
+        explicitly declares per-factor incremental publication.
         This does not observe transaction boundaries, events or rollback atomicity.
         """
         if outcome not in {"failed", "cancelled", "rolled_back"}:
@@ -211,7 +213,11 @@ class Factor4LifecycleClosureService:
             prefix = f"batch:id={batch.get('id')}:"
             if batch.get("is_active"):
                 pointers[(batch.get("market_scope"), batch.get("route_profile_key"))] += 1
-                if batch.get("status") not in _SUCCESS or batch.get("publish_status") != "published":
+                incremental_partial = (
+                    batch.get("status") == "partial_fail"
+                    and _object(batch.get("evaluation_config")).get("publication_mode") == "per_factor_incremental"
+                )
+                if (batch.get("status") not in _SUCCESS and not incremental_partial) or batch.get("publish_status") != "published":
                     issues.append(prefix + "active_nonpublished_terminal")
                 if not batch.get("active_scope_key"):
                     issues.append(prefix + "active_scope_pointer_missing")

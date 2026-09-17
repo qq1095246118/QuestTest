@@ -43,7 +43,7 @@ def test_recommendations_at_forecast_boundary_keep_visible_publication_and_label
 
 def test_exact_completed_formula_three_uncached_reads_match_database(factor4_read_service: Factor4ReadService, factor4_calculation_repository: Factor4CalculationRepository) -> None:
     """FORMULA-STABLE: actual requests, same factor/Run/hash/expression and full data replay."""
-    snapshot = Factor4FormulaRepository(factor4_calculation_repository.database_client).catalog()
+    snapshot = Factor4FormulaRepository(factor4_calculation_repository.database_client).completed_direct_replay_sample()
     _check(lambda: check_completed_formula_replay(Factor4FormulaAPI(factor4_read_service.api.mcp), snapshot))
 
 

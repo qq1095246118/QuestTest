@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from db.client import DatabaseClient, DatabaseTransaction
+from db.json_payload import decode_mysql_compressed_json
 
 
 @dataclass(frozen=True)
@@ -58,35 +59,81 @@ class Factor4FormulaRepository:
 
         Returns a coherent final-data snapshot. SQL/connection errors propagate
         as a credential-free RuntimeError; no raw price data or DB writes occur.
+        Every catalog/history row is retained. Large unused AST/provenance bodies
+        are excluded; wrapper source and metadata are restored losslessly,
+        including their original missing/null fields and nested content.
         """
         with self._snapshot() as tx:
             clock = tx.fetch_one("SELECT UTC_TIMESTAMP(6) AS as_of_time")
             details = tx.fetch_all("""
-                SELECT id,factor_id,is_sub_factor_id,name,description,calc_logic,calc_function,
-                       params,data_source_metadata,status,updated_at
+                SELECT id,factor_id,is_sub_factor_id,name,calc_logic,
+                       COMPRESS(calc_function) AS calc_function,params,
+                       COMPRESS(CAST(data_source_metadata AS CHAR)) AS data_source_metadata,
+                       updated_at
                 FROM factors_details ORDER BY id
             """)
             definitions = tx.fetch_all("""
-                SELECT id,sub_factor_name,`window`,factor_bar_interval,formula_summary,metadata,updated_at
+                SELECT id,sub_factor_name,`window`,factor_bar_interval,formula_summary,
+                       COMPRESS(CAST(metadata AS CHAR)) AS metadata,updated_at
                 FROM sub_factors ORDER BY id
             """)
             evidence = tx.fetch_all("""
-                SELECT e.*,r.status AS run_status,r.completed_at AS run_completed_at
+                SELECT e.id,e.run_id,e.factor_id,e.is_sub_factor_id,e.calculation_mode,
+                       e.factor_bar_interval,e.factor_window_bars,e.return_bar_interval,
+                       e.forward_return_bars,e.formula_version,e.formula_hash,e.expression,
+                       e.required_fields,e.lookback_json,e.lag_json,e.metadata_complete,
+                       e.metadata_warnings,e.source_detail_id,e.recorded_at,
+                       r.status AS run_status,r.completed_at AS run_completed_at
                 FROM factor_ic_run_formula_evidence e
                 LEFT JOIN factor_ic_runs r ON r.run_id=e.run_id
                 ORDER BY e.id
             """)
             routes = tx.fetch_all("""
                 SELECT r.id,r.factor_ref,r.factor_id,r.factor_type,r.metric_id,r.eval_batch_id,
-                       r.label_code,r.is_active,r.is_eligible,m.metric_payload
+                       r.label_code,r.is_active,r.is_eligible
                 FROM market_environment_factor_route r
-                LEFT JOIN market_environment_factor_metric m ON m.id=r.metric_id
                 WHERE r.is_active=1 AND r.is_eligible=1 ORDER BY r.id
             """)
+            # Restore before leaving the snapshot so malformed transport is
+            # wrapped in the same credential-free repository error as SQL.
+            details = [
+                {key: decode_mysql_compressed_json(value)
+                 if key in {"calc_function", "data_source_metadata"} else value
+                 for key, value in row.items()}
+                for row in details
+            ]
+            definitions = [
+                {key: decode_mysql_compressed_json(value) if key == "metadata" else value
+                 for key, value in row.items()}
+                for row in definitions
+            ]
         if not clock or not isinstance(clock.get("as_of_time"), datetime):
             raise RuntimeError("Formula catalog database clock is missing")
         return FormulaCatalogSnapshot(clock["as_of_time"].replace(tzinfo=timezone.utc),
                                       tuple(details), tuple(definitions), tuple(evidence), tuple(routes))
+
+    def completed_direct_replay_sample(self) -> FormulaCatalogSnapshot:
+        """读取三次精确重放所需的唯一最新 completed direct 非空表达式证据。
+
+        无输入；按原 Service 的最大 evidence ID 选样规则返回兼容快照，其他目录集合为空。
+        无符合条件证据时 evidence 为空，由原业务前置处理；读取失败抛脱敏 RuntimeError。
+        不读取全库详情、定义或历史证据，也不改变后续三次 MCP 的断言。
+        """
+        with self._snapshot() as tx:
+            clock = tx.fetch_one("SELECT UTC_TIMESTAMP(6) AS as_of_time")
+            row = tx.fetch_one("""
+                SELECT e.*,r.status AS run_status,r.completed_at AS run_completed_at
+                FROM factor_ic_run_formula_evidence e
+                JOIN factor_ic_runs r ON r.run_id=e.run_id
+                WHERE BINARY r.status='completed' AND BINARY e.calculation_mode='direct'
+                  AND e.expression IS NOT NULL AND OCTET_LENGTH(e.expression)>0
+                ORDER BY e.id DESC LIMIT 1
+            """)
+        if not clock or not isinstance(clock.get("as_of_time"), datetime):
+            raise RuntimeError("Formula catalog database clock is missing")
+        return FormulaCatalogSnapshot(
+            clock["as_of_time"].replace(tzinfo=timezone.utc), (), (), (row,) if row else (), (),
+        )
 
     def factor_results(self, factor_id: int) -> FormulaResultSnapshot:
         """Read all completed formula evidence and final summaries for a sub-factor.

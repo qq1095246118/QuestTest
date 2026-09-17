@@ -12,9 +12,23 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, NoReturn
 
 from db.client import DatabaseClient, DatabaseTransaction
+from db.json_payload import decode_mysql_compressed_json
 
 
 JsonObject = dict[str, Any]
+
+# Incremental publication can retain successful factor results after other
+# factors fail. Admit only that explicitly declared, observed terminal state;
+# pending/running/failed batches and undeclared publication modes stay excluded.
+_PUBLISHED_RESULT_STATUS_PREDICATE = """(
+    status = 'success'
+    OR (
+        status = 'partial_fail'
+        AND JSON_UNQUOTE(JSON_EXTRACT(
+            evaluation_config, '$.publication_mode'
+        )) = 'per_factor_incremental'
+    )
+)"""
 
 _FORMULA_LINK_CONTAINERS = ("formula", "formula_identity", "formula_evidence")
 _FORMULA_LINK_FIELDS = (
@@ -487,13 +501,14 @@ class Factor4CalculationRepository:
         return self._client
 
     def list_active_published_partitions(self) -> tuple[ActivePublishedPartition, ...]:
-        """List all active successful published calculation partitions.
+        """List active published partitions with supported final result states.
 
         The result is a lightweight, read-only discovery projection ordered by
         market scope/profile and newest publication first.  Each row is
         returned, including duplicate active rows for the same selector; a
         later :meth:`read_calculation_snapshot` call remains responsible for
-        enforcing the one-batch invariant.  A
+        enforcing the one-batch invariant. Successful batches and explicitly
+        per-factor incremental ``partial_fail`` batches are supported. A
         :class:`CalculationRepositoryError` is raised for malformed rows or a
         database failure.  No database writes occur.
         """
@@ -543,8 +558,11 @@ class Factor4CalculationRepository:
 
         ``ValueError`` is raised for blank selectors or a non-boolean history flag. A
         ``CalculationRepositoryError`` is raised when no unique active,
-        successful, published batch exists, a required row/JSON shape is
-        invalid, or a driver/schema query fails. No database writes occur.
+        published batch with a supported final result state exists, a required
+        row/JSON shape is invalid, or a driver/schema query fails. No database writes occur.
+        ``partial_fail`` is selectable only when the batch's frozen config
+        explicitly declares ``publication_mode=per_factor_incremental``;
+        this does not mark its failed metrics as successful.
         """
 
         scope, profile = self._normalized_selectors(
@@ -567,12 +585,12 @@ class Factor4CalculationRepository:
                 # JSON can exhaust MySQL's sort buffer before the audit starts.
                 stage = "latest_published_batch_candidates"
                 batch_candidates = transaction.fetch_all(
-                    """
+                    f"""
                     SELECT id
                     FROM market_environment_eval_batch
                     WHERE market_scope = %s
                       AND route_profile_key = %s
-                      AND status = 'success'
+                      AND {_PUBLISHED_RESULT_STATUS_PREDICATE}
                       AND publish_status = 'published'
                       AND is_active = 1
                     ORDER BY published_at DESC, id DESC
@@ -583,7 +601,7 @@ class Factor4CalculationRepository:
                 if len(batch_candidates) != 1:
                     raise CalculationRepositoryError(
                         stage,
-                        "expected exactly one active successful published batch "
+                        "expected exactly one active published result batch "
                         f"but found {len(batch_candidates)}",
                     )
 
@@ -604,7 +622,7 @@ class Factor4CalculationRepository:
                     batch_rows = [candidate_row]
                 else:
                     batch_rows = transaction.fetch_all(
-                        """
+                        f"""
                         SELECT
                             id, batch_uid, market_scope, label_kind,
                             route_profile_key, start_date, end_date, as_of_time,
@@ -614,13 +632,14 @@ class Factor4CalculationRepository:
                             expected_metric_count, completed_metric_count,
                             insufficient_metric_count, failed_metric_count,
                             factor_set_snapshot_hash, environment_snapshot_hash,
-                            release_manifest_hash, factor_set_snapshot,
+                            release_manifest_hash,
+                            COMPRESS(CAST(factor_set_snapshot AS CHAR)) AS factor_set_snapshot,
                             evaluation_config, environment_status, environment_snapshot
                         FROM market_environment_eval_batch
                         WHERE id = %s
                           AND market_scope = %s
                           AND route_profile_key = %s
-                          AND status = 'success'
+                          AND {_PUBLISHED_RESULT_STATUS_PREDICATE}
                           AND publish_status = 'published'
                           AND is_active = 1
                         """,
@@ -774,8 +793,9 @@ class Factor4CalculationRepository:
     ) -> PublishedRouteSnapshot:
         """Read the active publication identity and rank sequence atomically.
 
-        ``market_scope`` and ``route_profile_key`` select one active,
-        successful, published batch using bound parameters. The return value
+        ``market_scope`` and ``route_profile_key`` select one active published
+        result batch using bound parameters: success, or partial failure with
+        explicitly configured per-factor incremental publication. The return value
         contains only publication identity and active route ranking fields so
         callers can perform a repeat-read stability check without reloading
         factor definitions, formula evidence, or all evaluation metrics.
@@ -805,7 +825,7 @@ class Factor4CalculationRepository:
                 if len(batch_rows) != 1:
                     raise CalculationRepositoryError(
                         stage,
-                        "expected exactly one active successful published batch "
+                        "expected exactly one active published result batch "
                         f"but found {len(batch_rows)}",
                     )
                 batch_row = batch_rows[0]
@@ -1647,49 +1667,12 @@ class Factor4CalculationRepository:
         return """
             SELECT
                 id,
-                JSON_REMOVE(
+                COMPRESS(CAST(JSON_REMOVE(
                     metric_payload,
                     '$.oos.folds',
-                    '$.data_diagnostics.artifact_fingerprints'
-                ) AS metric_payload,
-                JSON_EXTRACT(
-                    metric_payload,
-                    '$.metric_identity'
-                ) AS metric_identity,
-                JSON_EXTRACT(
-                    metric_payload,
-                    '$.score_components'
-                ) AS score_components,
-                JSON_EXTRACT(metric_payload, '$.direction') AS direction,
-                JSON_REMOVE(
-                    JSON_EXTRACT(metric_payload, '$.oos'),
-                    '$.folds'
-                ) AS oos,
-                JSON_EXTRACT(metric_payload, '$.aggregation') AS aggregation,
-                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
-                    metric_payload,
-                    '$.directed_mean_ic'
-                )), 'null') AS directed_mean_ic,
-                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
-                    metric_payload,
-                    '$.directed_mean_rank_ic'
-                )), 'null') AS directed_mean_rank_ic,
-                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
-                    metric_payload,
-                    '$.directed_icir'
-                )), 'null') AS directed_icir,
-                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
-                    metric_payload,
-                    '$.directed_rank_icir'
-                )), 'null') AS directed_rank_icir,
-                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
-                    metric_payload,
-                    '$.directed_t_stat'
-                )), 'null') AS directed_t_stat,
-                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
-                    metric_payload,
-                    '$.score_penalty'
-                )), 'null') AS score_penalty
+                    '$.data_diagnostics.artifact_fingerprints',
+                    '$.data_diagnostics.artifact_manifest_json'
+                ) AS CHAR)) AS metric_payload
             FROM market_environment_factor_metric
             WHERE eval_batch_id = %s
             ORDER BY id
@@ -1737,8 +1720,14 @@ class Factor4CalculationRepository:
             if "metric_payload" in evidence_row:
                 # JSON objects preserve absent keys versus explicit null, including
                 # invalid/unscored metrics which still require admission auditing.
+                try:
+                    restored_payload = decode_mysql_compressed_json(evidence_row["metric_payload"])
+                except ValueError:
+                    raise CalculationRepositoryError(
+                        "evaluation_metrics", "column 'metric_payload' has invalid compressed transport"
+                    ) from None
                 evidence_by_metric_id[metric_id] = cls._optional_json_object(
-                    evidence_row, "metric_payload", "evaluation_metrics"
+                    {**evidence_row, "metric_payload": restored_payload}, "metric_payload", "evaluation_metrics"
                 ) or {}
                 lossless_payload_ids.add(metric_id)
                 continue
@@ -1889,7 +1878,9 @@ class Factor4CalculationRepository:
                 JSON_REMOVE(
                     route.evidence,
                     '$.time_series.data_diagnostics.artifact_fingerprints',
-                    '$.cross_sectional.data_diagnostics.artifact_fingerprints'
+                    '$.cross_sectional.data_diagnostics.artifact_fingerprints',
+                    '$.time_series.data_diagnostics.artifact_manifest_json',
+                    '$.cross_sectional.data_diagnostics.artifact_manifest_json'
                 ) AS evidence,
                 route.score_rule_version,
                 route.publish_version, route.is_active
@@ -1906,14 +1897,14 @@ class Factor4CalculationRepository:
 
     @staticmethod
     def _route_snapshot_batch_query() -> str:
-        return """
+        return f"""
             SELECT
                 id, publication_uid, publish_version,
                 market_scope, route_profile_key
             FROM market_environment_eval_batch
             WHERE market_scope = %s
               AND route_profile_key = %s
-              AND status = 'success'
+              AND {_PUBLISHED_RESULT_STATUS_PREDICATE}
               AND publish_status = 'published'
               AND is_active = 1
             ORDER BY published_at DESC, id DESC
@@ -1924,12 +1915,12 @@ class Factor4CalculationRepository:
     def _active_published_partitions_query() -> str:
         """Return the narrow selector projection for active publications."""
 
-        return """
+        return f"""
             SELECT
                 id, market_scope, route_profile_key, publication_uid,
                 publish_version, published_at
             FROM market_environment_eval_batch
-            WHERE status = 'success'
+            WHERE {_PUBLISHED_RESULT_STATUS_PREDICATE}
               AND publish_status = 'published'
               AND is_active = 1
             ORDER BY market_scope, route_profile_key,
@@ -1972,6 +1963,11 @@ class Factor4CalculationRepository:
 
     @classmethod
     def _to_batch(cls, row: Mapping[str, Any], stage: str) -> PublishedEvaluationBatch:
+        try:
+            decoded_snapshot = decode_mysql_compressed_json(cls._value(row, "factor_set_snapshot", stage))
+        except ValueError:
+            raise CalculationRepositoryError(stage, "column 'factor_set_snapshot' has invalid compressed transport") from None
+        row = {**row, "factor_set_snapshot": decoded_snapshot}
         return PublishedEvaluationBatch(
             id=cls._required_int(row, "id", stage),
             batch_uid=cls._required_str(row, "batch_uid", stage),

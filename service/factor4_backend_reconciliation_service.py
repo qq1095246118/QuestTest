@@ -10,6 +10,7 @@ import yaml
 
 from api.factor4_backend_api import Factor4BackendAPI
 from api.factor4_summary_api import Factor4SummaryAPI
+from db.factor4_auxiliary_repository import Factor4AuxiliaryRepository
 from db.factor4_read_repository import DailyReadSnapshot
 from db.factor4_publication_repository import PublicationHistory
 from service.factor4_read_service import Factor4ReadService, ReadCheck, ReadContractError, ReadPrecondition, compare_rows, read_tool_page, visible_daily_rows
@@ -73,6 +74,43 @@ class Factor4BackendReconciliationService:
     def check_summary(self, row: dict[str, Any]) -> ReadCheck:
         """精确 completed summary 的身份/最终数值及 period 时间三方对账；无显式时区 payload 不伪造时区。"""
         backend = _backend_items(self.backend.summary_metrics(int(row["factor_id"]), bool(row["is_sub_factor_id"])))
+        return self._check_summary(row, backend)
+
+    def check_summary_sample(self, repository: Factor4AuxiliaryRepository, ic_scope: str) -> ReadCheck:
+        """用公开单行结果定位 DB，再核对同一 summary 的 Backend/MCP/DB 身份、数值及时间。
+
+        仅接受 TS/CS；不要求因子历史数量、最新排序或完整列表。空页和未完成 Run 是显式样本阻断；
+        返回 ID、请求维度、因子类型、DB 关联缺失或冲突为 ReadContractError。三方原始业务断言复用，
+        DB 和网络异常原样透传；不通过 DB 值覆盖公开响应。
+        """
+        if ic_scope not in {"time_series", "cross_sectional"}:
+            raise ValueError("unsupported summary ic scope")
+        backend = _backend_items(self.backend.summary_metrics(None, True, ic_scope=ic_scope, limit=1))
+        if not backend:
+            raise ReadPrecondition(f"BLOCKED_DATA_PRECONDITION: Backend returned no {ic_scope} summary sample")
+        if len(backend) != 1:
+            raise ReadContractError("backend_summary_sample: response exceeds requested limit=1")
+        public = backend[0]
+        summary_id = public.get("id")
+        if isinstance(summary_id, bool) or not isinstance(summary_id, int) or summary_id <= 0:
+            raise ReadContractError("backend_summary_sample: missing or invalid public summary id")
+        if public.get("ic_scope") != ic_scope:
+            raise ReadContractError("backend_summary_sample: requested TS/CS scope mismatch")
+        if public.get("is_sub_factor_id") not in (True, 1):
+            raise ReadContractError("backend_summary_sample: requested sub-factor identity mismatch")
+        row = repository.summary_by_id(summary_id)
+        if row is None:
+            raise ReadContractError("backend_summary_sample: public summary id has no DB row")
+        if row.get("ic_scope") != ic_scope or row.get("is_sub_factor_id") not in (True, 1):
+            raise ReadContractError("backend_summary_sample: public summary scope/type conflicts with DB row")
+        if row.get("_sample_run_status") is None:
+            raise ReadContractError("backend_summary_sample: public summary has no associated DB Run")
+        if row["_sample_run_status"] != "completed":
+            raise ReadPrecondition("BLOCKED_DATA_PRECONDITION: Backend summary sample Run is not completed")
+        return self._check_summary(row, backend)
+
+    def _check_summary(self, row: dict[str, Any], backend: tuple[dict[str, Any], ...]) -> ReadCheck:
+        """复用同一公开 Backend 行和独立 DB 行完成既有三方断言，不再次选择 Backend 样本。"""
         kind = "sub_factor" if row["is_sub_factor_id"] else "factor"
         page = read_tool_page(Factor4SummaryAPI(self.read_service.api.mcp).metrics(
             f"{kind}:{row['factor_id']}", summary_scope(row), as_of=datetime.now(timezone.utc).isoformat(), run_id=row["run_id"]))

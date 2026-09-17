@@ -342,6 +342,51 @@ def test_slice_pages_use_exact_run_and_compare_page_counts_and_timestamps() -> N
     assert mcp.calls[1][1]["cursor"] == "page-2"
 
 
+def test_slice_pagination_exhausts_365_rows_in_53_small_pages() -> None:
+    """A real-sized 365-row period must complete at limit7, preserving every cursor and row."""
+    from db.factor4_read_repository import SliceSample
+    scope = {**SCOPE, "factor_id": 1, "run_id": "year-run"}
+    rows = tuple({"id": index, "ic": 0.1, "slice_start": NOW - timedelta(days=366-index),
+                  "slice_end": NOW - timedelta(days=365-index)} for index in range(365))
+    payload = [{**row, "slice_start": row["slice_start"].isoformat(), "slice_end": row["slice_end"].isoformat()} for row in rows]
+    responses = [_response({"items": payload[start:start+7], "returned_count": len(payload[start:start+7])},
+                           {"truncated": start+7 < len(payload), "next_cursor": f"page-{start+7}" if start+7 < len(payload) else None})
+                 for start in range(0, len(payload), 7)]
+    mcp = _MCP(responses)
+    check = Factor4SummaryService(Factor4SummaryAPI(mcp)).check_metric_slices(
+        SliceSample(scope, rows), limit=7, as_of=NOW.isoformat())
+    assert not check.issues
+    assert check.checked_count == 365
+    assert len(mcp.calls) == 53
+    assert not mcp.responses
+
+
+def test_slice_pagination_rejects_an_actual_repeated_cursor() -> None:
+    """Removing the fixed page cap must not accept an opaque cursor loop."""
+    from db.factor4_read_repository import SliceSample
+    scope = {**SCOPE, "factor_id": 1, "run_id": "run"}
+    rows = tuple({"id": index, "slice_start": NOW, "slice_end": NOW} for index in range(3))
+    payload = [{**row, "slice_start": NOW.isoformat(), "slice_end": NOW.isoformat()} for row in rows]
+    mcp = _MCP([_response({"items": payload[:1]}, {"next_cursor": "same-opaque-cursor"}),
+                _response({"items": payload[1:2]}, {"next_cursor": "same-opaque-cursor"})])
+    with pytest.raises(ReadContractError, match="cursor did not advance"):
+        Factor4SummaryService(Factor4SummaryAPI(mcp)).check_metric_slices(SliceSample(scope, rows), limit=1)
+    assert len(mcp.calls) == 2
+
+
+def test_fresh_slice_cursors_cannot_read_past_the_finite_database_oracle() -> None:
+    """Continuously fresh cursors with extra rows stop as a data mismatch, not an endless traversal."""
+    from db.factor4_read_repository import SliceSample
+    scope = {**SCOPE, "factor_id": 1, "run_id": "run"}
+    rows = tuple({"id": index, "slice_start": NOW, "slice_end": NOW} for index in range(2))
+    payload = [{"id": index, "slice_start": NOW.isoformat(), "slice_end": NOW.isoformat()} for index in range(3)]
+    mcp = _MCP([_response({"items": [row]}, {"next_cursor": f"opaque-{index}"}) for index, row in enumerate(payload)])
+    check = Factor4SummaryService(Factor4SummaryAPI(mcp)).check_metric_slices(SliceSample(scope, rows), limit=1)
+    assert "slices:returned_more_than_db" in check.issues
+    assert "slices:membership" in check.issues
+    assert len(mcp.calls) == 3
+
+
 @pytest.mark.parametrize("mutation,issue", [
     (lambda rows: rows.append(dict(rows[0])), "slices:duplicate_identity"),
     (lambda rows: rows[0].pop("ic"), "slices:missing_ic"),

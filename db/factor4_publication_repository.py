@@ -47,7 +47,12 @@ class Factor4PublicationRepository:
                         ORDER BY published_at, id
                     """)
                     routes = tx.fetch_all("""
-                        SELECT r.* FROM market_environment_factor_route r
+                        SELECT r.id,r.eval_batch_id,r.publication_uid,r.publish_version,
+                               r.market_scope,r.label_kind,r.label_code,r.is_active,r.is_eligible,
+                               r.factor_ref,r.factor_type,r.factor_id,r.factor_version,r.rank_no,
+                               r.routing_score,r.confidence,r.time_series_score,
+                               r.cross_sectional_score,r.score_rule_version
+                        FROM market_environment_factor_route r
                         JOIN market_environment_eval_batch b ON b.id=r.eval_batch_id
                         WHERE b.publish_status='published' AND b.published_at IS NOT NULL
                         ORDER BY r.eval_batch_id, r.label_code, r.rank_no, r.id

@@ -1,5 +1,6 @@
 """KB 候选与 universe 的只读实体查询；不引用 API/Service。"""
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -103,37 +104,177 @@ class Factor4AuxiliaryRepository(Factor4ReadRepository):
             child = tx.fetch_one("SELECT id, sub_factor_name AS name, serial_number, cn_name FROM sub_factors WHERE id=%s", (row["id"],))
             return (("factor", parent), ("sub_factor", child))
 
+    def summary_by_id(self, summary_id: int) -> dict[str, Any] | None:
+        """精确读取公开返回的 summary 及其 Run 状态，不改变因子、维度或 Run。
+
+        输入为正整数 summary 主键；返回完整 DB 行及只用于取样的 _sample_run_status，缺行返回 None。
+        关联 Run 缺失时状态为 None，未完成状态原样保留供调用方分类；不做样本选择或历史数量过滤。
+        非法主键抛 ValueError，数据库异常由只读事务安全透传，不执行写入。
+        """
+        if isinstance(summary_id, bool) or not isinstance(summary_id, int) or summary_id <= 0:
+            raise ValueError("summary id must be a positive integer")
+        with self._snapshot() as tx:
+            return tx.fetch_one("""SELECT m.*, r.status AS _sample_run_status
+                FROM factor_ic_summary_metrics m LEFT JOIN factor_ic_runs r ON r.run_id=m.run_id
+                WHERE m.id=%s LIMIT 1""", (summary_id,))
+
     def compact_time_summary_sample(self, ic_scope: str) -> dict[str, Any] | None:
-        """发现历史 summary 总量 <=20 且 payload 有显式 period 时间的 completed TS/CS 行；无样本 None。"""
+        """有界发现全历史 summary <=20、payload 含 period 的真实 completed TS/CS 样本。
+
+        输入 ``ic_scope`` 仅支持 TS/CS；同一只读快照按完成时间分批检查最多 256 个 Run、每 Run
+        128 条候选身份和 256 个去重因子，按类型化因子索引最多读取 21 条全历史记录判定资格。
+        返回任意符合原资格的完整 summary，不承诺全库最新；只有完整穷尽候选时才返回 None。
+        非法 scope 抛 ValueError；预算截断且未找到样本抛带 BLOCKED_SAMPLE_DISCOVERY 的 RuntimeError，
+        不将未完成发现误报为缺数据。数据库错误由只读事务安全透传。
+        """
         if ic_scope not in {"time_series", "cross_sectional"}:
             raise ValueError("unsupported summary ic scope")
+        run_batch_size, maximum_batches = 32, 8
+        candidate_limit, maximum_factors = 128, 256
+        seen_factors: set[tuple[int, int]] = set()
+        cursor: dict[str, Any] | None = None
+        runs_checked = 0
+        runs_exhausted = False
+        candidates_truncated = False
+        factor_budget_exhausted = False
         with self._snapshot() as tx:
-            return tx.fetch_one("""
-                SELECT m.* FROM factor_ic_summary_metrics m
-                JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
-                JOIN (SELECT factor_id, is_sub_factor_id FROM factor_ic_summary_metrics
-                      GROUP BY factor_id, is_sub_factor_id HAVING COUNT(*)<=20) compact
-                  ON compact.factor_id=m.factor_id AND compact.is_sub_factor_id=m.is_sub_factor_id
-                WHERE m.ic_scope=%s
-                  AND JSON_UNQUOTE(JSON_EXTRACT(m.metrics_json,'$.summary.period_start')) IS NOT NULL
-                  AND JSON_UNQUOTE(JSON_EXTRACT(m.metrics_json,'$.summary.period_end')) IS NOT NULL
-                ORDER BY r.completed_at DESC, m.updated_at DESC, m.id DESC LIMIT 1
-            """, (ic_scope,))
+            for _ in range(maximum_batches):
+                continuation, parameters = "", []
+                if cursor is not None:
+                    if cursor["completed_at"] is None:
+                        continuation = "AND completed_at IS NULL AND id < %s"
+                        parameters = [cursor["id"]]
+                    else:
+                        continuation = """AND (completed_at < %s OR
+                            (completed_at = %s AND id < %s) OR completed_at IS NULL)"""
+                        parameters = [cursor["completed_at"], cursor["completed_at"], cursor["id"]]
+                runs = tx.fetch_all(f"""
+                    SELECT id, run_id, completed_at FROM factor_ic_runs
+                    WHERE status='completed' {continuation}
+                    ORDER BY completed_at DESC, id DESC LIMIT %s
+                """, (*parameters, run_batch_size))
+                if not runs:
+                    runs_exhausted = True
+                    break
+                for run in runs:
+                    runs_checked += 1
+                    # The run_id index bounds discovery; the extra row detects
+                    # truncation without aggregating millions of summaries.
+                    candidates = tx.fetch_all("""
+                        SELECT factor_id, is_sub_factor_id FROM factor_ic_summary_metrics
+                        WHERE run_id=%s AND ic_scope=%s
+                        ORDER BY factor_id, is_sub_factor_id LIMIT %s
+                    """, (run["run_id"], ic_scope, candidate_limit + 1))
+                    candidates_truncated |= len(candidates) > candidate_limit
+                    for candidate in candidates[:candidate_limit]:
+                        identity = (int(candidate["factor_id"]), int(candidate["is_sub_factor_id"]))
+                        if identity in seen_factors:
+                            continue
+                        if len(seen_factors) >= maximum_factors:
+                            factor_budget_exhausted = True
+                            break
+                        seen_factors.add(identity)
+                        history = tx.fetch_all("""
+                            SELECT id FROM factor_ic_summary_metrics
+                            WHERE factor_id=%s AND is_sub_factor_id=%s LIMIT 21
+                        """, identity)
+                        if len(history) > 20:
+                            continue
+                        sample = tx.fetch_one("""
+                            SELECT m.* FROM factor_ic_summary_metrics m
+                            JOIN factor_ic_runs r ON r.run_id=m.run_id AND r.status='completed'
+                            WHERE m.factor_id=%s AND m.is_sub_factor_id=%s AND m.ic_scope=%s
+                              AND JSON_UNQUOTE(JSON_EXTRACT(m.metrics_json,'$.summary.period_start')) IS NOT NULL
+                              AND JSON_UNQUOTE(JSON_EXTRACT(m.metrics_json,'$.summary.period_end')) IS NOT NULL
+                            ORDER BY r.completed_at DESC, m.updated_at DESC, m.id DESC LIMIT 1
+                        """, (*identity, ic_scope))
+                        if sample is not None:
+                            return sample
+                    if factor_budget_exhausted:
+                        break
+                if factor_budget_exhausted:
+                    break
+                if len(runs) < run_batch_size:
+                    runs_exhausted = True
+                    break
+                cursor = runs[-1]
+        if not runs_exhausted or candidates_truncated or factor_budget_exhausted:
+            raise RuntimeError(
+                f"BLOCKED_SAMPLE_DISCOVERY: compact {ic_scope} sample search incomplete; "
+                f"checked_runs={runs_checked}, checked_factors={len(seen_factors)}, "
+                f"candidate_rows_truncated={candidates_truncated}, factor_budget_exhausted={factor_budget_exhausted}"
+            )
+        return None
 
     def published_cost_results(self) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
-        """同一只读快照返回所有 active published 批次的最终费用字段和 route evidence；空元组代表无数据。"""
+        """返回全部 active published 指标与路由的费用投影，不传输无关的大 JSON。
+
+        无输入；同一只读快照保留所有行和身份列，仅提取费用三个字段、metric_ids 及 TS/CS 费用证据。
+        JSON 路径存在性单独读取，保留字段缺失、显式 null 与非对象 scope 的区别；空元组代表无数据。
+        数据库或 JSON 解码异常由只读事务安全透传，不触发任何写操作。
+        """
+        fields = ("turnover_rate", "net_return", "sharpe")
+        scopes = ("time_series", "cross_sectional")
+
+        def projection(column: str, path: str, alias: str) -> str:
+            return (
+                f"JSON_CONTAINS_PATH({column}, 'one', '{path}') AS {alias}_present, "
+                f"JSON_EXTRACT({column}, '{path}') AS {alias}_value"
+            )
+
+        def take(row: dict[str, Any], alias: str) -> tuple[bool, Any]:
+            present = bool(row.pop(f"{alias}_present"))
+            value = row.pop(f"{alias}_value")
+            return present, json.loads(value) if isinstance(value, (str, bytes)) else value
+
+        metric_projection = ", ".join(
+            projection("m.metric_payload", f"$.{key}", f"cost_{key}") for key in fields
+        )
+        route_projection = [projection("r.evidence", "$.metric_ids", "cost_metric_ids")]
+        for scope in scopes:
+            route_projection.extend((
+                f"JSON_CONTAINS_PATH(r.evidence, 'one', '$.{scope}') AS cost_{scope}_present",
+                f"JSON_TYPE(JSON_EXTRACT(r.evidence, '$.{scope}')) AS cost_{scope}_type",
+                f"CASE WHEN JSON_TYPE(JSON_EXTRACT(r.evidence, '$.{scope}'))='OBJECT' "
+                f"THEN NULL ELSE JSON_EXTRACT(r.evidence, '$.{scope}') END AS cost_{scope}_value",
+                *(projection("r.evidence", f"$.{scope}.{key}", f"cost_{scope}_{key}") for key in fields),
+            ))
         with self._snapshot() as tx:
-            metrics = tx.fetch_all("""
+            metrics = tx.fetch_all(f"""
                 SELECT m.id,m.eval_batch_id,m.factor_ref,m.label_code,m.market_scope,m.evaluation_type,
-                       m.metric_status,m.is_valid,m.turnover_rate,m.net_return,m.sharpe,m.metric_payload
+                       m.metric_status,m.is_valid,m.turnover_rate,m.net_return,m.sharpe,{metric_projection}
                 FROM market_environment_factor_metric m JOIN market_environment_eval_batch b ON b.id=m.eval_batch_id
                 WHERE b.is_active=1 AND b.publish_status='published' ORDER BY m.id
             """)
-            routes = tx.fetch_all("""
-                SELECT r.id,r.eval_batch_id,r.metric_id,r.factor_ref,r.label_code,r.market_scope,r.evidence
+            routes = tx.fetch_all(f"""
+                SELECT r.id,r.eval_batch_id,r.metric_id,r.factor_ref,r.label_code,r.market_scope,
+                       {', '.join(route_projection)}
                 FROM market_environment_factor_route r JOIN market_environment_eval_batch b ON b.id=r.eval_batch_id
                 WHERE b.is_active=1 AND b.publish_status='published' ORDER BY r.id
             """)
+            for row in metrics:
+                payload: dict[str, Any] = {}
+                for key in fields:
+                    present, value = take(row, f"cost_{key}")
+                    if present:
+                        payload[key] = value
+                row["metric_payload"] = payload
+            for row in routes:
+                evidence: dict[str, Any] = {}
+                present, value = take(row, "cost_metric_ids")
+                if present:
+                    evidence["metric_ids"] = value
+                for scope in scopes:
+                    kind = row.pop(f"cost_{scope}_type")
+                    present, value = take(row, f"cost_{scope}")
+                    nested: dict[str, Any] = {}
+                    for key in fields:
+                        field_present, field_value = take(row, f"cost_{scope}_{key}")
+                        if field_present:
+                            nested[key] = field_value
+                    if present:
+                        evidence[scope] = nested if kind == "OBJECT" else value
+                row["evidence"] = evidence
             return tuple(metrics), tuple(routes)
 
     def catalog_status_members(self, kind: str, status: str, category: str | None = None) -> tuple[dict[str, Any], ...]:

@@ -23,9 +23,19 @@ class Factor4BackendAPI:
             params["as_of"] = as_of.isoformat()
         return self.client.request("GET", "/market-environments/daily", params=params)
 
-    def summary_metrics(self, factor_id: int, is_sub_factor: bool) -> requests.Response:
-        """读已由 Repository 确认为至多 20 行的因子 summary；最大查询 5000，无分页伪通过。"""
-        return self.client.request("GET", "/factor-ic/summary-metrics", params={"factor_id": factor_id, "is_sub_factor_id": is_sub_factor, "limit": 5000})
+    def summary_metrics(self, factor_id: int | None, is_sub_factor: bool, *, ic_scope: str | None = None,
+                        limit: int = 5000) -> requests.Response:
+        """按公开因子类型、TS/CS 和条数读取 summary；返回原始响应，网络异常透传。
+
+        factor_id 为 None 时不限制因子，ic_scope 为 None 时不限制维度；不发送未声明的 Run、
+        指标 ID 或排序参数，也不将有界返回解释为全历史。limit 原样转发，由服务端验证。
+        """
+        params: dict[str, object] = {"is_sub_factor_id": is_sub_factor, "limit": limit}
+        if factor_id is not None:
+            params["factor_id"] = factor_id
+        if ic_scope is not None:
+            params["ic_scope"] = ic_scope
+        return self.client.request("GET", "/factor-ic/summary-metrics", params=params)
 
     def openapi(self) -> requests.Response:
         """读取同一 Backend 的公开 OpenAPI YAML；返回原始响应，网络异常透传。"""

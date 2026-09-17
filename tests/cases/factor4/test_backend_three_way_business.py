@@ -1,4 +1,4 @@
-"""同一测试环境 Backend / MCP / DB 三方业务结果，不执行内部计算或写入。"""
+"""同一显式环境 Backend / MCP / DB 三方业务结果，不执行内部计算或写入。"""
 
 from collections.abc import Callable
 
@@ -30,14 +30,14 @@ def _verify(action: Callable[[], ReadCheck]) -> None:
 
 
 @pytest.fixture(scope="module")
-def backend_service(factor4_read_service: Factor4ReadService, privileged_api_settings: ApiSettings) -> Factor4BackendReconciliationService:
-    """复用既有独立 JWT 登录和测试 host 门禁；不复制或输出凭据。"""
-    return Factor4BackendReconciliationService(Factor4BackendAPI(HTTPClient(privileged_api_settings)), factor4_read_service)
+def backend_service(factor4_backend_api_settings: ApiSettings, factor4_read_service: Factor4ReadService) -> Factor4BackendReconciliationService:
+    """接收同环境独立认证配置与 MCP 服务；返回三方对账入口，缺 Backend 配置由前置跳过。"""
+    return Factor4BackendReconciliationService(Factor4BackendAPI(HTTPClient(factor4_backend_api_settings)), factor4_read_service)
 
 
 @pytest.fixture(scope="module")
 def backend_repository(factor4_calculation_repository: Factor4CalculationRepository) -> Factor4AuxiliaryRepository:
-    """复用仅经 live/test/DB 门禁的只读连接；不登录 Backend 或初始化 MCP，异常透传。"""
+    """复用经显式 live/环境门禁的只读连接；不登录 Backend 或初始化 MCP，异常透传。"""
     return Factor4AuxiliaryRepository(factor4_calculation_repository.database_client)
 
 
@@ -51,10 +51,7 @@ def test_backend_daily_exact_date_and_pit_match_mcp_database(backend_service: Fa
 @pytest.mark.parametrize("ic_scope", ["time_series", "cross_sectional"])
 def test_backend_summary_identity_values_and_period_instants_match_mcp_database(backend_service: Factor4BackendReconciliationService, backend_repository: Factor4AuxiliaryRepository, ic_scope: str) -> None:
     """MET-310：精确 Run 汇总身份/数值及 period 的真实瞬间与 DB 显式时区 payload 一致。"""
-    row = backend_repository.compact_time_summary_sample(ic_scope)
-    if row is None:
-        pytest.skip(f"BLOCKED_DATA_PRECONDITION: no compact explicit-period {ic_scope} summary")
-    _verify(lambda: backend_service.check_summary(row))
+    _verify(lambda: backend_service.check_summary_sample(backend_repository, ic_scope))
 
 
 @pytest.mark.factor4_technical

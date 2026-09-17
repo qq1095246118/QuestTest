@@ -30,7 +30,7 @@ class ApiSettings:
 class AccountCredentials:
     """保存一个自动化测试账号的登录凭据。
 
-    参数 ``email`` 和 ``password`` 可来自测试环境 YAML 配置或运行时环境变量；生产凭据不得进入静态配置。
+    参数 ``email`` 和 ``password`` 可来自环境配置或运行时环境变量；生产凭据仅允许本机忽略文件或运行时注入。
     返回值由 ``SettingsLoader.load`` 创建，供测试启动阶段调用登录接口；任一字段未配置时对应账号不可用。
     """
 
@@ -44,7 +44,7 @@ class AuthenticationSettings:
 
     参数 ``privileged`` 用于正常业务请求，``restricted`` 用于验证已登录但权限不足的 403 场景，``non_owner`` 用于
     验证拥有同等业务权限但不拥有目标资源的 404 所有权隔离场景。
-    返回值由 ``SettingsLoader.load`` 创建；生产环境账号密码不得写入静态配置。
+    返回值由 ``SettingsLoader.load`` 创建；生产环境账号密码不得写入可提交配置。
     """
 
     privileged: AccountCredentials
@@ -58,6 +58,8 @@ class DatabaseSettings:
 
     参数来自 YAML 配置和环境变量；支持 SQLite 的 ``dsn`` 以及 MySQL 的 host、port、name、username、password 和
     连接、读取、写入超时。三个超时单位均为秒，未显式配置时使用兼容默认值。
+    ``read_only`` 启用 DB 客户端只读保护；production 配置始终强制开启。
+    ``compress`` 启用 MySQL 协议传输压缩，默认关闭，不改变 driver 或查询结果类型。
     返回值由 ``SettingsLoader.load`` 创建，供 DB 层按驱动建立连接使用。
     """
 
@@ -71,6 +73,8 @@ class DatabaseSettings:
     connect_timeout_seconds: float = 10.0
     read_timeout_seconds: float = 60.0
     write_timeout_seconds: float = 60.0
+    read_only: bool = False
+    compress: bool = False
 
 
 @dataclass(frozen=True)
@@ -151,7 +155,7 @@ class Settings:
 
 
 class SettingsLoader:
-    """按默认配置、环境配置、环境变量的优先级加载框架配置。"""
+    """按默认、环境、本机生产覆盖、环境变量的优先级加载框架配置。"""
 
     _ENVIRONMENT_OVERRIDES: dict[str, tuple[str, str]] = {
         "AUTOMATION_API_BASE_URL": ("api", "base_url"),
@@ -175,6 +179,8 @@ class SettingsLoader:
         "AUTOMATION_DB_CONNECT_TIMEOUT_SECONDS": ("database", "connect_timeout_seconds"),
         "AUTOMATION_DB_READ_TIMEOUT_SECONDS": ("database", "read_timeout_seconds"),
         "AUTOMATION_DB_WRITE_TIMEOUT_SECONDS": ("database", "write_timeout_seconds"),
+        "AUTOMATION_DB_READ_ONLY": ("database", "read_only"),
+        "AUTOMATION_DB_COMPRESS": ("database", "compress"),
         "AUTOMATION_FACTOR_COMBO_AGENT_UID": ("factor_combo", "agent_uid"),
         "AUTOMATION_FACTOR_COMBO_AGENT_BASE_URL": ("factor_combo", "agent_base_url"),
         "AUTOMATION_FACTOR_COMBO_POLL_INTERVAL_SECONDS": ("factor_combo", "poll_interval_seconds"),
@@ -200,6 +206,10 @@ class SettingsLoader:
             "environment_safety",
             "allowed_database_hosts",
         ),
+        "AUTOMATION_PRODUCTION_ALLOWED_HOSTS": ("environment_safety", "allowed_hosts"),
+        "AUTOMATION_PRODUCTION_ALLOWED_DATABASE_HOSTS": (
+            "environment_safety", "allowed_database_hosts",
+        ),
     }
 
     @classmethod
@@ -208,7 +218,9 @@ class SettingsLoader:
 
         参数 ``environment`` 是 ``config/<environment>.yaml`` 的环境名，缺省时读取 ``AUTOMATION_ENV`` 或使用 ``test``；
         ``project_root`` 是项目根目录，缺省时从当前模块推导。
-        返回合并默认配置、环境配置和环境变量后的 ``Settings``；配置文件缺失或字段类型错误时抛出异常。
+        返回合并默认配置、环境配置和环境变量后的 ``Settings``；仅 production 额外读取可选
+        ``config/production.local.yaml``，优先级低于环境变量，且不继承 test 配置。
+        配置文件缺失或字段类型错误时抛出异常；production 的数据库只读保护不可由配置关闭。
         """
 
         root = project_root or Path(__file__).resolve().parents[1]
@@ -216,8 +228,12 @@ class SettingsLoader:
         default_data = cls._read_yaml(root / "config" / "default.yaml")
         environment_data = cls._read_yaml(root / "config" / f"{selected_environment}.yaml")
         merged_data = cls._deep_merge(default_data, environment_data)
-        cls._apply_environment_overrides(merged_data)
+        if selected_environment == "production":
+            local_path = root / "config" / "production.local.yaml"
+            if local_path.is_file():
+                merged_data = cls._deep_merge(merged_data, cls._read_yaml(local_path))
         merged_data["environment"] = selected_environment
+        cls._apply_environment_overrides(merged_data)
         return cls._to_settings(merged_data)
 
     @staticmethod
@@ -260,6 +276,11 @@ class SettingsLoader:
         """
 
         for variable, (section, key) in cls._ENVIRONMENT_OVERRIDES.items():
+            production = config.get("environment") == "production"
+            if variable.startswith("AUTOMATION_TEST_ALLOWED_") and production:
+                continue
+            if variable.startswith("AUTOMATION_PRODUCTION_ALLOWED_") and not production:
+                continue
             value = os.getenv(variable)
             if value is not None:
                 config.setdefault(section, {})[key] = value
@@ -322,6 +343,11 @@ class SettingsLoader:
                     database.get("write_timeout_seconds", 60),
                     "database.write_timeout_seconds",
                 ),
+                read_only=(
+                    str(data.get("environment", "test")).strip().lower() == "production"
+                    or SettingsLoader._to_boolean(database.get("read_only", False))
+                ),
+                compress=SettingsLoader._to_boolean(database.get("compress", False)),
             ),
             factor_combo=FactorComboSettings(
                 agent_uid=SettingsLoader._optional_string(factor_combo.get("agent_uid")),
