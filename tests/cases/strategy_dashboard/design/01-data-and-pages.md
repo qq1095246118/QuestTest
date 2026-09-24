@@ -253,6 +253,7 @@
   2. 打开总览“当前数据”Tab。
   3. 对照策略数、账号数、资金卡片和明细集合。
 - 期望：当前数据只包含页面定义的运行中对象；卡片和明细使用同一筛选集合；停止/废止对象不被混入当前资金汇总。
+- 自动化：`test_source_current_overview.py` 的18项覆盖真实当前来源的账户范围、8项明细源值、5项金额独立求和及缺失完整性；`test_source_current_overview_queries.py` 的28项扩展真实分页/筛选、单账户、账户组合、指标单独查询和日期语义，两组合计46个检查实例。见 `docs/strategy-dashboard-current-overview-reconciliation.md`。这是 BV-101 的接口数据部分，不代表 UI 渲染及所有状态转换已验收。
 
 ### BV-102 总览“历史累计数据”口径
 

@@ -33,6 +33,8 @@ def reconcile_runs(root: Path, reports: list[Path]) -> dict[str, Any]:
     timestamps: dict[str, datetime] = {}
     ignored: set[str] = set()
     natural: dict[str, dict[str, Any]] = {}
+    current_overview: dict[str, dict[str, Any]] = {}
+    current_overview_queries: dict[str, dict[str, Any]] = {}
     for path in reports:
         for suite in ET.parse(path).getroot().iter("testsuite"):
             stamp_text = suite.get("timestamp", "")
@@ -53,12 +55,30 @@ def reconcile_runs(root: Path, reports: list[Path]) -> dict[str, Any]:
                     relative = str(path.resolve().relative_to(root.resolve()))
                 except ValueError:
                     relative = str(path.resolve())
+                module = classname.rsplit(".", 1)[-1]
+                is_natural = module == "test_source_risk_statistics"
+                is_current_overview = module == "test_source_current_overview"
+                is_overview_query = module == "test_source_current_overview_queries"
+                # The same metric is checked at account, portfolio and coverage
+                # levels. Retain the function name to keep those checks distinct.
+                if is_current_overview or is_overview_query:
+                    identity = name
                 row = {"id": identity, "result": state, "executed_at": stamp_text,
                        "junit_report": relative, "test_name": name}
-                is_natural = "test_source_risk_statistics" in classname
-                target = natural if is_natural else latest
-                time_key = ("natural:" if is_natural else "controlled:") + identity
-                if not is_natural and identity not in ready:
+                if is_current_overview or is_overview_query:
+                    row["entrypoint"] = module + ".py"
+                    skipped = case.find("skipped")
+                    if skipped is not None:
+                        reason = " ".join(filter(None, (skipped.get("message", ""), skipped.text or "")))
+                        row["skip_reason"] = reason
+                        row["sample_gap"] = "SAMPLE_GAP" in reason or "SOURCE_SUBTOTAL_UNAVAILABLE" in reason
+                target = (current_overview_queries if is_overview_query else
+                          current_overview if is_current_overview else natural if is_natural else latest)
+                group = ("current_overview_query:" if is_overview_query else
+                         "current_overview:" if is_current_overview else "natural:" if is_natural else "controlled:")
+                time_key = group + identity
+                is_controlled = not (is_natural or is_current_overview or is_overview_query)
+                if is_controlled and identity not in ready:
                     ignored.add(f"{path.name}:{name}")
                     continue
                 previous = timestamps.get(time_key)
@@ -66,7 +86,7 @@ def reconcile_runs(root: Path, reports: list[Path]) -> dict[str, Any]:
                     raise ValueError(f"Conflicting same-time outcomes for {identity}")
                 if previous is None or stamp > previous:
                     timestamps[time_key], target[identity] = stamp, row
-                if not is_natural and state in {"passed", "failed"}:
+                if is_controlled and state in {"passed", "failed"}:
                     if identity not in completed_timestamps or stamp > completed_timestamps[identity]:
                         completed_timestamps[identity], completed[identity] = stamp, row
     bugs = json.loads((root / "tests/data/strategy_dashboard/formula_bug_registry.json").read_text(encoding="utf-8"))
@@ -99,6 +119,16 @@ def reconcile_runs(root: Path, reports: list[Path]) -> dict[str, Any]:
                                      if row["result"] == "failed" and identity not in mapped),
         "controlled_input_results": rows,
         "natural_source_checks": [row for _, row in sorted(natural.items())],
+        "current_overview_source_checks": [row for _, row in sorted(current_overview.items())],
+        "current_overview_results": dict(sorted(Counter(row["result"] for row in current_overview.values()).items())),
+        "current_overview_query_checks": [row for _, row in sorted(current_overview_queries.items())],
+        "current_overview_query_results": dict(sorted(Counter(row["result"] for row in current_overview_queries.values()).items())),
+        "current_overview_combined_results": dict(sorted(Counter(
+            row["result"] for row in list(current_overview.values()) + list(current_overview_queries.values())
+        ).items())),
+        "current_overview_sample_gaps": [row for row in
+                                         list(current_overview.values()) + list(current_overview_queries.values())
+                                         if row.get("sample_gap")],
         "ignored_out_of_scope_results": sorted(ignored),
     }
 
@@ -114,6 +144,7 @@ def main() -> None:
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: value for key, value in result.items()
                       if key not in {"controlled_input_results", "known_bug_matches", "natural_source_checks",
+                                     "current_overview_source_checks", "current_overview_query_checks",
                                      "ignored_out_of_scope_results"}}, ensure_ascii=False, indent=2))
 
 

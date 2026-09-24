@@ -10,6 +10,10 @@ from typing import Any
 
 from service.strategy_dashboard_case_registry import load_strategy_dashboard_cases
 from service.strategy_dashboard_formula_scenarios import formula_catalog_paths, load_formula_catalog
+from service.strategy_dashboard_current_overview_audit import AMOUNT_SOURCES, METRIC_SOURCES, RATIO_SOURCES
+from service.strategy_dashboard_current_overview_queries import (
+    ACCOUNT_SCENARIOS, DIRECTORY_SCENARIOS, SUBSET_SCENARIOS, WINDOW_SCENARIOS,
+)
 from tests.strategy_dashboard_formula_routes import source_case_routes
 
 
@@ -67,6 +71,21 @@ def build_inventory(root: Path) -> dict[str, Any]:
                              "automation_state": "source_adapter_ready" if source_ready else "local_reference_only",
                              "entrypoint": entrypoint, "source_file": filename, "scenario": record})
     profile_states = Counter(item["automation_state"] for item in profiles)
+    current_overview_groups = {
+        "running_account_population": 1,
+        "per_account_source_metrics": len(METRIC_SOURCES),
+        "portfolio_amount_sums": len(AMOUNT_SOURCES),
+        "amount_source_completeness": 1,
+        "ratio_source_completeness": len(RATIO_SOURCES),
+    }
+    overview_query_scenarios = {
+        "directory_queries": list(DIRECTORY_SCENARIOS),
+        "account_summary_queries": list(ACCOUNT_SCENARIOS),
+        "portfolio_subset_queries": list(SUBSET_SCENARIOS),
+        "metric_projection_queries": list(METRIC_SOURCES),
+        "window_queries": list(WINDOW_SCENARIOS),
+    }
+    overview_query_groups = {name: len(values) for name, values in overview_query_scenarios.items()}
     return {
         "scope": "quantitative trading / profit-sharing formula source-input validation",
         "historical_main_cases": len(main_cases),
@@ -85,6 +104,26 @@ def build_inventory(root: Path) -> dict[str, Any]:
             "entrypoint": "test_source_risk_statistics.py", "metric_checks": 5,
             "counting_rule": "Fresh natural samples only; never substitute for controlled input profiles.",
         },
+        "current_overview_source_audit": {
+            "entrypoint": "test_source_current_overview.py",
+            "case_ids": ["BV-101"],
+            "coverage_state": "partial_business_case_implementation",
+            "assertion_instances": sum(current_overview_groups.values()),
+            "assertion_groups": current_overview_groups,
+            "counting_rule": "Fresh natural source assertions; not fixed-input scenarios and excluded from all_distinct_fixed_input_scenarios.",
+            "coverage_limits": "BV-101 is partially implemented: directory membership plus same-generation DB amount reconciliation; no controlled boundary inputs or independently defined portfolio ratio formula.",
+        },
+        "current_overview_query_audit": {
+            "entrypoint": "test_source_current_overview_queries.py",
+            "case_ids": ["BV-101"],
+            "coverage_state": "partial_business_case_implementation",
+            "assertion_instances": sum(overview_query_groups.values()),
+            "assertion_groups": overview_query_groups,
+            "scenarios": overview_query_scenarios,
+            "counting_rule": "Separate fresh query instances, not additional fixed-input scenarios, metric counts or offline framework passes.",
+            "coverage_limits": "Read-only real-query variations. Missing natural populations are sample gaps, not product passes. Directory-only NT identities do not imply account-summary support; portfolio ratio formulas remain outside this audit.",
+        },
+        "current_overview_total_assertion_instances": sum(current_overview_groups.values()) + sum(overview_query_groups.values()),
         "execution_result": "NOT_EVALUATED: this is an inventory, not an execution report",
         "counting_rule": "Main cases, parameterized scenarios and local framework tests must not be added together.",
     }
@@ -144,6 +183,22 @@ def render_scenario_inventory(inventory: dict[str, Any]) -> str:
         lines.extend([f"### {case['id']}：{case['title']}", "",
                       f"状态：{labels[case['automation_state']]}。入口：`{case['entrypoint']}`。", "",
                       "```json", json.dumps(case["scenario"], ensure_ascii=False, indent=2), "```", ""])
+    current_overview = inventory["current_overview_source_audit"]
+    lines.extend(["## 当前数据自然样本核对（非固定输入场景）", "",
+                  f"入口：`tests/cases/strategy_dashboard/{current_overview['entrypoint']}`；"
+                  f"共 {current_overview['assertion_instances']} 个断言实例。", "",
+                  "BV-101 部分落地：运行账户范围 1 项、账户明细 8 项、金额汇总 5 项、"
+                  "金额完整性 1 项、比例完整性 3 项。", "",
+                  "账户目录确定参与集合，数据库同代次原始样本独立核对数值；"
+                  "不计入固定输入场景总数，也不代表组合收益率公式已经完成独立验证。", ""])
+    current_queries = inventory["current_overview_query_audit"]
+    lines.extend(["## 当前数据查询扩展（与原始核对分别统计）", "",
+                  f"入口：`tests/cases/strategy_dashboard/{current_queries['entrypoint']}`；"
+                  f"共 {current_queries['assertion_instances']} 个查询实例。", "",
+                  "目录分页/筛选 6 项、单账户分析 3 项、组合子集 8 项、指标投影 8 项、"
+                  "日期与时区 3 项。每个实例可以核对多个字段，字段数不重复计为用例。", "",
+                  f"当前数据两组共 {inventory['current_overview_total_assertion_instances']} 个实例；"
+                  "这些是登记数量，不代表真实执行通过数量。自然样本缺口、接口错误和断言失败必须分开输出。", ""])
     return "\n".join(lines)
 
 
