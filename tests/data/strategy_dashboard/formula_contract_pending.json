@@ -1,0 +1,510 @@
+[
+  {
+    "id": "FCP-WINRATE-001",
+    "title": "同一闭合交易拆成多笔成交时胜率样本单位待确认",
+    "family": "win_rate",
+    "case_ids": ["GAP-004", "CALC-043"],
+    "inputs": {
+      "account_id": "qa-a", "strategy_id": "qa-s1",
+      "fills": [
+        {"id": "f1", "trade_id": "t1", "order_id": "o1", "role": "close", "gross_pnl": "60", "timestamp": "2026-09-01T10:00:00Z"},
+        {"id": "f2", "trade_id": "t1", "order_id": "o1", "role": "close", "gross_pnl": "40", "timestamp": "2026-09-01T10:01:00Z"},
+        {"id": "f3", "trade_id": "t2", "order_id": "o2", "role": "close", "gross_pnl": "-50", "timestamp": "2026-09-01T11:00:00Z"}
+      ],
+      "closed_trade_ids": ["t1", "t2"],
+      "contract_requirements": {"decision": "T06: 胜率按有效已实现事件、订单还是完整闭合交易统计", "why_no_unique_result": "事件口径为2/3，闭合交易口径为1/2；不能依据行数自行选择", "known_invariants": ["同一事实重试不得新增样本", "事件统计不能命名为完整交易胜率"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-WINRATE-002",
+    "title": "闭合平手交易是否进入胜率分母待确认",
+    "family": "win_rate", "case_ids": ["GAP-004"],
+    "inputs": {
+      "closed_trades": [{"id": "t1", "net_pnl": "100"}, {"id": "t2", "net_pnl": "-50"}, {"id": "t3", "net_pnl": "0"}],
+      "contract_requirements": {"decision": "T06: 平手是否进入分母以及零值精度", "why_no_unique_result": "纳入平手为1/3，排除平手为1/2；必须与页面指标名称和来源样本一致"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-WINRATE-003",
+    "title": "部分平仓但交易未闭合的胜率归属待确认",
+    "family": "win_rate", "case_ids": ["GAP-004", "SD-120"],
+    "inputs": {
+      "trades": [{"id": "closed", "open_quantity": "1", "closed_quantity": "1", "realized_gross_pnl": "-10", "unrealized_pnl": "0"}, {"id": "partial", "open_quantity": "3", "closed_quantity": "1", "realized_gross_pnl": "20", "unrealized_pnl": "200"}],
+      "contract_requirements": {"decision": "T06: 已实现事件统计或完整往返交易统计；部分平仓如何划分交易", "why_no_unique_result": "事件统计可含已实现20，而完整交易统计可能只含已闭合亏损交易；样本集合不同", "known_invariants": ["未平仓浮盈200不能计为盈利样本", "只有开仓的成交不生成平手或亏损样本"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-WINRATE-004",
+    "title": "手续费使毛盈利交易转为净亏损的胜率口径待确认",
+    "family": "win_rate", "case_ids": ["GAP-004", "CALC-005"],
+    "inputs": {
+      "closed_trades": [{"id": "t1", "gross_pnl": "2", "commission_expense": "3", "funding_pnl": "0"}, {"id": "t2", "gross_pnl": "10", "commission_expense": "1", "funding_pnl": "-1"}],
+      "contract_requirements": {"decision": "T06/T07: 胜负使用毛收益还是净收益及费用归属", "why_no_unique_result": "毛收益两笔都盈利，按G-C+F第一笔净亏1、第二笔净赚8，胜率会不同", "known_invariants": ["采用净收益口径时手续费和资金费须有该交易归属证据"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-PROFITFACTOR-001",
+    "title": "平均盈亏比与总利润因子的数值差异必须由指标契约区分",
+    "family": "profit_factor", "case_ids": ["GAP-004"],
+    "inputs": {
+      "closed_trades": [{"id": "t1", "net_pnl": "100"}, {"id": "t2", "net_pnl": "20"}, {"id": "t3", "net_pnl": "-10"}],
+      "contract_requirements": {"decision": "T07: 输出字段指平均盈亏比还是总利润因子", "why_no_unique_result": "平均盈利60/平均亏损绝对值10=6；总盈利120/总亏损绝对值10=12，不能混用标题与结果"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-PROFITFACTOR-002",
+    "title": "全盈利样本没有亏损分母的指标状态待确认",
+    "family": "profit_factor", "case_ids": ["GAP-004", "CALC-045"],
+    "inputs": {
+      "closed_trades": [{"id": "t1", "net_pnl": "100"}, {"id": "t2", "net_pnl": "20"}],
+      "contract_requirements": {"decision": "T07: 正式样本单位、字段名称及不可计算原因码", "why_no_unique_result": "样本定义和输出契约未定，不能作为完整业务数值验收；但没有亏损分母时禁止输出Infinity已明确", "known_invariants": ["没有亏损样本不可输出无穷大盈亏比", "不能注入虚构亏损交易补分母"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-PROFITFACTOR-003",
+    "title": "全亏损样本的空盈利均值与零总盈利不能混同",
+    "family": "profit_factor", "case_ids": ["GAP-004"],
+    "inputs": {
+      "closed_trades": [{"id": "t1", "net_pnl": "-10"}, {"id": "t2", "net_pnl": "-30"}],
+      "contract_requirements": {"decision": "T07: 平均盈亏比还是总利润因子及空盈利集合处理", "why_no_unique_result": "总利润因子可以用总盈利0/总亏损40；平均盈利的空集合均值未定义，不能默认用0代替"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-SORTINO-001",
+    "title": "Sortino下行偏差使用全样本还是负样本分母待确认",
+    "family": "sortino", "case_ids": ["GAP-004", "CALC-016"],
+    "inputs": {
+      "series": [{"timestamp": "2026-09-01T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-02T00:00:00Z", "equity": "110"}, {"timestamp": "2026-09-03T00:00:00Z", "equity": "107.8"}, {"timestamp": "2026-09-04T00:00:00Z", "equity": "107.8"}],
+      "has_cash_flows": false,
+      "contract_requirements": {"decision": "T08: 全部完整日数量n还是仅负收益数量；同时批准同窗年化分子", "why_no_unique_result": "日收益为.10/-.02/0；目标0时全样本下行偏差sqrt(.0004/3)，只取负样本为.02；不能拿Sharpe替代"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-SORTINO-002",
+    "title": "Sortino最低可接受收益和目标频率待确认",
+    "family": "sortino", "case_ids": ["GAP-004"],
+    "inputs": {
+      "series": [{"timestamp": "2026-09-01T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-02T00:00:00Z", "equity": "100.5"}, {"timestamp": "2026-09-03T00:00:00Z", "equity": "101.0025"}, {"timestamp": "2026-09-04T00:00:00Z", "equity": "101.5075125"}],
+      "candidate_targets": [{"value": "0", "frequency": "daily"}, {"value": "0.01", "frequency": "daily"}, {"value": "0.05", "frequency": "annual"}],
+      "contract_requirements": {"decision": "T08: MAR数值、频率、年日转换方法及超额分子", "why_no_unique_result": "每日+.5%对目标0没有下行；对每日1%每个样本都低于目标；年目标5%还需独立转换规则"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-SORTINO-003",
+    "title": "Sortino来源净值与账户权益样本替代范围待确认",
+    "family": "sortino", "case_ids": ["GAP-004", "CALC-046"],
+    "inputs": {
+      "account_equity": [{"timestamp": "2026-09-01T00:00:00Z", "value": "100"}, {"timestamp": "2026-09-02T00:00:00Z", "value": "200"}, {"timestamp": "2026-09-03T00:00:00Z", "value": "198"}],
+      "source_strategy_nav": [{"timestamp": "2026-09-01T00:00:00Z", "value": "1"}, {"timestamp": "2026-09-02T00:00:00Z", "value": "1"}, {"timestamp": "2026-09-03T00:00:00Z", "value": ".99"}],
+      "cash_flows": [{"id": "deposit", "timestamp": "2026-09-01T12:00:00Z", "direction": "in", "amount": "100"}],
+      "contract_requirements": {"decision": "T01/T08/T16: 账户权益或策略净值对象、现金流调整、同窗分子", "why_no_unique_result": "账户权益跳变包含入金而策略来源净值没有同幅收益；不能混对象或默认替代", "known_invariants": ["入金不能被当作投资盈利", "无下行波动不得输出Infinity"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FX-001",
+    "title": "手续费折算采用事件价还是结算价待确认",
+    "family": "fx_fees", "case_ids": ["GAP-005", "CALC-005"],
+    "inputs": {
+      "fees": [{"id": "fee1", "timestamp": "2026-09-01T10:00:00Z", "currency": "BNB", "amount": ".01"}],
+      "prices": [{"symbol": "BNBUSDT", "timestamp": "2026-09-01T10:00:00Z", "price": "300"}, {"symbol": "BNBUSDT", "timestamp": "2026-09-01T23:59:59Z", "price": "350"}],
+      "target_currency": "USDT",
+      "contract_requirements": {"decision": "T10: 汇率来源、折算时点、价格类型", "why_no_unique_result": "事件价折算3USDT，期末价折算3.5USDT；没有批准不能选择有利结果"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FX-002",
+    "title": "缺事件汇率时能否使用前值以及容忍年龄待确认",
+    "family": "fx_fees", "case_ids": ["GAP-005", "CALC-048"],
+    "inputs": {
+      "fees": [{"id": "fee1", "timestamp": "2026-09-01T10:00:00Z", "currency": "BNB", "amount": ".01"}],
+      "prices": [{"symbol": "BNBUSDT", "timestamp": "2026-09-01T09:00:00Z", "price": "300"}],
+      "target_currency": "USDT",
+      "contract_requirements": {"decision": "T10/T17: 是否允许前值汇率及最大价格年龄", "why_no_unique_result": "允许一小时前值时可折算3USDT，不允许时应保持原币金额和折算不可用", "known_invariants": ["缺汇率不得按0或1折算", "不得使用事件之后未来价格冒充已知汇率"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FX-003",
+    "title": "内部互转手续费与奖励的资金分类待确认",
+    "family": "fx_fees", "case_ids": ["GAP-005", "CALC-002"],
+    "inputs": {
+      "events": [{"id": "out", "transfer_id": "x1", "account_id": "a", "currency": "USDT", "direction": "out", "amount": "100"}, {"id": "in", "transfer_id": "x1", "account_id": "b", "currency": "USDT", "direction": "in", "amount": "99"}, {"id": "fee", "transfer_id": "x1", "account_id": "a", "currency": "USDT", "kind": "transfer_fee", "amount": "1"}, {"id": "reward", "account_id": "b", "currency": "USDT", "kind": "reward", "amount": "5"}],
+      "contract_requirements": {"decision": "T10: 互转扣费、奖励与交易手续费C/资金流D/其他调整的分类", "why_no_unique_result": "双端100/99差额1需要归类，奖励5也不是当然的交易G或外部入金D", "known_invariants": ["有双端证据的内部转账本金不创造组合资本", "不能把所有余额变化放进交易收益"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-HEALTH-001",
+    "title": "风险分项端点内外的分值映射待批准",
+    "family": "health", "case_ids": ["CALC-028", "AL-010"],
+    "inputs": {
+      "observations": [{"max_strategy_drawdown": ".074999", "net_exposure_ratio": ".1", "margin_utilization": ".3", "plan_match_rate": ".99"}, {"max_strategy_drawdown": ".075", "net_exposure_ratio": ".1", "margin_utilization": ".3", "plan_match_rate": ".99"}, {"max_strategy_drawdown": ".075001", "net_exposure_ratio": ".1", "margin_utilization": ".3", "plan_match_rate": ".99"}],
+      "contract_requirements": {"decision": "T03/T04/T05: 指标定义、端点、插值和越界跳变", "why_no_unique_result": "候选旧曲线在7.5%处50分、刚超过归0，但未批准保留跳变或采用平滑规则", "known_invariants": ["M13权重40/20/20/20已经明确，不在待定范围", "任何必需分项缺失不能重新分配权重"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-HEALTH-002",
+    "title": "健康分数到风险等级及告警的阈值待确认",
+    "family": "health", "case_ids": ["CALC-028", "AL-010"],
+    "inputs": {
+      "approved_component_scores": [{"drawdown": "75", "net_exposure": "75", "margin": "75", "match": "75"}, {"drawdown": "74.999", "net_exposure": "75", "margin": "75", "match": "75"}],
+      "contract_requirements": {"decision": "T05: 等级边界、比较前精度和触发门槛", "why_no_unique_result": "加权总分算式已确定，但75附近属于哪个等级、何时告警还不能从候选文案推断", "known_invariants": ["必须用未展示截断的分数比较获批阈值"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-BASELINE-001",
+    "title": "启用到首个合格快照之间的收益是否追溯待确认",
+    "family": "first_baseline", "case_ids": ["CALC-041", "GAP-009"],
+    "inputs": {
+      "enabled_at": "2026-09-01T10:00:00Z", "net_deposit": "10000",
+      "snapshots": [{"timestamp": "2026-09-01T09:59:00Z", "G": "500", "exact": false}, {"timestamp": "2026-09-01T10:05:00Z", "G": "520", "exact": true}, {"timestamp": "2026-09-01T11:00:00Z", "G": "600", "exact": true}],
+      "contract_requirements": {"decision": "T11: 首周期从启用时间还是首个合格证据开始，是否补证追溯", "why_no_unique_result": "首个合格基准520对应后续收益80；追溯到500为100，差额影响计费", "known_invariants": ["没有精确基准不得先出账", "无真实清算不能把启用前G当Gclear"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-BASELINE-002",
+    "title": "历史清算已发生但基准未迁入时初始化补证待确认",
+    "family": "first_baseline", "case_ids": ["CALC-041", "GAP-009"],
+    "inputs": {
+      "account_snapshot": {"G": "800", "D": "10000"},
+      "clearance_records": [{"id": "legacy-clear", "cleared_at": "2026-08-01T00:00:00Z", "Gclear": null}],
+      "contract_requirements": {"decision": "T11: 历史清算证据如何迁移与核准，是否允许有限回溯建立基准", "why_no_unique_result": "确有历史清算而数值未知，不能选择Gclear=0或当前800来给出唯一比率", "known_invariants": ["不得把缺清算基准等同从未清算", "缺证据时不能锁单"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-BASELINE-003",
+    "title": "亏损恢复后分润使用原基准还是高水位待确认",
+    "family": "first_baseline", "case_ids": ["CALC-035", "SET-047"],
+    "inputs": {
+      "original_Gbase": "500", "snapshots": [{"timestamp": "2026-09-01T00:00:00Z", "G": "300"}, {"timestamp": "2026-09-02T00:00:00Z", "G": "450"}, {"timestamp": "2026-09-03T00:00:00Z", "G": "600"}],
+      "prior_high_water_G": "550", "D": "1000", "rate": ".2", "gate": ".05",
+      "contract_requirements": {"decision": "T11: 是否另签亏损结转/高水位政策及其生效范围", "why_no_unique_result": "固定M14原基准500得100；新增高水位550得50，两种收费政策不可悄悄替换", "known_invariants": ["未批准新政策时不暗改M14", "负周期收益不自动生成负应收退款"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-DAYPOLICY-001",
+    "title": "停机间隔导致自然历时与有效运行天数不同",
+    "family": "runtime_day_policy", "case_ids": ["CALC-013", "GAP-006"],
+    "inputs": {
+      "as_of": "2026-09-11T00:00:00Z", "runs": [{"started_at": "2026-09-01T00:00:00Z", "stopped_at": "2026-09-05T00:00:00Z"}, {"started_at": "2026-09-08T00:00:00Z", "stopped_at": "2026-09-11T00:00:00Z"}],
+      "G": "100", "D": "1000",
+      "contract_requirements": {"decision": "T02: M05使用自然历时还是已证实运行区间并集", "why_no_unique_result": "自然历时10天、有效运行7天，同样10%收益分别线性年化3.65或(.1/7*365)", "known_invariants": ["不能向上取整绕过7天门槛", "重叠运行区间不能重复算有效时长"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-DAYPOLICY-002",
+    "title": "UTC与北京时间日切选取不同权益边界",
+    "family": "runtime_day_policy", "case_ids": ["CALC-013", "CALC-014", "GAP-006"],
+    "inputs": {
+      "series": [{"timestamp": "2026-09-01T16:00:00Z", "equity": "100"}, {"timestamp": "2026-09-02T00:00:00Z", "equity": "110"}, {"timestamp": "2026-09-02T16:00:00Z", "equity": "105"}, {"timestamp": "2026-09-03T00:00:00Z", "equity": "121"}],
+      "contract_requirements": {"decision": "T02: 统计固定日界线和边界快照选择", "why_no_unique_result": "北京时间边界100→105为5%；UTC边界110→121为10%；界面时区不自动决定统计日切", "known_invariants": ["同一统计不能混用两套日切样本"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-DAYPOLICY-003",
+    "title": "最近七天是滚动小时还是完整业务日待确认",
+    "family": "runtime_day_policy", "case_ids": ["GAP-006", "CALC-046"],
+    "inputs": {
+      "as_of": "2026-09-08T12:00:00Z", "events": [{"id": "e1", "timestamp": "2026-09-01T06:00:00Z", "kind": "G", "amount": "10"}, {"id": "e2", "timestamp": "2026-09-08T06:00:00Z", "kind": "G", "amount": "20"}],
+      "contract_requirements": {"decision": "T02: 组件默认窗口为168小时、7完整日还是含今天7日历日", "why_no_unique_result": "UTC滚动168小时含e2不含e1；前7完整UTC日含e1不含e2，结果20与10不同", "known_invariants": ["明确指定窗口后统一左闭右开", "默认图窗口不能擅自改变累计G含义"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FLOWNAV-001",
+    "title": "日内入金后的投资净值调整方法待确认",
+    "family": "fixed_principal_nav_cash_flows", "case_ids": ["GAP-003", "CALC-014"],
+    "inputs": {
+      "series": [{"timestamp": "2026-09-01T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-01T12:00:00Z", "equity": "110", "phase": "before_flow"}, {"timestamp": "2026-09-01T12:00:00Z", "equity": "210", "phase": "after_flow"}, {"timestamp": "2026-09-02T00:00:00Z", "equity": "231"}],
+      "cash_flows": [{"id": "deposit", "timestamp": "2026-09-01T12:00:00Z", "direction": "in", "amount": "100"}],
+      "contract_requirements": {"decision": "T16: 时间加权或其他现金流调整方法、同刻流前后边界", "why_no_unique_result": "未经调整231/100=2.31包含本金；分段时间加权候选1.1*1.1=1.21；不能据候选自动批准", "known_invariants": ["100入金不是投资利润", "账户固定M03不被该投资净值替代"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FLOWNAV-002",
+    "title": "账户资本差异下组合净值加权方法待确认",
+    "family": "fixed_principal_nav_cash_flows", "case_ids": ["GAP-003", "CALC-050"],
+    "inputs": {
+      "accounts": [{"account_id": "a", "initial_equity": "100", "ending_equity": "110", "source_unit_nav_start": "1", "source_unit_nav_end": "1.1"}, {"account_id": "b", "initial_equity": "900", "ending_equity": "900", "source_unit_nav_start": "1", "source_unit_nav_end": "1"}],
+      "cash_flows": [],
+      "contract_requirements": {"decision": "T14/T16: 真实资本组合还是等权来源监控篮子及资金归属", "why_no_unique_result": "资本总额1010/1000=1.01，等权来源净值(1.1+1)/2=1.05；两者不能同名视为组合投资净值"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-REVISION-001",
+    "title": "锁单边界与当前累计收益修订如何传递后继周期待确认",
+    "family": "revision_propagation", "case_ids": ["CALC-049", "SET-009", "GAP-008"],
+    "inputs": {
+      "locked_bill": {"id": "c1", "Gbase": "500", "lock_G": "1100", "share_rate": ".2", "receivable": "120"},
+      "successor_cycle": {"id": "c2", "Gbase": "1100", "current_G": "1200"},
+      "source_revision": {"revised_lock_G": "1080", "revised_current_G": "1180", "reason": "旧周期一笔20毛收益撤回"},
+      "contract_requirements": {"decision": "T13: 已锁证据调整方式和C2相容基准修订策略", "why_no_unique_result": "历史理论应收变116但冻结120不能静默改；C2用同修订边界保持100还是进入核验须明确处理", "known_invariants": ["C1冻结应收保持120直到批准更正", "不能下修累计20后再扣C2收益20造成双重扣减"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-REVISION-002",
+    "title": "已确认款退款后待收与清算基准如何更新待确认",
+    "family": "revision_propagation", "case_ids": ["SET-053", "SET-052"],
+    "inputs": {
+      "bill": {"id": "b1", "receivable": "120", "received": "120", "cleared": true, "Gclear": "1300"},
+      "refund": {"id": "refund1", "receipt_id": "r1", "actual_amount": "40", "actual_currency": "USDT", "actual_at": "2026-09-10T00:00:00Z"},
+      "successor_cycle": {"Gbase": "1100", "current_G": "1400"},
+      "contract_requirements": {"decision": "T13: 退款是否重开待收、是否影响清算和后继周期、批准的更正操作", "why_no_unique_result": "可能形成退款事实但不能推断待收重开40或将Gclear退回；无已支持契约无法自动核算最终状态", "known_invariants": ["不能用拒绝已确认款或登记负收款模拟退款", "保留原确认和清算证据"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-EVIDENCE-001",
+    "title": "精确计费快照鲜度边界及未来容差待配置",
+    "family": "exact_evidence_policy", "case_ids": ["CALC-040", "GAP-007"],
+    "inputs": {
+      "evaluation_at": "2026-09-01T10:02:00Z", "snapshots": [{"id": "before", "observed_at": "2026-09-01T09:59:59Z", "G": "600", "D": "10000", "currency": "USDT"}, {"id": "at", "observed_at": "2026-09-01T10:00:00Z", "G": "600", "D": "10000", "currency": "USDT"}, {"id": "future", "observed_at": "2026-09-01T10:02:01Z", "G": "600", "D": "10000", "currency": "USDT"}],
+      "contract_requirements": {"decision": "T17/精确证据技术契约: 最大快照年龄、比较边界、未来容差及来源时钟", "why_no_unique_result": "121秒、120秒、未来1秒的资格取决于该证据类型已配置规则，不能把运行状态2/5分钟套进全部财务来源", "known_invariants": ["不得改写来源时间使快照看似新鲜"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-EVIDENCE-002",
+    "title": "收益与净入金快照水位不一致时的计费资格待确认",
+    "family": "exact_evidence_policy", "case_ids": ["GAP-007", "GAP-012", "CALC-040"],
+    "inputs": {
+      "evaluation_at": "2026-09-01T10:01:00Z", "G": {"value": "600", "observed_at": "2026-09-01T10:01:00Z", "watermark": "batch-2"}, "D": {"value": "10000", "observed_at": "2026-09-01T10:00:00Z", "watermark": "batch-1"},
+      "cash_flows": [{"id": "deposit", "timestamp": "2026-09-01T10:00:30Z", "amount": "10000", "direction": "in"}],
+      "contract_requirements": {"decision": "T17: 字段最大时差与共同来源水位要求，是否有可证明的对齐补偿", "why_no_unique_result": "旧D算6%而已知入金后D为20000算3%；不能因为每项单独新鲜就合成合格计费证据", "known_invariants": ["已知不相容的G/D不得锁单", "来源时间和水位不得伪造一致"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-EVIDENCE-003",
+    "title": "非支持币种的精确计费资格与折算政策待确认",
+    "family": "exact_evidence_policy", "case_ids": ["GAP-007", "GAP-005"],
+    "inputs": {
+      "account_snapshot": {"account_id": "a", "G": "600", "D": "10000", "currency": "USDC", "observed_at": "2026-09-01T10:00:00Z"},
+      "billing_policy": {"currency": "USDT", "gate": ".05", "share_rate": ".2"},
+      "prices": [{"symbol": "USDCUSDT", "timestamp": "2026-09-01T10:00:00Z", "price": ".998"}],
+      "contract_requirements": {"decision": "T10/精确来源契约: 支持币种白名单、是否允许折算后计费及汇率政策", "why_no_unique_result": "同样数字不同计价币不能按1:1当USDT；即使有价格也不能证明该来源可作正式账务证据", "known_invariants": ["不同币种未经批准不合并应收"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-TOP6-001",
+    "title": "Top6第六与第七名同分时次级排序待确认",
+    "family": "top6_tie_breaker", "case_ids": ["CALC-024", "BV-133"],
+    "inputs": {
+      "strategies": [{"id": "s1", "net_profit": "100"}, {"id": "s2", "net_profit": "90"}, {"id": "s3", "net_profit": "80"}, {"id": "s4", "net_profit": "70"}, {"id": "s5", "net_profit": "60"}, {"id": "s6", "net_profit": "50"}, {"id": "s7", "net_profit": "50"}],
+      "contract_requirements": {"decision": "Top6查询契约: 同分按稳定ID、名称、时间还是允许任一入选", "why_no_unique_result": "第六名可为s6或s7，缺tie-breaker不能固定ID集合判Bug", "known_invariants": ["无重复对象", "完整贡献分母包含所有合格策略"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-TOP6-002",
+    "title": "贡献Top6按净收益还是绝对贡献排序待确认",
+    "family": "top6_tie_breaker", "case_ids": ["CALC-024", "BV-133"],
+    "inputs": {
+      "strategies": [{"id": "loss", "net_profit": "-1000"}, {"id": "s1", "net_profit": "100"}, {"id": "s2", "net_profit": "90"}, {"id": "s3", "net_profit": "80"}, {"id": "s4", "net_profit": "70"}, {"id": "s5", "net_profit": "60"}, {"id": "s6", "net_profit": "50"}],
+      "contract_requirements": {"decision": "Top6查询契约: 排序字段与方向以及其他项聚合展示", "why_no_unique_result": "按净收益降序会排除loss，按绝对贡献会优先纳入loss；M11只确定分母并不自动确定Top6排序", "known_invariants": ["亏损策略不得从完整贡献分母删除", "其他项金额应与完整集合对账"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-NETEXPOSURE-001",
+    "title": "跨合约多空净额能否相抵用于风险评分待确认",
+    "family": "net_exposure", "case_ids": ["GAP-004", "CALC-027"],
+    "inputs": {
+      "equity": "1000", "positions": [{"account_id": "a", "symbol": "BTCUSDT", "side": "long", "notional": "600"}, {"account_id": "a", "symbol": "ETHUSDT", "side": "short", "notional": "-400"}],
+      "contract_requirements": {"decision": "T03: 整体方向净额、逐合约绝对净额或风险因子分组", "why_no_unique_result": "整体绝对净额200/1000=20%，逐合约绝对净额1000/1000=100%，风险结论不同", "known_invariants": ["M20总绝对名义1000不受此待定规则影响"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-NETEXPOSURE-002",
+    "title": "同合约跨账户多空能否相抵及净额符号待确认",
+    "family": "net_exposure", "case_ids": ["GAP-004", "CALC-050"],
+    "inputs": {
+      "accounts": [{"account_id": "a", "equity": "500"}, {"account_id": "b", "equity": "500"}],
+      "positions": [{"account_id": "a", "symbol": "BTCUSDT", "side": "long", "notional": "300"}, {"account_id": "b", "symbol": "BTCUSDT", "side": "short", "notional": "-500"}],
+      "contract_requirements": {"decision": "T03/T14: 抵消分区与方向净额/绝对风险净额命名", "why_no_unique_result": "整体方向额-200、绝对净额200、逐账户绝对额800；账户隔离与风险展示不能由同symbol直接决定"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-POSITIONRATIO-001",
+    "title": "仓位率与保证金使用率分子不能互相替换",
+    "family": "position_ratio", "case_ids": ["GAP-004", "CALC-029"],
+    "inputs": {
+      "equity": "500", "positions": [{"symbol": "BTCUSDT", "side": "long", "notional": "600", "initial_margin": "60", "maintenance_margin": "10"}, {"symbol": "ETHUSDT", "side": "short", "notional": "-400", "initial_margin": "40", "maintenance_margin": "8"}],
+      "contract_requirements": {"decision": "T04: 当前仓位字段是gross/equity、net/equity还是initial_margin/equity", "why_no_unique_result": "总名义率200%、方向净额率40%、初始保证金率20%，不是同一字段的可互换实现", "known_invariants": ["杠杆下名义仓位率超过100%不自动算异常"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-POSITIONRATIO-002",
+    "title": "挂单冻结保证金是否进入使用率待确认",
+    "family": "position_ratio", "case_ids": ["GAP-004", "CALC-027"],
+    "inputs": {
+      "equity": "1000", "position_initial_margin": "200", "order_reserved_margin": "100", "maintenance_margin": "50", "margin_mode": "cross",
+      "contract_requirements": {"decision": "T04: 是否含挂单冻结、使用初始或维持保证金、来源占用定义", "why_no_unique_result": "仅仓位初始20%，含挂单30%，维持保证金5%；未确认不能拿其中一项触发强平风险"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-POSITIONRATIO-003",
+    "title": "逐仓风险使用账户权益还是隔离仓位保证金待确认",
+    "family": "position_ratio", "case_ids": ["GAP-004", "AL-011"],
+    "inputs": {
+      "account_equity": "10000", "position": {"symbol": "BTCUSDT", "margin_mode": "isolated", "isolated_margin_balance": "100", "maintenance_margin": "20", "initial_margin": "80", "notional": "1000"},
+      "contract_requirements": {"decision": "T04: 逐仓/全仓分母和强平风险指标方向", "why_no_unique_result": "维持保证金/账户权益=.2%，维持保证金/隔离余额=20%，不是同等风险；还需明确越大还是越小触发"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-BENCHMARK-001",
+    "title": "超额收益的基准标的价格类型和收益公式待确认",
+    "family": "benchmark_excess", "case_ids": ["GAP-003", "CALC-046"],
+    "inputs": {
+      "window": {"from": "2026-09-01T00:00:00Z", "to": "2026-09-08T00:00:00Z"},
+      "account": {"G": "100", "D": "1000"},
+      "prices": [{"symbol": "BTCUSDT", "type": "close", "timestamp": "2026-09-01T00:00:00Z", "price": "100"}, {"symbol": "BTCUSDT", "type": "close", "timestamp": "2026-09-08T00:00:00Z", "price": "105"}, {"symbol": "ETHUSDT", "type": "close", "timestamp": "2026-09-01T00:00:00Z", "price": "100"}, {"symbol": "ETHUSDT", "type": "close", "timestamp": "2026-09-08T00:00:00Z", "price": "90"}],
+      "contract_requirements": {"decision": "T16: 基准标的、是否用固定M03还是获批投资收益、差值或相对净值", "why_no_unique_result": "即使采用10%账户率，减BTC收益为5个百分点、减ETH收益为20个百分点；基准不能自行选择"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-BENCHMARK-002",
+    "title": "基准末日未收盘或缺起点时替代价格规则待确认",
+    "family": "benchmark_excess", "case_ids": ["GAP-003", "GAP-006"],
+    "inputs": {
+      "as_of": "2026-09-08T12:00:00Z",
+      "prices": [{"symbol": "BTCUSDT", "timestamp": "2026-09-07T00:00:00Z", "price": "100", "closed": true}, {"symbol": "BTCUSDT", "timestamp": "2026-09-08T00:00:00Z", "price": "105", "closed": true}, {"symbol": "BTCUSDT", "timestamp": "2026-09-08T12:00:00Z", "price": "120", "closed": false}],
+      "requested_start": "2026-09-01T00:00:00Z",
+      "contract_requirements": {"decision": "T16: 缺起点是否允许扩大/缩小范围、截止价类型及完整收盘规则", "why_no_unique_result": "请求起点缺失，不能用9/7当9/1；当日120不是已收盘价，不能冒充完整日基准", "known_invariants": ["没有批准替代规则时正式基准不可计算", "未来收盘价不得进入历史结果"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-VAR-001",
+    "title": "历史VaR分位插值与损失正负号待确认",
+    "family": "var_cvar", "case_ids": ["GAP-004"],
+    "inputs": {
+      "daily_pnl": [{"day": "2026-09-01", "pnl": "-100"}, {"day": "2026-09-02", "pnl": "-20"}, {"day": "2026-09-03", "pnl": "0"}, {"day": "2026-09-04", "pnl": "10"}, {"day": "2026-09-05", "pnl": "20"}],
+      "initial_capital": "1000", "candidate_confidence": ".8",
+      "contract_requirements": {"decision": "原型VaR/CVaR: 历史/参数法、置信度、分位插值、金额或比例、损失符号", "why_no_unique_result": "20%左尾最近秩可选-100，线性插值可为-36；再以损失正值或收益负值输出会不同；短样本是否足够也待定"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-VAR-002",
+    "title": "CVaR边界并列样本及多日持有期算法待确认",
+    "family": "var_cvar", "case_ids": ["GAP-004"],
+    "inputs": {
+      "daily_returns": [{"day": "2026-09-01", "value": "-.1"}, {"day": "2026-09-02", "value": "-.05"}, {"day": "2026-09-03", "value": "-.05"}, {"day": "2026-09-04", "value": ".02"}, {"day": "2026-09-05", "value": ".03"}],
+      "candidate_confidence": ".6", "holding_days": 2,
+      "contract_requirements": {"decision": "原型VaR/CVaR: 尾部阈值相等是否全纳入、尾部权重、两日重算还是sqrt时间缩放", "why_no_unique_result": "并列阈值样本的选取改变尾部均值，多日复合与平方根缩放也不等价，不能默认金融库参数"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-RSQUARED-001",
+    "title": "R方回归是否带截距及输入收益频率待确认",
+    "family": "r_squared", "case_ids": ["GAP-004"],
+    "inputs": {
+      "paired_returns": [{"timestamp": "2026-09-01T00:00:00Z", "benchmark": "0", "strategy": ".01"}, {"timestamp": "2026-09-02T00:00:00Z", "benchmark": ".01", "strategy": ".02"}, {"timestamp": "2026-09-03T00:00:00Z", "benchmark": ".02", "strategy": ".03"}],
+      "contract_requirements": {"decision": "原型R方: 回归带截距或过原点、相关系数平方或回归R2、输入频率", "why_no_unique_result": "序列y=x+.01在带截距回归R2为1，强制过原点并用中心化总平方和时得到不同值；定义必须命名"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-RSQUARED-002",
+    "title": "R方基准常数与时间缺口的不可计算样本规则待确认",
+    "family": "r_squared", "case_ids": ["GAP-004", "CALC-047"],
+    "inputs": {
+      "strategy_returns": [{"day": "2026-09-01", "value": ".01"}, {"day": "2026-09-02", "value": "-.01"}, {"day": "2026-09-03", "value": ".02"}],
+      "benchmark_returns": [{"day": "2026-09-01", "value": "0"}, {"day": "2026-09-03", "value": "0"}],
+      "contract_requirements": {"decision": "原型R方: 时间配对、最低样本数、常数基准/策略的返回状态", "why_no_unique_result": "基准常数导致相关定义分母为零，且缺9/2；不能补0并默认R2=0或1", "known_invariants": ["图表补零不能生成统计样本"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-STREAK-001",
+    "title": "平手是否打断连续盈利和亏损序列待确认",
+    "family": "consecutive_wins_losses", "case_ids": ["GAP-004"],
+    "inputs": {
+      "closed_trades": [{"id": "t1", "closed_at": "2026-09-01T01:00:00Z", "net_pnl": "10"}, {"id": "t2", "closed_at": "2026-09-01T02:00:00Z", "net_pnl": "0"}, {"id": "t3", "closed_at": "2026-09-01T03:00:00Z", "net_pnl": "20"}, {"id": "t4", "closed_at": "2026-09-01T04:00:00Z", "net_pnl": "-10"}, {"id": "t5", "closed_at": "2026-09-01T05:00:00Z", "net_pnl": "0"}, {"id": "t6", "closed_at": "2026-09-01T06:00:00Z", "net_pnl": "-20"}],
+      "contract_requirements": {"decision": "原型连胜亏/T06: 平手打断或忽略以及交易样本单位", "why_no_unique_result": "打断时最长连续盈利/亏损各1，忽略平手时各2，不能自行延续"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-STREAK-002",
+    "title": "同一时间闭合交易的次级排序影响最长连胜亏",
+    "family": "consecutive_wins_losses", "case_ids": ["GAP-004"],
+    "inputs": {
+      "closed_trades": [{"id": "a", "closed_at": "2026-09-01T01:00:00Z", "net_pnl": "10"}, {"id": "b", "closed_at": "2026-09-01T02:00:00Z", "net_pnl": "20"}, {"id": "c", "closed_at": "2026-09-01T02:00:00Z", "net_pnl": "-10"}, {"id": "d", "closed_at": "2026-09-01T03:00:00Z", "net_pnl": "-20"}],
+      "contract_requirements": {"decision": "原型连胜亏: 同时刻事件的稳定顺序、是否分运行段重置", "why_no_unique_result": "同刻b/c先后不同可得到++--或+-+-，最长连续次数不同；JSON数组顺序不能冒充业务顺序"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FLATDAYS-001",
+    "title": "日内短暂持仓是否使整日不算空仓待确认",
+    "family": "flat_days", "case_ids": ["GAP-004", "CALC-029"],
+    "inputs": {
+      "position_changes": [{"timestamp": "2026-09-01T00:00:00Z", "quantity": "0"}, {"timestamp": "2026-09-01T10:00:00Z", "quantity": "1"}, {"timestamp": "2026-09-01T10:05:00Z", "quantity": "0"}, {"timestamp": "2026-09-02T00:00:00Z", "quantity": "0"}],
+      "history_complete": true,
+      "contract_requirements": {"decision": "原型空仓天数/T02: 全日无持仓、日末空仓还是按空仓时长折算日数", "why_no_unique_result": "9/1日末空仓但日内有5分钟持仓，三种定义结果不同"}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-FLATDAYS-002",
+    "title": "缺仓位观测日是否中断最长空仓周期待确认",
+    "family": "flat_days", "case_ids": ["GAP-004", "CALC-047"],
+    "inputs": {
+      "daily_positions": [{"day": "2026-09-01", "complete": true, "positions": []}, {"day": "2026-09-02", "complete": false, "positions": null}, {"day": "2026-09-03", "complete": true, "positions": []}],
+      "contract_requirements": {"decision": "原型空仓统计/T17: 缺失日使全窗口不可算或只给可证明下界", "why_no_unique_result": "已知两个空仓日之间未知，不能声称连续3天空仓；输出null或已知天数加不完整状态需契约", "known_invariants": ["来源读取失败不是空持仓事实"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-RECOVERY-001",
+    "title": "重复触及同一谷底时回撤修复起点待确认",
+    "family": "drawdown_recovery", "case_ids": ["GAP-004", "CALC-019"],
+    "inputs": {
+      "series": [{"timestamp": "2026-09-01T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-02T00:00:00Z", "equity": "80"}, {"timestamp": "2026-09-03T00:00:00Z", "equity": "85"}, {"timestamp": "2026-09-05T00:00:00Z", "equity": "80"}, {"timestamp": "2026-09-08T00:00:00Z", "equity": "100"}],
+      "contract_requirements": {"decision": "原型回撤修复: 同一回撤段内并列最低点取首次还是最后一次及真实采样精度", "why_no_unique_result": "9/2与9/5同为最低80，至9/8恢复分别为6天或3天；并列谷底选择未明确", "known_invariants": ["原型描述谷底到重回前高，不用峰值起点偷换该字段", "没有真实重回前高的事实不得判已修复"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  },
+  {
+    "id": "FCP-RECOVERY-002",
+    "title": "Top5回撤修复平均的排序及未恢复事件处理待确认",
+    "family": "drawdown_recovery", "case_ids": ["GAP-004", "CALC-019"],
+    "inputs": {
+      "series": [{"timestamp": "2026-09-01T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-02T00:00:00Z", "equity": "80"}, {"timestamp": "2026-09-03T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-04T00:00:00Z", "equity": "95"}, {"timestamp": "2026-09-06T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-07T00:00:00Z", "equity": "90"}, {"timestamp": "2026-09-08T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-09T00:00:00Z", "equity": "98"}, {"timestamp": "2026-09-12T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-13T00:00:00Z", "equity": "85"}, {"timestamp": "2026-09-14T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-15T00:00:00Z", "equity": "99"}, {"timestamp": "2026-09-19T00:00:00Z", "equity": "100"}, {"timestamp": "2026-09-20T00:00:00Z", "equity": "70"}],
+      "as_of": "2026-09-21T00:00:00Z",
+      "contract_requirements": {"decision": "原型回撤修复: Top5按回撤深度或修复时长、未恢复段是否排除/截尾", "why_no_unique_result": "6个已恢复段按深度选Top5平均1.6天，按修复耗时选Top5平均2.2天；最后30%尚未恢复，不能当已完成样本", "known_invariants": ["不得虚构未来恢复时间", "每段峰谷必须按时间发生顺序"]}
+    },
+    "expected": {"status": "blocked_contract", "reason": "BLOCKED_CONTRACT"}
+  }
+]

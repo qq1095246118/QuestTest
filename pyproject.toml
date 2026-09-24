@@ -42,4 +42,6 @@ markers = [
     "factor4_calculation: Factor 4.0 calculation logic checks against the configured test MCP and database",
     "factor4_internal_calculation: formula mathematics and independent calculations; explicitly opt in",
     "factor4_technical: protocol/security/storage specialist checks; explicitly opt in",
+    "strategy_dashboard: Strategy Dashboard contract/live result cases",
+    "strategy_dashboard_formula: raw source injection and real formula calculation; requires test --live",
 ]

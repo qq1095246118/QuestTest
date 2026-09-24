@@ -1,0 +1,718 @@
+[
+  {
+    "id": "FM-PORTFOLIO-LIVE-001",
+    "title": "两账户原始基础金额逐项求和",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "400",
+      "wallet_balance": "400",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-002",
+    "title": "零权益和负权益账户保留计数并参与金额汇总",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "0",
+          "wallet_balance": "0",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "0",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "-10",
+          "wallet_balance": "-5",
+          "unrealized_pnl": "-5",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "-10",
+      "wallet_balance": "-5",
+      "unrealized_pnl": "-5",
+      "realized_pnl_gross": "-20",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-003",
+    "title": "多个全零账户返回完整零而非缺失",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "0",
+          "wallet_balance": "0",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "0",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "0",
+          "wallet_balance": "0",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "0",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "0",
+      "wallet_balance": "0",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-004",
+    "title": "大额与八位小数汇总保持后端精度",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "1000000000.12345678",
+          "wallet_balance": "999999999.12345677",
+          "unrealized_pnl": "1.00000001",
+          "realized_pnl_gross": "0.00000001",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "0.87654322",
+          "wallet_balance": "1.87654323",
+          "unrealized_pnl": "-1.00000001",
+          "realized_pnl_gross": "-0.00000002",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "1000000001.00000000",
+      "wallet_balance": "1000000001.00000000",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "-0.00000001",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-005",
+    "title": "一个账户权益缺失只使权益总额不完整",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": null,
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": null,
+      "wallet_balance": "400",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-006",
+    "title": "一个账户钱包缺失不污染权益与收益总额",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": null,
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "400",
+      "wallet_balance": null,
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-007",
+    "title": "一个账户未实现收益缺失不伪装完整零",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": null,
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "400",
+      "wallet_balance": "400",
+      "unrealized_pnl": null,
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-008",
+    "title": "一个账户已实现收益缺失不污染其他金额",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": null,
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "margin_equity": "400",
+      "wallet_balance": "400",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": null,
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-009",
+    "title": "账户成员引用重复时账户与金额只统计一次",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ],
+      "duplicate_members": true
+    },
+    "expected": {
+      "margin_equity": "400",
+      "wallet_balance": "400",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-010",
+    "title": "只选择第一个账户时排除其余账户金额",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ],
+      "selected_indexes": [
+        0
+      ]
+    },
+    "expected": {
+      "margin_equity": "100",
+      "wallet_balance": "90",
+      "unrealized_pnl": "10",
+      "realized_pnl_gross": "20",
+      "account_count": 1
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-011",
+    "title": "只选择第二个亏损账户时保留负收益",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ],
+      "selected_indexes": [
+        1
+      ]
+    },
+    "expected": {
+      "margin_equity": "300",
+      "wallet_balance": "310",
+      "unrealized_pnl": "-10",
+      "realized_pnl_gross": "-20",
+      "account_count": 1
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-012",
+    "title": "同一物理账户绑定多个策略时账户和金额只统计一次",
+    "family": "portfolio_source_amounts",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "profile": "deployed_raw_business_portfolio",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl_gross": "20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "300",
+          "wallet_balance": "310",
+          "unrealized_pnl": "-10",
+          "realized_pnl_gross": "-20",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ],
+      "duplicate_account_bindings": true
+    },
+    "expected": {
+      "margin_equity": "400",
+      "wallet_balance": "400",
+      "unrealized_pnl": "0",
+      "realized_pnl_gross": "0",
+      "account_count": 2
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-013",
+    "title": "不同本金账户按毛已实现总额除以净入金总额计算累计收益率",
+    "family": "portfolio_source_returns",
+    "case_ids": [
+      "CALC-006",
+      "CALC-050"
+    ],
+    "profile": "exchange_cumulative_realized_latest_net_deposit_v1",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "1000",
+          "wallet_balance": "1000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "10",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "10000",
+          "wallet_balance": "10000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "900",
+          "net_deposit": "10000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "account_count": 2,
+      "cumulative_return": "0.08272727"
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-014",
+    "title": "多账户正负毛收益抵消后累计收益率为零",
+    "family": "portfolio_source_returns",
+    "case_ids": [
+      "CALC-006",
+      "CALC-050"
+    ],
+    "profile": "exchange_cumulative_realized_latest_net_deposit_v1",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "1000",
+          "wallet_balance": "1000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "100",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "10000",
+          "wallet_balance": "10000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "-100",
+          "net_deposit": "10000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "account_count": 2,
+      "cumulative_return": "0"
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-015",
+    "title": "多账户整体亏损返回负累计收益率",
+    "family": "portfolio_source_returns",
+    "case_ids": [
+      "CALC-006",
+      "CALC-050"
+    ],
+    "profile": "exchange_cumulative_realized_latest_net_deposit_v1",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "1000",
+          "wallet_balance": "1000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "-100",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "10000",
+          "wallet_balance": "10000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "-450",
+          "net_deposit": "10000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "account_count": 2,
+      "cumulative_return": "-0.05"
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-016",
+    "title": "多账户真实零毛收益与正本金返回完整零收益率",
+    "family": "portfolio_source_returns",
+    "case_ids": [
+      "CALC-006",
+      "CALC-050"
+    ],
+    "profile": "exchange_cumulative_realized_latest_net_deposit_v1",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "1000",
+          "wallet_balance": "1000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "0",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "10000",
+          "wallet_balance": "10000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "0",
+          "net_deposit": "10000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "account_count": 2,
+      "cumulative_return": "0"
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-017",
+    "title": "一个账户毛收益缺失时组合收益率不能伪装完整值",
+    "family": "portfolio_source_returns",
+    "case_ids": [
+      "CALC-006",
+      "CALC-050"
+    ],
+    "profile": "exchange_cumulative_realized_latest_net_deposit_v1",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "1000",
+          "wallet_balance": "1000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "10",
+          "net_deposit": "1000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "10000",
+          "wallet_balance": "10000",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": null,
+          "net_deposit": "10000",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "account_count": 2,
+      "cumulative_return": null
+    }
+  },
+  {
+    "id": "FM-PORTFOLIO-LIVE-018",
+    "title": "组合净入金总额为零时累计收益率不可计算",
+    "family": "portfolio_source_returns",
+    "case_ids": [
+      "CALC-006",
+      "CALC-050"
+    ],
+    "profile": "exchange_cumulative_realized_latest_net_deposit_v1",
+    "inputs": {
+      "accounts": [
+        {
+          "margin_equity": "100",
+          "wallet_balance": "100",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "10",
+          "net_deposit": "0",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        },
+        {
+          "margin_equity": "100",
+          "wallet_balance": "100",
+          "unrealized_pnl": "0",
+          "realized_pnl_gross": "20",
+          "net_deposit": "0",
+          "commission_expense": "0",
+          "funding_pnl": "0",
+          "margin_used": "0"
+        }
+      ]
+    },
+    "expected": {
+      "account_count": 2,
+      "cumulative_return": null
+    }
+  }
+]

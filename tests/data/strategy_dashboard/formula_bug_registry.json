@@ -1,0 +1,34 @@
+[
+  {
+    "title": "波动率错误套用七天运行门槛",
+    "scenario_ids": ["FM-VOL-001", "FM-VOL-002", "FM-VOL-003", "FM-VOL-004", "FM-VOL-006", "FXT-VOL-001", "FXT-VOL-002"],
+    "representative_scenario": "FM-VOL-001",
+    "expected": "至少两个完整日收益即可计算独立年化波动率；样本不足和缺点分别给出其实际原因。",
+    "observed": "已有两个或三个完整日收益仍返回 null / INSUFFICIENT_DURATION；两个负例的真实原因也被此门槛掩盖。",
+    "evidence_report": "reports/quant-risk-formula-regression-20260923.md"
+  },
+  {
+    "title": "零波动率场景返回极大夏普比率",
+    "scenario_ids": ["FM-SHARPE-003"],
+    "representative_scenario": "FM-SHARPE-003",
+    "expected": "七个日收益完全相同，波动率为零，Sharpe 应不可计算。",
+    "observed": "返回 complete，Sharpe 为 12745380182745919.94502380。",
+    "evidence_report": "reports/quant-risk-formula-regression-20260923.md"
+  },
+  {
+    "title": "权益归零时回撤指标被标记为不可用",
+    "scenario_ids": ["FM-DRAWDOWN-004"],
+    "representative_scenario": "FM-DRAWDOWN-004",
+    "expected": "完整路径 100 → 0，峰值为正，当前和最大回撤均为 100%。",
+    "observed": "两项返回 null / NON_POSITIVE_NAV。",
+    "evidence_report": "reports/quant-risk-formula-regression-20260923.md"
+  },
+  {
+    "title": "区间净交易收益跨币种端点被直接相减",
+    "scenario_ids": ["FM-INTERVAL-009"],
+    "representative_scenario": "FM-INTERVAL-009",
+    "expected": "起点 USD、终点 USDT 且没有折算依据时，应拒绝直接相减。",
+    "observed": "直接计算 (200−100)−(20−10)，返回 complete / 90.00000000 USDT。",
+    "evidence_report": "reports/quant-capital-formula-regression-20260923.md"
+  }
+]

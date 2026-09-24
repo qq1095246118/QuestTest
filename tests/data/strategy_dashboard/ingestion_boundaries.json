@@ -1,0 +1,1962 @@
+{
+  "schema_version": 1,
+  "scope": "profit_sharing_platform_source_ingestion",
+  "status": "DESIGNED_NOT_INJECTED",
+  "clock": "2026-09-20T10:02:00Z",
+  "description": "可控合成数据；此逻辑结构不是产品请求Schema或真实API返回。source_responses是按顺序投递给平台上游读取边界的输入，expected独立描述平台输出应满足的业务断言。",
+  "injection_contract": {
+    "target": "isolated_upstream_fixture_or_test_staging_consumed_by_real_ingestion",
+    "must_confirm": [
+      "实际源字段和逻辑字段的映射",
+      "测试部署读取这些数据的注入点",
+      "接入触发方式和完成条件",
+      "平台查询字段映射和分页规则"
+    ],
+    "not_valid_evidence": [
+      "仅在本地处理两份合成JSON",
+      "直接写平台最终结果再读取",
+      "仅检查设计文档或HTTP200"
+    ],
+    "cleanup": "仅清理本次创建并登记归属的测试资源；保留既有历史数据"
+  },
+  "cases": [
+    {
+      "fixture_id": "SD-101-ZERO",
+      "parent_case_id": "SD-101",
+      "title": "完整资金数据中的真实零值",
+      "group": "字段值边界",
+      "input_summary": "完整账户所有金额为0",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "0",
+                "realized_profit": "0",
+                "unrealized_profit": "0",
+                "cumulative_fee": "0",
+                "funding_pnl": "0"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "fields": {
+          "wallet_balance": "0",
+          "realized_profit": "0",
+          "unrealized_profit": "0",
+          "cumulative_fee": "0",
+          "funding_pnl": "0"
+        },
+        "assertions": [
+          "字段保持可用的零值，不因布尔判断被当成未获取",
+          "账户身份仍保留"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-MISSING",
+      "parent_case_id": "SD-101",
+      "title": "钱包余额字段缺失",
+      "group": "字段值边界",
+      "input_summary": "移除wallet_balance键，其他字段保留",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "unavailable_fields": [
+          "wallet_balance"
+        ],
+        "preserved_fields": {
+          "realized_profit": "100.00000000",
+          "unrealized_profit": "20.00000000"
+        },
+        "assertions": [
+          "缺失值不填0",
+          "已知字段不被连带清空"
+        ]
+      },
+      "required_contract": [
+        "确认字段/账户/批次的提交粒度。本场景的有效部分保留断言适用于正式部分成功契约；若正式规则为整行或整批拒绝，须先改为该唯一契约对应的预期，不能将其直接判为Bug或同时接受相反结果"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-NULL",
+      "parent_case_id": "SD-101",
+      "title": "已实现收益显式为空",
+      "group": "字段值边界",
+      "input_summary": "realized_profit=null，钱包余额有效",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": null,
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "unavailable_fields": [
+          "realized_profit"
+        ],
+        "preserved_fields": {
+          "wallet_balance": "1000.00000000"
+        },
+        "assertions": [
+          "null不能转换为0或使用旧值冒充本次成功"
+        ]
+      },
+      "required_contract": [
+        "确认字段/账户/批次的提交粒度。本场景的有效部分保留断言适用于正式部分成功契约；若正式规则为整行或整批拒绝，须先改为该唯一契约对应的预期，不能将其直接判为Bug或同时接受相反结果"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-INVALID",
+      "parent_case_id": "SD-101",
+      "title": "非数值金额不得转为有效零值",
+      "group": "字段值边界",
+      "input_summary": "realized_profit为非数值字符串",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "not-a-number",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "非法金额不能成为有效收益0",
+          "不得将非法值标记为正常数值成功"
+        ]
+      },
+      "required_contract": [
+        "字段类型及非法记录处理方式；只对不得伪造有效0作固定断言"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-PRECISION",
+      "parent_case_id": "SD-101",
+      "title": "接入原值保留允许的有效小数",
+      "group": "字段值边界",
+      "input_summary": "八位小数金额以及正负最小单位",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "12345.12345678",
+                "realized_profit": "0.00000001",
+                "unrealized_profit": "-0.00000001",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "fields": {
+          "wallet_balance": "12345.12345678",
+          "realized_profit": "0.00000001",
+          "unrealized_profit": "-0.00000001"
+        },
+        "assertions": [
+          "接入过程不提前按页面展示规则截断或格式化，保留源契约允许的有效精度"
+        ]
+      },
+      "required_contract": [
+        "确认被测字段支持8位小数；若精度不同需按真实字段末位另建变体，不能硬判超精度输入"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-102-PAY",
+      "parent_case_id": "SD-102",
+      "title": "支付资金费保留负号",
+      "group": "字段值边界",
+      "input_summary": "正支出手续费与负资金费",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-0.00000001"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "fields": {
+          "funding_pnl": "-0.00000001",
+          "cumulative_fee": "3.00000000"
+        },
+        "assertions": [
+          "支付资金费保留负号",
+          "费用字段不互换"
+        ]
+      },
+      "required_contract": [
+        "字段允许精度"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-102-RECEIVE",
+      "parent_case_id": "SD-102",
+      "title": "收到资金费保留正号",
+      "group": "字段值边界",
+      "input_summary": "正支出手续费与正资金费",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "fields": {
+          "funding_pnl": "2.00000000",
+          "cumulative_fee": "3.00000000"
+        },
+        "assertions": [
+          "收到资金费不被反向扣除或写入手续费字段"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-105-COLLISION",
+      "parent_case_id": "SD-105",
+      "title": "外部运行与本地策略编号碰撞",
+      "group": "身份和关联",
+      "input_summary": "外部运行ID恰好等于另一策略本地ID",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "strategies": [
+              {
+                "local_strategy_id": "101",
+                "external_run_id": "202"
+              },
+              {
+                "local_strategy_id": "202",
+                "external_run_id": "303"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z",
+                "external_run_id": "202"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "event_strategy": {
+          "e1": "101"
+        },
+        "assertions": [
+          "外部运行202的事件归本地策略101，不能归本地策略202"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-105-NO-KEY",
+      "parent_case_id": "SD-105",
+      "title": "缺少稳定身份不按名称猜测关联",
+      "group": "身份和关联",
+      "input_summary": "同名A/B账户，加一条只有名称、没有账户ID的事件",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              },
+              {
+                "account_id": "fixture_account_b",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "2000.00000000",
+                "realized_profit": "200.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_name": "测试账户",
+                "amount": "10",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "缺少身份的记录不能随意归到A或B",
+          "不能修改任一已确认账户的资金事实"
+        ]
+      },
+      "required_contract": [
+        "未匹配记录的保留或拒绝方式"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-106-SAME-NAME",
+      "parent_case_id": "SD-106",
+      "title": "同名策略的不同来源金额保持归属",
+      "group": "身份和关联",
+      "input_summary": "同名策略分别产生10和20的收益事件",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "strategies": [
+              {
+                "local_strategy_id": "s1",
+                "strategy_name": "同名策略",
+                "external_run_id": "r1"
+              },
+              {
+                "local_strategy_id": "s2",
+                "strategy_name": "同名策略",
+                "external_run_id": "r2"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z",
+                "external_run_id": "r1"
+              },
+              {
+                "event_id": "e2",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "20",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z",
+                "external_run_id": "r2"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "event_strategy": {
+          "e1": "s1",
+          "e2": "s2"
+        },
+        "assertions": [
+          "按稳定ID核对事实，不按名称跨策略串数据",
+          "接口如合法按名称聚合，底层身份和各自明细仍应可追溯"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-107-SAME-NAME",
+      "parent_case_id": "SD-107",
+      "title": "同名账户在不同交易所下保持隔离",
+      "group": "身份和关联",
+      "input_summary": "同名账户不同交易所，钱包分别1000和2000",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              },
+              {
+                "account_id": "fixture_account_b",
+                "account_name": "测试账户",
+                "exchange": "exchange_two",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "2000.00000000",
+                "realized_profit": "200.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "account_ids": [
+          "fixture_account_a",
+          "fixture_account_b"
+        ],
+        "wallet_by_account": {
+          "fixture_account_a": "1000.00000000",
+          "fixture_account_b": "2000.00000000"
+        },
+        "assertions": [
+          "两个账户不按名称合并，不串资金"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-108-MULTI-STRATEGY",
+      "parent_case_id": "SD-108",
+      "title": "共享账户资金事实不重复接入",
+      "group": "身份和关联",
+      "input_summary": "一个账户，两条策略绑定，同一收益事件",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ],
+            "bindings": [
+              {
+                "account_id": "fixture_account_a",
+                "strategy_id": "s1"
+              },
+              {
+                "account_id": "fixture_account_a",
+                "strategy_id": "s2"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "account_count": 1,
+        "event_count": 1,
+        "binding_count": 2,
+        "assertions": [
+          "共享关系完整保留",
+          "同一账户资金事实不能因两条绑定重复入库；本例不要求独立策略绩效"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-109-MULTI-ACCOUNT",
+      "parent_case_id": "SD-109",
+      "title": "多账户接入保留各自金额与关系",
+      "group": "身份和关联",
+      "input_summary": "一策略绑定A/B两个账户",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              },
+              {
+                "account_id": "fixture_account_b",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "2000.00000000",
+                "realized_profit": "200.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ],
+            "bindings": [
+              {
+                "account_id": "fixture_account_a",
+                "strategy_id": "s1"
+              },
+              {
+                "account_id": "fixture_account_b",
+                "strategy_id": "s1"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "account_count": 2,
+        "binding_count": 2,
+        "wallet_by_account": {
+          "fixture_account_a": "1000.00000000",
+          "fixture_account_b": "2000.00000000"
+        },
+        "assertions": [
+          "两账户都被接入",
+          "单条绑定不能覆盖另一个账户"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-110-REPLAY",
+      "parent_case_id": "SD-110",
+      "title": "完全相同的源批次重复投递",
+      "group": "传输去重",
+      "input_summary": "同一输入批次投递两次",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              },
+              {
+                "event_id": "e2",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              },
+              {
+                "event_id": "e2",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "event_ids": [
+          "e1",
+          "e2"
+        ],
+        "event_count": 2,
+        "assertions": [
+          "真实同步两次后仍只有两条事实；只重复GET不算执行此场景"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-110-SAME-VALUE",
+      "parent_case_id": "SD-110",
+      "title": "不同事件同金额同时间不得误去重",
+      "group": "传输去重",
+      "input_summary": "两个不同业务ID具有相同金额和时间",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              },
+              {
+                "event_id": "e2",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "event_ids": [
+          "e1",
+          "e2"
+        ],
+        "event_count": 2,
+        "assertions": [
+          "不能仅用金额和时间作为去重键"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-110-CROSS-ACCOUNT",
+      "parent_case_id": "SD-110",
+      "title": "不同账户局部事件编号相同",
+      "group": "传输去重",
+      "input_summary": "A和B均有局部事件ID local_e1",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "local_e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              },
+              {
+                "event_id": "local_e1",
+                "account_id": "fixture_account_b",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "event_keys": [
+          [
+            "fixture_account_a",
+            "local_e1"
+          ],
+          [
+            "fixture_account_b",
+            "local_e1"
+          ]
+        ],
+        "event_count": 2,
+        "assertions": [
+          "不同账户内合法不同事实不得互相覆盖"
+        ]
+      },
+      "required_contract": [
+        "来源事件ID作用域是否为账户内唯一；全局唯一源应更换为合法命名空间碰撞样本"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-110-CROSS-PAGE",
+      "parent_case_id": "SD-110",
+      "title": "来源分页边界重复记录",
+      "group": "传输去重",
+      "input_summary": "第一页e1/e2，第二页e2/e3",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              },
+              {
+                "event_id": "e2",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ],
+            "next_cursor": "page_2"
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "e2",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              },
+              {
+                "event_id": "e3",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ],
+            "next_cursor": null
+          }
+        }
+      ],
+      "expected": {
+        "event_ids": [
+          "e1",
+          "e2",
+          "e3"
+        ],
+        "event_count": 3,
+        "assertions": [
+          "拉完两页后无遗漏无重复"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-111-UNKNOWN",
+      "parent_case_id": "SD-111",
+      "title": "未知运行枚举不能映射为停止",
+      "group": "状态变化",
+      "input_summary": "运行状态为未登记枚举",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "runs": [
+              {
+                "run_id": "r1",
+                "account_id": "fixture_account_a",
+                "status": "new_unrecognized_status"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "不能将未知值转换为已停止或正在运行",
+          "结果明确为未知/不可识别"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-111-RECOVER",
+      "parent_case_id": "SD-111",
+      "title": "未知状态恢复运行后解除未知",
+      "group": "状态变化",
+      "input_summary": "同一运行先unknown，后running",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "runs": [
+              {
+                "run_id": "r1",
+                "status": "unknown",
+                "observed_at": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "runs": [
+              {
+                "run_id": "r1",
+                "status": "running",
+                "observed_at": "2026-09-20T10:01:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "run_status": {
+          "r1": "running"
+        },
+        "assertions": [
+          "当前已确认运行状态不被旧unknown覆盖",
+          "不新增第二个运行实体"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-114-UNBOUND",
+      "parent_case_id": "SD-114",
+      "title": "解绑后重放历史事件仍归原关系",
+      "group": "状态变化",
+      "input_summary": "接入历史事件后结束绑定，再重放历史事件",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "bindings": [
+              {
+                "binding_id": "b1",
+                "account_id": "fixture_account_a",
+                "strategy_id": "s1",
+                "valid_from": "2026-09-20T09:00:00Z",
+                "valid_to": null
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "bindings": [
+              {
+                "binding_id": "b1",
+                "account_id": "fixture_account_a",
+                "strategy_id": "s1",
+                "valid_from": "2026-09-20T09:00:00Z",
+                "valid_to": "2026-09-20T10:01:00Z"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "event_count": 1,
+        "assertions": [
+          "原历史事件不删除不重复",
+          "历史事实不能被当成新运行或新绑定的收益"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-115-STOPPED-POSITION",
+      "parent_case_id": "SD-115",
+      "title": "运行停止后持仓保持不变",
+      "group": "状态变化",
+      "input_summary": "同一持仓从running到stopped始终存在",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "runs": [
+              {
+                "run_id": "r1",
+                "status": "running"
+              }
+            ],
+            "positions": [
+              {
+                "position_id": "p1",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "long",
+                "quantity": "1.00000000",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "runs": [
+              {
+                "run_id": "r1",
+                "status": "stopped"
+              }
+            ],
+            "positions": [
+              {
+                "position_id": "p1",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "long",
+                "quantity": "1.00000000",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "position_ids": [
+          "p1"
+        ],
+        "fields": {
+          "quantity": "1.00000000"
+        },
+        "assertions": [
+          "停止事件不能生成平仓事实",
+          "持仓数量不能因停止被清零"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-116-NULL-PRICE",
+      "parent_case_id": "SD-116",
+      "title": "强平价缺失不挪用其他价格",
+      "group": "持仓边界",
+      "input_summary": "开仓/标记价有效，强平价null",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "positions": [
+              {
+                "position_id": "p1",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "long",
+                "quantity": "1.00000000",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000",
+                "liquidation_price": null
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "unavailable_fields": [
+          "liquidation_price"
+        ],
+        "preserved_fields": {
+          "entry_price": "50000",
+          "mark_price": "51000"
+        },
+        "assertions": [
+          "强平价缺失不使用标记价或开仓价顶替"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-117-HEDGE",
+      "parent_case_id": "SD-117",
+      "title": "同合约多空仓位同时存在",
+      "group": "持仓边界",
+      "input_summary": "同账户同合约等量多空仓位",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "positions": [
+              {
+                "position_id": "long_btc",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "long",
+                "quantity": "1",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000"
+              },
+              {
+                "position_id": "short_btc",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "short",
+                "quantity": "1",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "position_ids": [
+          "long_btc",
+          "short_btc"
+        ],
+        "position_count": 2,
+        "assertions": [
+          "两条真实非零仓位不能因多空抵消而被当作完整空仓"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-118-EMPTY",
+      "parent_case_id": "SD-118",
+      "title": "完整空持仓集合",
+      "group": "持仓边界",
+      "input_summary": "来源成功且positions=[]",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "account_id": "fixture_account_a",
+            "positions": []
+          }
+        }
+      ],
+      "expected": {
+        "position_count": 0,
+        "assertions": [
+          "完整空集合可明确表示空仓"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-118-ZERO",
+      "parent_case_id": "SD-118",
+      "title": "零数量仓位不算有效持仓",
+      "group": "持仓边界",
+      "input_summary": "来源成功且包含数量为0的仓位",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "positions": [
+              {
+                "position_id": "p0",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "long",
+                "quantity": "0",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "nonzero_position_count": 0,
+        "assertions": [
+          "零数量记录不能当成非零持仓；原始明细是否保留遵循接口定义"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-118-MISSING",
+      "parent_case_id": "SD-118",
+      "title": "持仓读取失败不能成为完整空仓",
+      "group": "持仓边界",
+      "input_summary": "资金成功，持仓来源失败且没有positions键",
+      "source_responses": [
+        {
+          "source_status": "partial",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          },
+          "failures": [
+            {
+              "resource": "positions",
+              "account_id": "fixture_account_a",
+              "reason": "source_read_failed"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "unavailable_resources": [
+          "positions"
+        ],
+        "preserved_fields": {
+          "wallet_balance": "1000.00000000"
+        },
+        "assertions": [
+          "不得报完整空仓",
+          "有效账户资金不随持仓失败清零"
+        ]
+      },
+      "required_contract": [
+        "确认字段/账户/批次的提交粒度。本场景的有效部分保留断言适用于正式部分成功契约；若正式规则为整行或整批拒绝，须先改为该唯一契约对应的预期，不能将其直接判为Bug或同时接受相反结果"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-119-OUT-OF-ORDER",
+      "parent_case_id": "SD-119",
+      "title": "成交先到订单后到",
+      "group": "订单成交边界",
+      "input_summary": "先投递f1，再补o1并重放f1",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "fills": [
+              {
+                "fill_id": "f1",
+                "order_id": "o1",
+                "account_id": "fixture_account_a",
+                "quantity": "1",
+                "price": "100"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "orders": [
+              {
+                "order_id": "o1",
+                "account_id": "fixture_account_a",
+                "requested_quantity": "2"
+              }
+            ],
+            "fills": [
+              {
+                "fill_id": "f1",
+                "order_id": "o1",
+                "account_id": "fixture_account_a",
+                "quantity": "1",
+                "price": "100"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "fill_count": 1,
+        "fill_order": {
+          "f1": "o1"
+        },
+        "assertions": [
+          "关系齐全后成交只接入一次且关联正确",
+          "缺父记录阶段不能猜到其他订单"
+        ]
+      },
+      "required_contract": [
+        "缺父记录时采用暂存、拒绝后重放或其他正式机制"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-119-MISSING-PARENT",
+      "parent_case_id": "SD-119",
+      "title": "不存在的订单编号不串到最近订单",
+      "group": "订单成交边界",
+      "input_summary": "有效订单o1与引用o_missing的成交",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "orders": [
+              {
+                "order_id": "o1",
+                "account_id": "fixture_account_a"
+              }
+            ],
+            "fills": [
+              {
+                "fill_id": "f1",
+                "order_id": "o_missing",
+                "account_id": "fixture_account_a",
+                "quantity": "1",
+                "price": "100"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "f1不能关联到o1",
+          "缺关联事实不能静默当作完整成功链路"
+        ]
+      },
+      "required_contract": [
+        "缺关联记录的处理方式"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-120-PARTIAL",
+      "parent_case_id": "SD-120",
+      "title": "部分成交数量不采用委托数量",
+      "group": "订单成交边界",
+      "input_summary": "委托10，实际成交3",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "orders": [
+              {
+                "order_id": "o1",
+                "account_id": "fixture_account_a",
+                "requested_quantity": "10",
+                "filled_quantity": "3",
+                "status": "partially_filled"
+              }
+            ],
+            "fills": [
+              {
+                "fill_id": "f1",
+                "order_id": "o1",
+                "quantity": "3",
+                "price": "100"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "order_fields": {
+          "requested_quantity": "10",
+          "filled_quantity": "3",
+          "status": "partially_filled"
+        },
+        "assertions": [
+          "实际成交数量为3，不误写为10或完全成交"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-120-OPEN",
+      "parent_case_id": "SD-120",
+      "title": "尚未平仓成交不生成虚构交易结果",
+      "group": "订单成交边界",
+      "input_summary": "只有开仓成交，没有平仓事实",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "fills": [
+              {
+                "fill_id": "f1",
+                "order_id": "o1",
+                "account_id": "fixture_account_a",
+                "quantity": "1",
+                "price": "50000",
+                "effect": "open",
+                "symbol": "BTCUSDT"
+              }
+            ],
+            "positions": [
+              {
+                "position_id": "p1",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "side": "long",
+                "quantity": "1.00000000",
+                "quantity_unit": "coin",
+                "contract_multiplier": "1",
+                "entry_price": "50000",
+                "mark_price": "51000"
+              }
+            ],
+            "closed_trades": [],
+            "orders": [
+              {
+                "order_id": "o1",
+                "account_id": "fixture_account_a",
+                "symbol": "BTCUSDT",
+                "requested_quantity": "1",
+                "filled_quantity": "1",
+                "status": "filled",
+                "effect": "open"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "closed_trade_count": 0,
+        "assertions": [
+          "开仓成交保留",
+          "未有平仓事实时不生成亏损或平手的已闭合交易记录"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-STALE",
+      "parent_case_id": "SD-101",
+      "title": "新快照之后抵达旧快照",
+      "group": "时点和更新",
+      "input_summary": "先10:01的钱包1100，后到10:00的钱包1000",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:01:00Z",
+                "wallet_balance": "1100",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "不得把10:00的钱包标成10:01的新值",
+          "若契约按observed_at选择最新快照，当前应保持1100；历史旧快照可以保留"
+        ]
+      },
+      "required_contract": [
+        "最新快照的排序键和修订优先级；确认后才能断言最终选值"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-FIELD-TIMES",
+      "parent_case_id": "SD-101",
+      "title": "不同字段采集时间不伪造一致",
+      "group": "时点和更新",
+      "input_summary": "钱包和浮盈来自相差30秒的采集时点",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000",
+                "field_observed_at": {
+                  "wallet_balance": "2026-09-20T10:00:00Z",
+                  "unrealized_profit": "2026-09-20T09:59:30Z"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "已公开的字段采集时间不得伪造"
+        ]
+      },
+      "required_contract": [
+        "字段对齐策略、允许时差和接口实际公开的时点字段；关联既有DATA-122"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-PARTIAL-FAILURE",
+      "parent_case_id": "SD-101",
+      "title": "多账户来源中只有部分成功",
+      "group": "批次完整性",
+      "input_summary": "请求A/B，A成功B失败",
+      "source_responses": [
+        {
+          "source_status": "partial",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          },
+          "requested_account_ids": [
+            "fixture_account_a",
+            "fixture_account_b"
+          ],
+          "failures": [
+            {
+              "account_id": "fixture_account_b",
+              "reason": "source_read_failed"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "expected_counts": {
+          "requested": 2,
+          "successful": 1,
+          "failed": 1
+        },
+        "assertions": [
+          "A的有效值保留",
+          "B失败不能用A数据或零值冒充读取成功",
+          "结果不能标全量成功"
+        ]
+      },
+      "required_contract": [
+        "确认字段/账户/批次的提交粒度。本场景的有效部分保留断言适用于正式部分成功契约；若正式规则为整行或整批拒绝，须先改为该唯一契约对应的预期，不能将其直接判为Bug或同时接受相反结果"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-TRUNCATED",
+      "parent_case_id": "SD-101",
+      "title": "只取得第一页不能当成完整批次",
+      "group": "批次完整性",
+      "input_summary": "第一页成功且声明有后页，第二页读取失败",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ],
+            "next_cursor": "page_2"
+          }
+        },
+        {
+          "source_status": "error",
+          "request_cursor": "page_2",
+          "reason": "source_read_failed"
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "结果不能声明完整接入",
+          "未取得第二页不等于第二页账户已删除"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-NULL-RECOVERY",
+      "parent_case_id": "SD-101",
+      "title": "资金字段缺失后恢复有效值",
+      "group": "时点和更新",
+      "input_summary": "收益先null，后恢复125",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": null,
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:01:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "125.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "fields": {
+          "realized_profit": "125.00000000"
+        },
+        "assertions": [
+          "当前已恢复字段不能继续沿用旧缺失状态"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-FUTURE",
+      "parent_case_id": "SD-101",
+      "title": "未来时间快照不改写真实采集时间",
+      "group": "时点和更新",
+      "input_summary": "测试时钟固定9月20日10:02，快照时间9月21日10:00",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-21T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "assertions": [
+          "不得将未来来源时间静默改写成测试当前时间并宣称是当前采集",
+          "是否拒收以及允许时钟偏差按正式规则判断"
+        ]
+      },
+      "required_contract": [
+        "未来时间和允许时钟偏差规则；本例不验证分润/告警触发"
+      ],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-101-ALL-FAILURE",
+      "parent_case_id": "SD-101",
+      "title": "全部账户来源失败不等于账户清空",
+      "group": "批次完整性",
+      "input_summary": "完整基线后A/B同时读取失败",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              },
+              {
+                "account_id": "fixture_account_b",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "2000.00000000",
+                "realized_profit": "200.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "error",
+          "requested_account_ids": [
+            "fixture_account_a",
+            "fixture_account_b"
+          ],
+          "failures": [
+            {
+              "account_id": "fixture_account_a",
+              "reason": "source_read_failed"
+            },
+            {
+              "account_id": "fixture_account_b",
+              "reason": "source_read_failed"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "expected_counts": {
+          "requested": 2,
+          "successful": 0,
+          "failed": 2
+        },
+        "assertions": [
+          "全部失败不能包装成完整空账户集合",
+          "保留历史或返回不可用遵循接口规则，不能把历史数据冒充本次成功"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    },
+    {
+      "fixture_id": "SD-107-RENAME",
+      "parent_case_id": "SD-107",
+      "title": "账户改名保持原身份和历史事实",
+      "group": "身份和关联",
+      "input_summary": "账户ID不变，改名后重放同一事件",
+      "source_responses": [
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "accounts": [
+              {
+                "account_id": "fixture_account_a",
+                "account_name": "改名后的测试账户",
+                "exchange": "exchange_one",
+                "environment": "sandbox",
+                "currency": "USDT",
+                "observed_at": "2026-09-20T10:00:00Z",
+                "wallet_balance": "1000.00000000",
+                "realized_profit": "100.00000000",
+                "unrealized_profit": "20.00000000",
+                "cumulative_fee": "3.00000000",
+                "funding_pnl": "-2.00000000"
+              }
+            ],
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "event_type": "realized_profit",
+                "amount": "10.00000000",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "account_count": 1,
+        "event_count": 1,
+        "account_id": "fixture_account_a",
+        "assertions": [
+          "名称变化不生成新账户",
+          "旧事实仍归同一稳定身份"
+        ]
+      },
+      "required_contract": [],
+      "execution_status": "DESIGNED_NOT_INJECTED"
+    }
+  ]
+}

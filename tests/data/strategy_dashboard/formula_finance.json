@@ -1,0 +1,6708 @@
+[
+  {
+    "id": "FM-WALLET-001",
+    "title": "正浮盈从权益扣回钱包",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001"
+    ],
+    "inputs": {
+      "E": "12240",
+      "U": "250"
+    },
+    "expected": {
+      "status": "ok",
+      "wallet": "11990"
+    }
+  },
+  {
+    "id": "FM-WALLET-002",
+    "title": "负浮盈还原钱包",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001",
+      "CALC-004"
+    ],
+    "inputs": {
+      "E": "9750",
+      "U": "-250"
+    },
+    "expected": {
+      "status": "ok",
+      "wallet": "10000"
+    }
+  },
+  {
+    "id": "FM-WALLET-003",
+    "title": "零权益零浮盈保留真实零",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001"
+    ],
+    "inputs": {
+      "E": "0",
+      "U": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "wallet": "0"
+    }
+  },
+  {
+    "id": "FM-WALLET-004",
+    "title": "高精度余额不经过浮点运算",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001",
+      "CALC-044"
+    ],
+    "inputs": {
+      "E": "12345678901234567890.12345678",
+      "U": "0.00000001"
+    },
+    "expected": {
+      "status": "ok",
+      "wallet": "12345678901234567890.12345677"
+    }
+  },
+  {
+    "id": "FM-WALLET-005",
+    "title": "浮盈缺失不能当零",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001",
+      "CALC-048"
+    ],
+    "inputs": {
+      "E": "100"
+    },
+    "expected": {
+      "status": "unavailable",
+      "wallet": null
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-001",
+    "title": "合格转入减转出",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "id": "a",
+          "direction": "in",
+          "amount": "12000",
+          "qualified": true
+        },
+        {
+          "id": "b",
+          "direction": "out",
+          "amount": "1000",
+          "qualified": true
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "11000"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-002",
+    "title": "非合格资金事件不计入净入金",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "id": "a",
+          "direction": "in",
+          "amount": "12000",
+          "qualified": true
+        },
+        {
+          "id": "b",
+          "direction": "out",
+          "amount": "1000",
+          "qualified": true
+        },
+        {
+          "id": "c",
+          "direction": "in",
+          "amount": "7000",
+          "qualified": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "11000"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-003",
+    "title": "重复资金事件只计一次",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "id": "a",
+          "direction": "in",
+          "amount": "100",
+          "qualified": true
+        },
+        {
+          "id": "a",
+          "direction": "in",
+          "amount": "100",
+          "qualified": true
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "100"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-004",
+    "title": "净转出保留负值",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "id": "a",
+          "direction": "in",
+          "amount": "20",
+          "qualified": true
+        },
+        {
+          "id": "b",
+          "direction": "out",
+          "amount": "30",
+          "qualified": true
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "-10"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-005",
+    "title": "没有资金事件返回零",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {
+      "events": []
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "0"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-006",
+    "title": "缺失资金数据集合不能伪造零",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {},
+    "expected": {
+      "status": "unavailable",
+      "net_deposit": null
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-007",
+    "title": "只统计选定账户和半开区间",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002",
+      "CALC-010"
+    ],
+    "inputs": {
+      "account_id": "a",
+      "window": {
+        "from": "2026-09-01T00:00:00Z",
+        "to": "2026-09-02T00:00:00Z"
+      },
+      "events": [
+        {
+          "id": "a",
+          "direction": "in",
+          "amount": "100",
+          "qualified": true,
+          "account_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "direction": "out",
+          "amount": "40",
+          "qualified": true,
+          "account_id": "a",
+          "timestamp": "2026-09-02T00:00:00Z"
+        },
+        {
+          "id": "c",
+          "direction": "in",
+          "amount": "900",
+          "qualified": true,
+          "account_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "100"
+    }
+  },
+  {
+    "id": "FM-RETURN-001",
+    "title": "正累计收益按净入金计算",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-006"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_return": "0.1"
+    }
+  },
+  {
+    "id": "FM-RETURN-002",
+    "title": "负累计收益保留符号",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-007"
+    ],
+    "inputs": {
+      "G": "-1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_return": "-0.1"
+    }
+  },
+  {
+    "id": "FM-RETURN-003",
+    "title": "零收益与不可计算分开",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-007"
+    ],
+    "inputs": {
+      "G": "0",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_return": "0"
+    }
+  },
+  {
+    "id": "FM-RETURN-004",
+    "title": "净入金为零不可计算",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-008"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "0",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "unavailable",
+      "cumulative_return": null
+    }
+  },
+  {
+    "id": "FM-RETURN-005",
+    "title": "负净入金不可计算",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-008"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "-1",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "unavailable",
+      "cumulative_return": null
+    }
+  },
+  {
+    "id": "FM-RETURN-006",
+    "title": "缺失净入金不可计算",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-008"
+    ],
+    "inputs": {
+      "G": "100"
+    },
+    "expected": {
+      "status": "unavailable",
+      "cumulative_return": null
+    }
+  },
+  {
+    "id": "FM-RETURN-007",
+    "title": "多账户汇总收益率须先确认重算口径",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "inputs": {
+      "accounts": [
+        {
+          "id": "a",
+          "G": "100",
+          "D": "1000"
+        },
+        {
+          "id": "b",
+          "G": "100",
+          "D": "9000"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-RETURN-008",
+    "title": "累计收益不扣清算或计费基准",
+    "family": "cumulative_return",
+    "case_ids": [
+      "CALC-006",
+      "CALC-034"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "900",
+      "Gclear": "800",
+      "C": "77",
+      "F": "-22",
+      "U": "800"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_return": "0.1"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-001",
+    "title": "费用和资金费取区间增量",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-005",
+      "CALC-009"
+    ],
+    "inputs": {
+      "start": {
+        "G": "500",
+        "C": "50",
+        "F": "-10"
+      },
+      "end": {
+        "G": "1100",
+        "C": "80",
+        "F": "-30"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "interval_net_profit": "550"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-002",
+    "title": "收入资金费增加净收益",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-005"
+    ],
+    "inputs": {
+      "start": {
+        "G": "500",
+        "C": "50",
+        "F": "10"
+      },
+      "end": {
+        "G": "1100",
+        "C": "80",
+        "F": "30"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "interval_net_profit": "590"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-003",
+    "title": "只有入出金和浮盈变化不制造交易收益",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-003",
+      "CALC-004"
+    ],
+    "inputs": {
+      "start": {
+        "G": "500",
+        "C": "50",
+        "F": "10",
+        "D": "1000",
+        "U": "100"
+      },
+      "end": {
+        "G": "500",
+        "C": "50",
+        "F": "10",
+        "D": "3000",
+        "U": "900"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "interval_net_profit": "0"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-004",
+    "title": "手续费足以使净收益为负",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-009"
+    ],
+    "inputs": {
+      "start": {
+        "G": "0",
+        "C": "0",
+        "F": "0"
+      },
+      "end": {
+        "G": "10",
+        "C": "20",
+        "F": "-5"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "interval_net_profit": "-15"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-005",
+    "title": "缺起点费用不能当累计费用增量",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-009"
+    ],
+    "inputs": {
+      "start": {
+        "G": "0",
+        "F": "0"
+      },
+      "end": {
+        "G": "10",
+        "C": "20",
+        "F": "0"
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "interval_net_profit": null
+    }
+  },
+  {
+    "id": "FM-INTERVAL-006",
+    "title": "事件起点计入终点排除并去重",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-010"
+    ],
+    "inputs": {
+      "window": {
+        "from": "2026-09-01T00:00:00Z",
+        "to": "2026-09-02T00:00:00Z"
+      },
+      "events": [
+        {
+          "id": "a",
+          "kind": "G",
+          "amount": "100",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "a",
+          "kind": "G",
+          "amount": "100",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "kind": "C",
+          "amount": "10",
+          "timestamp": "2026-09-01T12:00:00Z"
+        },
+        {
+          "id": "c",
+          "kind": "G",
+          "amount": "900",
+          "timestamp": "2026-09-02T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "interval_net_profit": "90"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-007",
+    "title": "相邻后段只接收共同边界事件",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-010"
+    ],
+    "inputs": {
+      "window": {
+        "from": "2026-09-02T00:00:00Z",
+        "to": "2026-09-03T00:00:00Z"
+      },
+      "events": [
+        {
+          "id": "a",
+          "kind": "G",
+          "amount": "100",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "kind": "C",
+          "amount": "10",
+          "timestamp": "2026-09-01T12:00:00Z"
+        },
+        {
+          "id": "c",
+          "kind": "G",
+          "amount": "900",
+          "timestamp": "2026-09-02T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "interval_net_profit": "900"
+    }
+  },
+  {
+    "id": "FM-CLEAR-001",
+    "title": "给定清算基准等于累计毛收益时展示收益率为零",
+    "coverage_note": "仅验证给定G与Gclear的M04算式；不执行清算动作，也不证明累计收益记录在清算后保持不变。",
+    "family": "post_clear_return",
+    "case_ids": [
+      "CALC-033"
+    ],
+    "inputs": {
+      "G": "1300",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "1300"
+    },
+    "expected": {
+      "status": "ok",
+      "post_clear_return": "0"
+    }
+  },
+  {
+    "id": "FM-CLEAR-002",
+    "title": "清算后新增收益用含清算本金",
+    "family": "post_clear_return",
+    "case_ids": [
+      "CALC-034"
+    ],
+    "inputs": {
+      "G": "1400",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "1300"
+    },
+    "expected": {
+      "status": "ok",
+      "post_clear_return": "0.008130081300813008130081300813"
+    },
+    "tolerance": "1e-27"
+  },
+  {
+    "id": "FM-CLEAR-003",
+    "title": "清算后亏损允许负收益",
+    "family": "post_clear_return",
+    "case_ids": [
+      "CALC-034"
+    ],
+    "inputs": {
+      "G": "900",
+      "Gclear": "1000",
+      "D": "9000"
+    },
+    "expected": {
+      "status": "ok",
+      "post_clear_return": "-0.01"
+    }
+  },
+  {
+    "id": "FM-CLEAR-004",
+    "title": "清算后分母为零不可计算",
+    "family": "post_clear_return",
+    "case_ids": [
+      "CALC-045"
+    ],
+    "inputs": {
+      "G": "100",
+      "Gclear": "1000",
+      "D": "-1000"
+    },
+    "expected": {
+      "status": "unavailable",
+      "post_clear_return": null
+    }
+  },
+  {
+    "id": "FM-CLEAR-005",
+    "title": "清算基准缺失不能默认为历史收益",
+    "family": "post_clear_return",
+    "case_ids": [
+      "CALC-041"
+    ],
+    "inputs": {
+      "G": "500",
+      "D": "10000"
+    },
+    "expected": {
+      "status": "unavailable",
+      "post_clear_return": null
+    }
+  },
+  {
+    "id": "FM-PRINCIPAL-001",
+    "title": "清算基准进入计费本金",
+    "family": "billing_principal",
+    "case_ids": [
+      "CALC-036"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "800",
+      "Gclear": "1300"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_principal": "12300"
+    }
+  },
+  {
+    "id": "FM-PRINCIPAL-002",
+    "title": "零清算基准不改变净入金",
+    "family": "billing_principal",
+    "case_ids": [
+      "CALC-036"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_principal": "11000"
+    }
+  },
+  {
+    "id": "FM-PRINCIPAL-003",
+    "title": "本金负值保留用于门禁",
+    "family": "billing_principal",
+    "case_ids": [
+      "CALC-036",
+      "CALC-040"
+    ],
+    "inputs": {
+      "D": "-100",
+      "Gclear": "20"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_principal": "-80"
+    }
+  },
+  {
+    "id": "FM-PRINCIPAL-004",
+    "title": "缺计费本金依赖不可计算",
+    "family": "billing_principal",
+    "case_ids": [
+      "CALC-036"
+    ],
+    "inputs": {
+      "D": "11000"
+    },
+    "expected": {
+      "status": "unavailable",
+      "billing_principal": null
+    }
+  },
+  {
+    "id": "FM-PROFIT-001",
+    "title": "计费收益减锁单基准",
+    "family": "billing_profit",
+    "case_ids": [
+      "CALC-035"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_profit": "600"
+    }
+  },
+  {
+    "id": "FM-PROFIT-002",
+    "title": "费用资金费浮盈不参与毛收益计费",
+    "family": "billing_profit",
+    "case_ids": [
+      "CALC-037"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "1000",
+      "C": "300",
+      "F": "-200",
+      "U": "900"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_profit": "600"
+    }
+  },
+  {
+    "id": "FM-PROFIT-003",
+    "title": "累计下修后的本周期收益可以为负",
+    "family": "billing_profit",
+    "case_ids": [
+      "CALC-035"
+    ],
+    "inputs": {
+      "G": "400",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_profit": "-100"
+    }
+  },
+  {
+    "id": "FM-PROFIT-004",
+    "title": "新周期起点收益为零",
+    "family": "billing_profit",
+    "case_ids": [
+      "CALC-042"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "1100",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_profit": "0"
+    }
+  },
+  {
+    "id": "FM-PROFIT-005",
+    "title": "缺失Gbase不可自动使用Gclear",
+    "family": "billing_profit",
+    "case_ids": [
+      "CALC-035"
+    ],
+    "inputs": {
+      "G": "1100",
+      "Gclear": "500"
+    },
+    "expected": {
+      "status": "unavailable",
+      "billing_profit": null
+    }
+  },
+  {
+    "id": "FM-BILLRETURN-001",
+    "title": "计费周期分子与清算本金独立",
+    "family": "billing_return",
+    "case_ids": [
+      "CALC-035",
+      "CALC-036"
+    ],
+    "inputs": {
+      "G": "1600",
+      "Gbase": "1000",
+      "D": "10000",
+      "Gclear": "2000"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_return": "0.05"
+    }
+  },
+  {
+    "id": "FM-BILLRETURN-002",
+    "title": "计费收益为负返回负比率",
+    "family": "billing_return",
+    "case_ids": [
+      "CALC-035"
+    ],
+    "inputs": {
+      "G": "900",
+      "Gbase": "1000",
+      "D": "9000",
+      "Gclear": "1000"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_return": "-0.01"
+    }
+  },
+  {
+    "id": "FM-BILLRETURN-003",
+    "title": "计费本金为零返回空",
+    "family": "billing_return",
+    "case_ids": [
+      "CALC-045"
+    ],
+    "inputs": {
+      "G": "1100",
+      "Gbase": "1000",
+      "D": "-1000",
+      "Gclear": "1000"
+    },
+    "expected": {
+      "status": "unavailable",
+      "billing_return": null
+    }
+  },
+  {
+    "id": "FM-BILLRETURN-004",
+    "title": "缺基准不可算计费收益率",
+    "family": "billing_return",
+    "case_ids": [
+      "CALC-045"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "10000",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "unavailable",
+      "billing_return": null
+    }
+  },
+  {
+    "id": "FM-ANNUAL-001",
+    "title": "不足七天不年化",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-011"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0",
+      "days": "6.99",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_return": null
+    }
+  },
+  {
+    "id": "FM-ANNUAL-002",
+    "title": "精确七天通过门槛",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012"
+    ],
+    "inputs": {
+      "G": "7",
+      "D": "100",
+      "days": "7",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_return": "3.65"
+    }
+  },
+  {
+    "id": "FM-ANNUAL-003",
+    "title": "年化使用累计收益不减周期基准",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012"
+    ],
+    "inputs": {
+      "G": "10",
+      "D": "100",
+      "Gbase": "9",
+      "days": "10",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_return": "3.65"
+    }
+  },
+  {
+    "id": "FM-ANNUAL-004",
+    "title": "365天年化等于累计收益",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012"
+    ],
+    "inputs": {
+      "G": "1100",
+      "D": "11000",
+      "Gbase": "500",
+      "Gclear": "0",
+      "days": "365",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_return": "0.1"
+    }
+  },
+  {
+    "id": "FM-ANNUAL-005",
+    "title": "亏损年化保留负号",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012"
+    ],
+    "inputs": {
+      "G": "-10",
+      "D": "100",
+      "days": "10",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_return": "-3.65"
+    }
+  },
+  {
+    "id": "FM-ANNUAL-006",
+    "title": "本金非正不能年化",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-045"
+    ],
+    "inputs": {
+      "G": "10",
+      "D": "0",
+      "days": "365",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_return": null
+    }
+  },
+  {
+    "id": "FM-ANNUAL-007",
+    "title": "小数运行天数不取整",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012"
+    ],
+    "inputs": {
+      "G": "3",
+      "D": "100",
+      "days": "7.5",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_return": "1.46"
+    }
+  },
+  {
+    "id": "FM-ANNUAL-008",
+    "title": "缺运行天数不可计算",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-013"
+    ],
+    "inputs": {
+      "G": "1",
+      "D": "100",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_return": null
+    }
+  },
+  {
+    "id": "FM-DAILY-001",
+    "title": "由相邻权益计算正负日收益",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-014"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "110",
+        "99"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "daily_returns": [
+        "0.1",
+        "-0.1"
+      ]
+    }
+  },
+  {
+    "id": "FM-DAILY-002",
+    "title": "日权益不变为真实零收益",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-014"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "100",
+        "100"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "daily_returns": [
+        "0",
+        "0"
+      ]
+    }
+  },
+  {
+    "id": "FM-DAILY-003",
+    "title": "起始权益为零只使依赖该点的比率无效",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-014",
+      "CALC-045"
+    ],
+    "inputs": {
+      "equity_path": [
+        "0",
+        "100",
+        "110"
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "daily_returns": [
+        null,
+        "0.1"
+      ]
+    }
+  },
+  {
+    "id": "FM-DAILY-004",
+    "title": "缺失历史点不补零影响日收益",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-047"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        null,
+        "110",
+        "121"
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "daily_returns": [
+        null,
+        null,
+        "0.1"
+      ]
+    }
+  },
+  {
+    "id": "FM-DAILY-005",
+    "title": "单权益点不能构造日收益",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-047"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100"
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "daily_returns": null
+    }
+  },
+  {
+    "id": "FM-DAILY-006",
+    "title": "未闭合当日排除且输入按时间排序",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-014",
+      "CALC-015"
+    ],
+    "inputs": {
+      "series": [
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110"
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "999",
+          "closed": false
+        },
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "daily_returns": [
+        "0.1"
+      ]
+    }
+  },
+  {
+    "id": "FM-DAILY-007",
+    "title": "现金流调整口径未确认不猜收益",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-014"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "200"
+      ],
+      "has_cash_flows": true
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-VOL-001",
+    "title": "两个收益按样本分母n减一",
+    "family": "annualized_volatility",
+    "case_ids": [
+      "CALC-015"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "110",
+        "99"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_volatility": "2.701851217221259",
+      "sample_count": 2
+    },
+    "tolerance": "1e-14"
+  },
+  {
+    "id": "FM-VOL-002",
+    "title": "三个收益年化365天",
+    "family": "annualized_volatility",
+    "case_ids": [
+      "CALC-015"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "100",
+        "110",
+        "132"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_volatility": "1.910497317454280",
+      "sample_count": 3
+    },
+    "tolerance": "1e-14"
+  },
+  {
+    "id": "FM-VOL-003",
+    "title": "恒定收益的波动为零",
+    "family": "annualized_volatility",
+    "case_ids": [
+      "CALC-015"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "110",
+        "121",
+        "133.1"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_volatility": "0",
+      "sample_count": 3
+    }
+  },
+  {
+    "id": "FM-VOL-004",
+    "title": "单个日收益不足样本数",
+    "family": "annualized_volatility",
+    "case_ids": [
+      "CALC-015",
+      "CALC-045"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "110"
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_volatility": null,
+      "sample_count": 1
+    }
+  },
+  {
+    "id": "FM-VOL-005",
+    "title": "原始权益历史空集合不能生成波动率样本",
+    "family": "annualized_volatility",
+    "case_ids": [
+      "CALC-015"
+    ],
+    "inputs": {
+      "equity_path": []
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_volatility": null,
+      "sample_count": 0
+    }
+  },
+  {
+    "id": "FM-VOL-006",
+    "title": "原始权益边界缺值不能删除后跨点重算波动率",
+    "family": "annualized_volatility",
+    "case_ids": [
+      "CALC-047"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "110",
+        null,
+        "99"
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_volatility": null,
+      "sample_count": 3
+    }
+  },
+  {
+    "id": "FM-SHARPE-001",
+    "title": "完整七日权益与同窗累计收益独立计算Sharpe",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016"
+    ],
+    "inputs": {
+      "G": "7",
+      "D": "100",
+      "days": "7",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true,
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "99",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "108.9",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "98.01",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "107.811",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-08T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        }
+      ],
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        }
+      },
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "sharpe": "1.910497317454280"
+    },
+    "tolerance": "1e-14"
+  },
+  {
+    "id": "FM-SHARPE-002",
+    "title": "完整七日权益正波动及负年化收益得到负Sharpe",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016"
+    ],
+    "inputs": {
+      "G": "-7",
+      "D": "100",
+      "days": "7",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true,
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "99",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "108.9",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "98.01",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "107.811",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-08T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        }
+      ],
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        }
+      },
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "sharpe": "-1.910497317454280"
+    },
+    "tolerance": "1e-14"
+  },
+  {
+    "id": "FM-SHARPE-003",
+    "title": "完整七日恒定收益零波动时Sharpe不可计算",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016"
+    ],
+    "inputs": {
+      "G": "7",
+      "D": "100",
+      "days": "7",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true,
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "121",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "133.1",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "146.41",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "161.051",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "177.1561",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-08T00:00:00Z",
+          "equity": "194.87171",
+          "closed": true
+        }
+      ],
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        }
+      },
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "sharpe": null
+    }
+  },
+  {
+    "id": "FM-SHARPE-004",
+    "title": "仅六个完整运行日即使已有波动也不能计算Sharpe",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016"
+    ],
+    "inputs": {
+      "G": "7",
+      "D": "100",
+      "days": "6",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true,
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "99",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "108.9",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "98.01",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "107.811",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        }
+      ],
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-07T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-07T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-07T00:00:00Z"
+        }
+      },
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "sharpe": null
+    }
+  },
+  {
+    "id": "FM-SHARPE-005",
+    "title": "完整七日正波动零收益得到零Sharpe",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016"
+    ],
+    "inputs": {
+      "G": "0",
+      "D": "100",
+      "days": "7",
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true,
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "99",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "108.9",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "98.01",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "107.811",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-08T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        }
+      ],
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        }
+      },
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "sharpe": "0"
+    }
+  },
+  {
+    "id": "FM-CALMAR-001",
+    "title": "Calmar使用最大回撤不是当前回撤",
+    "family": "calmar",
+    "case_ids": [
+      "CALC-017"
+    ],
+    "inputs": {
+      "G": "10",
+      "D": "100",
+      "days": "365",
+      "equity_path": [
+        "100",
+        "120",
+        "90",
+        "110"
+      ],
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "calmar": "0.4"
+    }
+  },
+  {
+    "id": "FM-CALMAR-002",
+    "title": "负收益Calmar保留负号",
+    "family": "calmar",
+    "case_ids": [
+      "CALC-017"
+    ],
+    "inputs": {
+      "G": "-10",
+      "D": "100",
+      "days": "365",
+      "equity_path": [
+        "100",
+        "80"
+      ],
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "ok",
+      "calmar": "-0.5"
+    }
+  },
+  {
+    "id": "FM-CALMAR-003",
+    "title": "无回撤不返回无限大",
+    "family": "calmar",
+    "case_ids": [
+      "CALC-017",
+      "CALC-045"
+    ],
+    "inputs": {
+      "G": "10",
+      "D": "100",
+      "days": "365",
+      "equity_path": [
+        "100",
+        "110"
+      ],
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "unavailable",
+      "calmar": null
+    }
+  },
+  {
+    "id": "FM-CALMAR-004",
+    "title": "历史不完整不构造Calmar",
+    "family": "calmar",
+    "case_ids": [
+      "CALC-017",
+      "CALC-020"
+    ],
+    "inputs": {
+      "G": "10",
+      "D": "100",
+      "days": "365",
+      "equity_path": [
+        "100",
+        "80"
+      ],
+      "history_complete": false,
+      "return_basis": "account_cumulative",
+      "profile_confirmed": true
+    },
+    "expected": {
+      "status": "unavailable",
+      "calmar": null
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-001",
+    "title": "峰值在谷值之前按时间路径计算",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-018",
+      "CALC-019"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "120",
+        "90",
+        "110"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "current_drawdown": "0.08333333333333333333333333333",
+      "max_drawdown": "0.25"
+    },
+    "tolerance": "1e-26"
+  },
+  {
+    "id": "FM-DRAWDOWN-002",
+    "title": "新高之后当前回撤归零最大回撤保留",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-018",
+      "CALC-019"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "80",
+        "120"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "current_drawdown": "0",
+      "max_drawdown": "0.2"
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-003",
+    "title": "低点在后来的高点之前不反向制造回撤",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-019"
+    ],
+    "inputs": {
+      "equity_path": [
+        "50",
+        "100",
+        "150"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "current_drawdown": "0",
+      "max_drawdown": "0"
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-004",
+    "title": "权益归零对应百分之百回撤",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-019"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "0"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "current_drawdown": "1",
+      "max_drawdown": "1"
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-005",
+    "title": "非正初始权益不可计算回撤",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-045"
+    ],
+    "inputs": {
+      "equity_path": [
+        "0",
+        "100"
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "current_drawdown": null,
+      "max_drawdown": null
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-006",
+    "title": "缺失历史峰值不得用当前点冒充",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-020"
+    ],
+    "inputs": {
+      "equity_path": [
+        "80",
+        "90"
+      ],
+      "history_complete": false
+    },
+    "expected": {
+      "status": "unavailable",
+      "current_drawdown": null,
+      "max_drawdown": null
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-007",
+    "title": "图表粒度不能改完整路径最大回撤",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-021"
+    ],
+    "inputs": {
+      "equity_path": [
+        "100",
+        "120",
+        "60",
+        "120"
+      ],
+      "display_granularity": "1d",
+      "display_path": [
+        "100",
+        "120"
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "current_drawdown": "0",
+      "max_drawdown": "0.5"
+    }
+  },
+  {
+    "id": "FM-DRAWDOWN-008",
+    "title": "乱序时间点先排序再求峰谷",
+    "family": "drawdown",
+    "case_ids": [
+      "CALC-019"
+    ],
+    "inputs": {
+      "series": [
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "90"
+        },
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100"
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "120"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "current_drawdown": "0.25",
+      "max_drawdown": "0.25"
+    }
+  },
+  {
+    "id": "FM-NAV-001",
+    "title": "累计净值和清算周期净值使用不同基准",
+    "family": "nav",
+    "case_ids": [
+      "CALC-053"
+    ],
+    "inputs": {
+      "G": "200",
+      "D": "1000",
+      "Gclear": "100"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_nav": "1.2",
+      "cycle_nav": "1.0909090909090909090909090909"
+    },
+    "tolerance": "1e-25"
+  },
+  {
+    "id": "FM-NAV-002",
+    "title": "清算点只重置周期净值",
+    "family": "nav",
+    "case_ids": [
+      "CALC-033",
+      "CALC-053"
+    ],
+    "inputs": {
+      "G": "100",
+      "D": "1000",
+      "Gclear": "100"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_nav": "1.1",
+      "cycle_nav": "1"
+    }
+  },
+  {
+    "id": "FM-NAV-003",
+    "title": "没有清算时两个净值一致",
+    "family": "nav",
+    "case_ids": [
+      "CALC-053"
+    ],
+    "inputs": {
+      "G": "-100",
+      "D": "1000",
+      "Gclear": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "cumulative_nav": "0.9",
+      "cycle_nav": "0.9"
+    }
+  },
+  {
+    "id": "FM-NAV-004",
+    "title": "仅清算基准缺失仍保留可计算累计净值",
+    "family": "nav",
+    "case_ids": [
+      "CALC-048",
+      "CALC-053"
+    ],
+    "inputs": {
+      "G": "100",
+      "D": "1000"
+    },
+    "expected": {
+      "status": "unavailable",
+      "cumulative_nav": "1.1",
+      "cycle_nav": null
+    }
+  },
+  {
+    "id": "FM-NAV-005",
+    "title": "净入金为零但有效清算本金仍可算周期净值",
+    "family": "nav",
+    "case_ids": [
+      "CALC-048",
+      "CALC-053"
+    ],
+    "inputs": {
+      "G": "100",
+      "D": "0",
+      "Gclear": "100"
+    },
+    "expected": {
+      "status": "unavailable",
+      "cumulative_nav": null,
+      "cycle_nav": "1"
+    }
+  },
+  {
+    "id": "FM-CONTRIB-001",
+    "title": "正负贡献使用绝对值分母",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-022"
+    ],
+    "inputs": {
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "100"
+        },
+        {
+          "id": "b",
+          "profit": "-50"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "denominator": "150",
+      "contributions": [
+        {
+          "id": "a",
+          "profit": "100",
+          "contribution": "0.6666666666666666666666666667"
+        },
+        {
+          "id": "b",
+          "profit": "-50",
+          "contribution": "-0.3333333333333333333333333333"
+        }
+      ]
+    },
+    "tolerance": "1e-25"
+  },
+  {
+    "id": "FM-CONTRIB-002",
+    "title": "全亏损贡献合计负一",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-022"
+    ],
+    "inputs": {
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "-30"
+        },
+        {
+          "id": "b",
+          "profit": "-70"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "denominator": "100",
+      "contributions": [
+        {
+          "id": "a",
+          "profit": "-30",
+          "contribution": "-0.3"
+        },
+        {
+          "id": "b",
+          "profit": "-70",
+          "contribution": "-0.7"
+        }
+      ]
+    }
+  },
+  {
+    "id": "FM-CONTRIB-003",
+    "title": "全零利润不可分配贡献",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-023"
+    ],
+    "inputs": {
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "0"
+        },
+        {
+          "id": "b",
+          "profit": "0"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "denominator": "0",
+      "contributions": null
+    }
+  },
+  {
+    "id": "FM-CONTRIB-004",
+    "title": "重复归因记录不放大贡献分母",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-022"
+    ],
+    "inputs": {
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "30"
+        },
+        {
+          "id": "a",
+          "profit": "30"
+        },
+        {
+          "id": "b",
+          "profit": "70"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "denominator": "100",
+      "contributions": [
+        {
+          "id": "a",
+          "profit": "30",
+          "contribution": "0.3"
+        },
+        {
+          "id": "b",
+          "profit": "70",
+          "contribution": "0.7"
+        }
+      ]
+    }
+  },
+  {
+    "id": "FM-CONTRIB-005",
+    "title": "某策略利润缺失不当零重分配",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-023",
+      "CALC-048"
+    ],
+    "inputs": {
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "100"
+        },
+        {
+          "id": "b",
+          "profit": null
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "denominator": null,
+      "contributions": null
+    }
+  },
+  {
+    "id": "FM-MATCH-001",
+    "title": "按一百个目标计算99%而不是平均两个批次",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-025"
+    ],
+    "inputs": {
+      "targets": [
+        {
+          "target_id": "target-0",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-1",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-2",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-3",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-4",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-5",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-6",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-7",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-8",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-9",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-10",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-11",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-12",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-13",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-14",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-15",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-16",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-17",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-18",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-19",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-20",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-21",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-22",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-23",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-24",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-25",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-26",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-27",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-28",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-29",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-30",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-31",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-32",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-33",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-34",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-35",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-36",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-37",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-38",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-39",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-40",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-41",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-42",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-43",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-44",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-45",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-46",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-47",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-48",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-49",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-50",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-51",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-52",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-53",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-54",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-55",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-56",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-57",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-58",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-59",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-60",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-61",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-62",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-63",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-64",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-65",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-66",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-67",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-68",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-69",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-70",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-71",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-72",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-73",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-74",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-75",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-76",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-77",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-78",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-79",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-80",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-81",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-82",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-83",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-84",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-85",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-86",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-87",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-88",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-89",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-90",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-91",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-92",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-93",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-94",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-95",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-96",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-97",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-a"
+        },
+        {
+          "target_id": "target-98",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true,
+          "batch_id": "batch-b"
+        },
+        {
+          "target_id": "target-99",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false,
+          "batch_id": "batch-b"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "target_count": 100,
+      "matched_count": 99,
+      "match_rate": "0.99"
+    }
+  },
+  {
+    "id": "FM-MATCH-002",
+    "title": "替换事件取最终目标状态",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-026"
+    ],
+    "inputs": {
+      "targets": [
+        {
+          "target_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false
+        },
+        {
+          "target_id": "a",
+          "timestamp": "2026-09-02T00:00:00Z",
+          "matched": true
+        },
+        {
+          "target_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "target_count": 2,
+      "matched_count": 1,
+      "match_rate": "0.5"
+    }
+  },
+  {
+    "id": "FM-MATCH-003",
+    "title": "已明确不合格的目标不入分母",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-026"
+    ],
+    "inputs": {
+      "targets": [
+        {
+          "target_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true
+        },
+        {
+          "target_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false,
+          "eligible": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "target_count": 1,
+      "matched_count": 1,
+      "match_rate": "1"
+    }
+  },
+  {
+    "id": "FM-MATCH-004",
+    "title": "零有效目标不可计算匹配率",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-026"
+    ],
+    "inputs": {
+      "targets": []
+    },
+    "expected": {
+      "status": "unavailable",
+      "target_count": 0,
+      "matched_count": 0,
+      "match_rate": null
+    }
+  },
+  {
+    "id": "FM-MATCH-005",
+    "title": "未批准取消目标资格不得自行排除",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-026"
+    ],
+    "inputs": {
+      "targets": [
+        {
+          "target_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false,
+          "status": "cancelled"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-ORDER-001",
+    "title": "订单多事件按唯一订单最终状态",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030"
+    ],
+    "inputs": {
+      "orders": [
+        {
+          "order_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "open"
+        },
+        {
+          "order_id": "a",
+          "timestamp": "2026-09-02T00:00:00Z",
+          "status": "filled"
+        },
+        {
+          "order_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "partial"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "order_count": 2,
+      "completed_count": 1,
+      "completion_rate": "0.5"
+    }
+  },
+  {
+    "id": "FM-ORDER-002",
+    "title": "乱序事件仍取真实最新状态",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030"
+    ],
+    "inputs": {
+      "orders": [
+        {
+          "order_id": "a",
+          "timestamp": "2026-09-02T00:00:00Z",
+          "status": "filled"
+        },
+        {
+          "order_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "open"
+        },
+        {
+          "order_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "filled"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "order_count": 2,
+      "completed_count": 2,
+      "completion_rate": "1"
+    }
+  },
+  {
+    "id": "FM-ORDER-003",
+    "title": "部分成交和取消订单不计完成",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030"
+    ],
+    "inputs": {
+      "orders": [
+        {
+          "order_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "partial"
+        },
+        {
+          "order_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "cancelled"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "order_count": 2,
+      "completed_count": 0,
+      "completion_rate": "0"
+    }
+  },
+  {
+    "id": "FM-ORDER-004",
+    "title": "零订单没有完成率",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030"
+    ],
+    "inputs": {
+      "orders": []
+    },
+    "expected": {
+      "status": "unavailable",
+      "order_count": 0,
+      "completed_count": 0,
+      "completion_rate": null
+    }
+  },
+  {
+    "id": "FM-ORDER-005",
+    "title": "完整筛选集合中的订单跨账户隔离",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030",
+      "CALC-046"
+    ],
+    "inputs": {
+      "account_id": "a",
+      "orders": [
+        {
+          "order_id": "a",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "filled",
+          "account_id": "a"
+        },
+        {
+          "order_id": "b",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "partial",
+          "account_id": "b"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "order_count": 1,
+      "completed_count": 1,
+      "completion_rate": "1"
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-001",
+    "title": "成交均价按数量加权不按笔数",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "fills": [
+        {
+          "id": "a",
+          "quantity": "2",
+          "price": "100"
+        },
+        {
+          "id": "b",
+          "quantity": "1",
+          "price": "110"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "weighted_average_price": "103.3333333333333333333333333"
+    },
+    "tolerance": "1e-24"
+  },
+  {
+    "id": "FM-FILLPRICE-002",
+    "title": "重复成交事件只计算一次",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "fills": [
+        {
+          "id": "a",
+          "quantity": "2",
+          "price": "100"
+        },
+        {
+          "id": "a",
+          "quantity": "2",
+          "price": "100"
+        },
+        {
+          "id": "b",
+          "quantity": "2",
+          "price": "110"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "weighted_average_price": "105"
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-003",
+    "title": "无有效成交数量不可计算均价",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "fills": [
+        {
+          "id": "a",
+          "quantity": "0",
+          "price": "100"
+        },
+        {
+          "id": "b",
+          "quantity": "1",
+          "price": "1000",
+          "valid": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "weighted_average_price": null
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-004",
+    "title": "不同合约不能混算成交均价",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "fills": [
+        {
+          "id": "a",
+          "quantity": "1",
+          "price": "100",
+          "symbol": "BTC"
+        },
+        {
+          "id": "b",
+          "quantity": "1",
+          "price": "10",
+          "symbol": "ETH"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "weighted_average_price": null
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-005",
+    "title": "细小成交量仍保留精确加权",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031",
+      "CALC-044"
+    ],
+    "inputs": {
+      "fills": [
+        {
+          "id": "a",
+          "quantity": "0.000001",
+          "price": "0.12345678"
+        },
+        {
+          "id": "b",
+          "quantity": "0.000003",
+          "price": "0.12345682"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "weighted_average_price": "0.12345681"
+    }
+  },
+  {
+    "id": "FM-POSITION-001",
+    "title": "非零双向持仓分别计数绝对名义求和",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "2",
+          "notional": "200",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "short",
+          "quantity": "-1",
+          "notional": "-110",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "account_id": "a",
+          "symbol": "ETH",
+          "side": "long",
+          "quantity": "0",
+          "notional": "0",
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "position_count": 2,
+      "gross_notional": "310"
+    }
+  },
+  {
+    "id": "FM-POSITION-002",
+    "title": "重复快照持仓数和名义都不重复",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "2",
+          "notional": "200",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "2",
+          "notional": "200",
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "position_count": 1,
+      "gross_notional": "200"
+    }
+  },
+  {
+    "id": "FM-POSITION-003",
+    "title": "最新零持仓快照覆盖旧持仓",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "2",
+          "notional": "200",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "0",
+          "notional": "0",
+          "timestamp": "2026-09-02T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "position_count": 0,
+      "gross_notional": "0"
+    }
+  },
+  {
+    "id": "FM-POSITION-004",
+    "title": "同合约同方向跨账户不可相互去重",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "2",
+          "notional": "200",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "account_id": "b",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "3",
+          "notional": "300",
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "position_count": 2,
+      "gross_notional": "500"
+    }
+  },
+  {
+    "id": "FM-POSITION-005",
+    "title": "持仓名义缺失不能记成零",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "quantity": "2",
+          "notional": null,
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "position_count": 1,
+      "gross_notional": null
+    }
+  },
+  {
+    "id": "FM-LATENCY-001",
+    "title": "同链触发到最后完成计算延迟",
+    "family": "execution_latency",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "chain_id": "a",
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "plan",
+          "timestamp": "2026-09-01T00:00:02Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:07Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:09Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:08Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "latency_seconds": "9"
+    }
+  },
+  {
+    "id": "FM-LATENCY-002",
+    "title": "跨日带时区微秒延迟",
+    "family": "execution_latency",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "chain_id": "a",
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T23:59:59.900+08:00"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T16:00:00.100Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "latency_seconds": "0.2"
+    }
+  },
+  {
+    "id": "FM-LATENCY-003",
+    "title": "其他链完成不能补本链缺失",
+    "family": "execution_latency",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "chain_id": "a",
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "completed",
+          "timestamp": "2026-09-02T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "latency_seconds": null
+    }
+  },
+  {
+    "id": "FM-LATENCY-004",
+    "title": "完成早于触发不能返回负延迟",
+    "family": "execution_latency",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "chain_id": "a",
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-02T00:00:00Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "latency_seconds": null
+    }
+  },
+  {
+    "id": "FM-RECEIVABLE-001",
+    "title": "半入点入账第八位进一",
+    "family": "receivable",
+    "case_ids": [
+      "CALC-038"
+    ],
+    "inputs": {
+      "G": "1.234567895",
+      "Gbase": "0",
+      "share_rate": "1"
+    },
+    "expected": {
+      "status": "ok",
+      "receivable": "1.23456790"
+    }
+  },
+  {
+    "id": "FM-RECEIVABLE-002",
+    "title": "半入点前不进位",
+    "family": "receivable",
+    "case_ids": [
+      "CALC-038"
+    ],
+    "inputs": {
+      "G": "1.234567894",
+      "Gbase": "0",
+      "share_rate": "1"
+    },
+    "expected": {
+      "status": "ok",
+      "receivable": "1.23456789"
+    }
+  },
+  {
+    "id": "FM-RECEIVABLE-003",
+    "title": "先用完整计费收益乘比例再统一入账精度",
+    "family": "receivable",
+    "case_ids": [
+      "CALC-038"
+    ],
+    "inputs": {
+      "G": "10.000000025",
+      "Gbase": "10",
+      "share_rate": "0.2"
+    },
+    "expected": {
+      "status": "ok",
+      "receivable": "0.00000001"
+    }
+  },
+  {
+    "id": "FM-RECEIVABLE-004",
+    "title": "整段计费收益乘给定比例而非仅计超阈部分",
+    "coverage_note": "仅验证M17应收金额算式；比例作为输入，不证明政策冻结、锁单或后续配置变更的行为。",
+    "family": "receivable",
+    "case_ids": [
+      "CALC-038",
+      "CALC-039"
+    ],
+    "inputs": {
+      "G": "700",
+      "Gbase": "100",
+      "share_rate": "0.2",
+      "threshold": "0.05",
+      "D": "10000"
+    },
+    "expected": {
+      "status": "ok",
+      "receivable": "120.00000000"
+    }
+  },
+  {
+    "id": "FM-RECEIVABLE-005",
+    "title": "零比例金额保留零",
+    "family": "receivable",
+    "case_ids": [
+      "CALC-038"
+    ],
+    "inputs": {
+      "G": "100",
+      "Gbase": "0",
+      "share_rate": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "receivable": "0.00000000"
+    }
+  },
+  {
+    "id": "FM-GATE-001",
+    "title": "低于阈值不达标",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-039"
+    ],
+    "inputs": {
+      "G": "499.9999",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "0.05",
+      "evidence_qualified": true,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": false,
+      "billing_principal": "10000",
+      "billing_profit": "499.9999",
+      "billing_return": "0.04999999"
+    }
+  },
+  {
+    "id": "FM-GATE-002",
+    "title": "等于阈值即可达标",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-039"
+    ],
+    "inputs": {
+      "G": "500",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "0.05",
+      "evidence_qualified": true,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": true,
+      "billing_principal": "10000",
+      "billing_profit": "500",
+      "billing_return": "0.05"
+    }
+  },
+  {
+    "id": "FM-GATE-003",
+    "title": "高于阈值达标",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-039"
+    ],
+    "inputs": {
+      "G": "500.0001",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "0.05",
+      "evidence_qualified": true,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": true,
+      "billing_principal": "10000",
+      "billing_profit": "500.0001",
+      "billing_return": "0.05000001"
+    }
+  },
+  {
+    "id": "FM-GATE-004",
+    "title": "分润政策关闭即使数字达标也不能计费",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-040"
+    ],
+    "inputs": {
+      "G": "500",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "0.05",
+      "evidence_qualified": true,
+      "policy_enabled": false
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": false,
+      "billing_principal": "10000",
+      "billing_profit": "500",
+      "billing_return": "0.05"
+    }
+  },
+  {
+    "id": "FM-GATE-005",
+    "title": "证据缺失即使数字达标也不能计费",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-040"
+    ],
+    "inputs": {
+      "G": "500",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "0.05",
+      "evidence_qualified": false,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": false,
+      "billing_principal": "10000",
+      "billing_profit": "500",
+      "billing_return": "0.05"
+    }
+  },
+  {
+    "id": "FM-GATE-006",
+    "title": "零收益即使零阈值也不能计费",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-040"
+    ],
+    "inputs": {
+      "G": "0",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "0",
+      "evidence_qualified": true,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": false,
+      "billing_principal": "10000",
+      "billing_profit": "0",
+      "billing_return": "0"
+    }
+  },
+  {
+    "id": "FM-GATE-007",
+    "title": "零本金无法产生计费资格",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-040"
+    ],
+    "inputs": {
+      "G": "500",
+      "Gbase": "0",
+      "D": "0",
+      "Gclear": "0",
+      "threshold": "0.05",
+      "evidence_qualified": true,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "unavailable",
+      "eligible": false,
+      "billing_principal": "0",
+      "billing_profit": "500",
+      "billing_return": null
+    }
+  },
+  {
+    "id": "FM-GATE-008",
+    "title": "负利润不能被负阈值放行",
+    "family": "billing_gate",
+    "case_ids": [
+      "CALC-040"
+    ],
+    "inputs": {
+      "G": "-1",
+      "Gbase": "0",
+      "D": "10000",
+      "Gclear": "0",
+      "threshold": "-1",
+      "evidence_qualified": true,
+      "policy_enabled": true
+    },
+    "expected": {
+      "status": "ok",
+      "eligible": false,
+      "billing_principal": "10000",
+      "billing_profit": "-1",
+      "billing_return": "-0.0001"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-001",
+    "title": "只累加同账单已确认到账金额",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "bill_ids": [
+        "b1"
+      ],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "30",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-09-02T00:00:00Z"
+        },
+        {
+          "id": "c",
+          "bill_id": "b1",
+          "status": "pending",
+          "amount": "80",
+          "actual_received_at": "2026-09-03T00:00:00Z"
+        },
+        {
+          "id": "d",
+          "bill_id": "b2",
+          "status": "confirmed",
+          "amount": "900",
+          "actual_received_at": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "50",
+      "outstanding": "50",
+      "latest_received_at": "2026-09-02T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-002",
+    "title": "到账时间取实际时间而不是登记审核时间",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-09-01T00:00:00Z",
+          "registered_at": "2026-09-05T00:00:00Z",
+          "approved_at": "2026-09-05T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "30",
+          "actual_received_at": "2026-09-02T00:00:00Z",
+          "registered_at": "2026-09-03T00:00:00Z",
+          "approved_at": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "50",
+      "outstanding": "50",
+      "latest_received_at": "2026-09-02T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-003",
+    "title": "重复到账事件不重复扣待收",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "100",
+      "outstanding": "0",
+      "latest_received_at": "2026-09-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-004",
+    "title": "没有确认收款时最近到账为空",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "pending",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "0",
+      "outstanding": "100",
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-RECEIPT-005",
+    "title": "跨月和时区按实际时间先后取最大",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-08-31T23:30:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "30",
+          "actual_received_at": "2026-09-01T07:00:00+08:00"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "50",
+      "outstanding": "50",
+      "latest_received_at": "2026-08-31T23:30:00Z"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-006",
+    "title": "缺已确认到账金额不能按零入账",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": null,
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "received": null,
+      "outstanding": null,
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-OVERDUE-001",
+    "title": "到期时刻恰好相等不逾期",
+    "family": "overdue",
+    "case_ids": [
+      "CALC-052"
+    ],
+    "inputs": {
+      "deadline_rule_approved": true,
+      "deadline": "2026-09-02T00:00:00Z",
+      "now": "2026-09-02T00:00:00Z",
+      "outstanding": "100"
+    },
+    "expected": {
+      "status": "ok",
+      "overdue": false
+    }
+  },
+  {
+    "id": "FM-OVERDUE-002",
+    "title": "严格晚于到期时刻且有待收才逾期",
+    "family": "overdue",
+    "case_ids": [
+      "CALC-052"
+    ],
+    "inputs": {
+      "deadline_rule_approved": true,
+      "deadline": "2026-09-02T00:00:00Z",
+      "now": "2026-09-02T00:00:00.000001Z",
+      "outstanding": "100"
+    },
+    "expected": {
+      "status": "ok",
+      "overdue": true
+    }
+  },
+  {
+    "id": "FM-OVERDUE-003",
+    "title": "已收足即使超过到期也不逾期",
+    "family": "overdue",
+    "case_ids": [
+      "CALC-052"
+    ],
+    "inputs": {
+      "deadline_rule_approved": true,
+      "deadline": "2026-09-02T00:00:00Z",
+      "now": "2026-09-03T00:00:00Z",
+      "outstanding": "0"
+    },
+    "expected": {
+      "status": "ok",
+      "overdue": false
+    }
+  },
+  {
+    "id": "FM-OVERDUE-004",
+    "title": "没有到期时间不凭空标逾期",
+    "family": "overdue",
+    "case_ids": [
+      "CALC-052"
+    ],
+    "inputs": {
+      "deadline_rule_approved": true,
+      "deadline": null,
+      "now": "2026-09-03T00:00:00Z",
+      "outstanding": "100"
+    },
+    "expected": {
+      "status": "ok",
+      "overdue": false
+    }
+  },
+  {
+    "id": "FM-OVERDUE-005",
+    "title": "到期规则未批准只登记阻塞不判Bug",
+    "family": "overdue",
+    "case_ids": [
+      "CALC-052"
+    ],
+    "inputs": {
+      "deadline": "2026-09-02T00:00:00Z",
+      "now": "2026-09-03T00:00:00Z",
+      "outstanding": "100"
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-DAILY-008",
+    "title": "已确认UTC日界线下缺中间日不能计算单日日收益",
+    "coverage_note": "本例显式选定UTC及86400秒日边界，只验缺少相邻边界时不可计算；未来缺口补齐或替代边界政策仍需另行签认。",
+    "family": "daily_returns",
+    "case_ids": [
+      "CALC-014",
+      "CALC-047"
+    ],
+    "inputs": {
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100"
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "121"
+        }
+      ],
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "daily_returns": null
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-008",
+    "title": "不同账户复用来源事件ID不能错误去重",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "id": "a",
+          "account_id": "a",
+          "direction": "in",
+          "amount": "100",
+          "qualified": true
+        },
+        {
+          "id": "a",
+          "account_id": "b",
+          "direction": "in",
+          "amount": "200",
+          "qualified": true
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "300"
+    }
+  },
+  {
+    "id": "FM-INTERVAL-008",
+    "title": "已标记计数器重置不能直接相减",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-009",
+      "CALC-048"
+    ],
+    "inputs": {
+      "counter_reset": true,
+      "start": {
+        "G": "1000",
+        "C": "100",
+        "F": "-10"
+      },
+      "end": {
+        "G": "10",
+        "C": "1",
+        "F": "0"
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "interval_net_profit": null
+    }
+  },
+  {
+    "id": "FM-RECEIPT-007",
+    "title": "确认截止点之后才审核到账的记录不得进入旧快照",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051",
+      "SET-023"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "confirmation_cutoff": "2026-09-02T00:00:00Z",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-09-01T00:00:00Z",
+          "confirmation_at": "2026-09-02T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "30",
+          "actual_received_at": "2026-09-01T00:00:00Z",
+          "confirmation_at": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "20",
+      "outstanding": "80",
+      "latest_received_at": "2026-09-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-008",
+    "title": "明确空账单选择不等于所有账单",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051",
+      "SET-024"
+    ],
+    "inputs": {
+      "receivable": "0",
+      "bill_ids": [],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "0",
+      "outstanding": "0",
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-RECEIPT-009",
+    "title": "超额收款处理未批准不裁零也不默许负待收",
+    "family": "receipts",
+    "case_ids": [
+      "SET-021"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "101",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-BILLSUM-001",
+    "title": "应收按唯一账单求和实收只取同集合已确认款",
+    "family": "bill_summary",
+    "case_ids": [
+      "SET-024",
+      "SET-051"
+    ],
+    "inputs": {
+      "bills": [
+        {
+          "id": "b1",
+          "receivable": "100"
+        },
+        {
+          "id": "b1",
+          "receivable": "100"
+        },
+        {
+          "id": "b2",
+          "receivable": "300"
+        }
+      ],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b2",
+          "status": "confirmed",
+          "amount": "80",
+          "actual_received_at": "2026-09-02T00:00:00Z"
+        },
+        {
+          "id": "c",
+          "bill_id": "b3",
+          "status": "confirmed",
+          "amount": "900",
+          "actual_received_at": "2026-09-03T00:00:00Z"
+        },
+        {
+          "id": "d",
+          "bill_id": "b2",
+          "status": "pending",
+          "amount": "200",
+          "actual_received_at": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "bill_count": 2,
+      "total_receivable": "400",
+      "received": "100",
+      "outstanding": "300",
+      "collection_progress": "0.25",
+      "latest_received_at": "2026-09-02T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-BILLSUM-002",
+    "title": "多个选定账单完整合计并排除未选账单及收款",
+    "coverage_note": "输入提供完整选择集合，仅验证集合求和；通用参考接口没有分页协议，不能把本例算作跨页读取或页面总额验收。",
+    "family": "bill_summary",
+    "case_ids": [
+      "SET-024",
+      "SET-051"
+    ],
+    "inputs": {
+      "bill_ids": [
+        "b1",
+        "b2"
+      ],
+      "bills": [
+        {
+          "id": "b1",
+          "receivable": "100"
+        },
+        {
+          "id": "b2",
+          "receivable": "300"
+        },
+        {
+          "id": "b3",
+          "receivable": "900"
+        }
+      ],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "50",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b2",
+          "status": "confirmed",
+          "amount": "150",
+          "actual_received_at": "2026-09-02T00:00:00Z"
+        },
+        {
+          "id": "c",
+          "bill_id": "b3",
+          "status": "confirmed",
+          "amount": "900",
+          "actual_received_at": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "bill_count": 2,
+      "total_receivable": "400",
+      "received": "200",
+      "outstanding": "200",
+      "collection_progress": "0.5",
+      "latest_received_at": "2026-09-02T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-BILLSUM-003",
+    "title": "零应收总额的收款进度不可计算",
+    "family": "bill_summary",
+    "case_ids": [
+      "SET-024"
+    ],
+    "inputs": {
+      "bills": [
+        {
+          "id": "b1",
+          "receivable": "0"
+        }
+      ],
+      "receipts": []
+    },
+    "expected": {
+      "status": "unavailable",
+      "bill_count": 1,
+      "total_receivable": "0",
+      "received": "0",
+      "outstanding": "0",
+      "collection_progress": null,
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-BILLSUM-004",
+    "title": "空账单选择所有金额计数归零但进度不造零",
+    "family": "bill_summary",
+    "case_ids": [
+      "SET-024"
+    ],
+    "inputs": {
+      "bill_ids": [],
+      "bills": [
+        {
+          "id": "b1",
+          "receivable": "100"
+        }
+      ],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "bill_count": 0,
+      "total_receivable": "0",
+      "received": "0",
+      "outstanding": "0",
+      "collection_progress": null,
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-BILLSUM-005",
+    "title": "单张账单超收不能被另一张欠收掩盖",
+    "family": "bill_summary",
+    "case_ids": [
+      "SET-021",
+      "SET-024"
+    ],
+    "inputs": {
+      "bills": [
+        {
+          "id": "b1",
+          "receivable": "100"
+        },
+        {
+          "id": "b2",
+          "receivable": "200"
+        }
+      ],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "101",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-001",
+    "title": "同一物理账号绑定多个策略不重复计账户和权益",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050",
+      "SD-101"
+    ],
+    "inputs": {
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "100",
+          "strategy_id": "s1"
+        },
+        {
+          "account_id": "a",
+          "equity": "100",
+          "strategy_id": "s2"
+        },
+        {
+          "account_id": "b",
+          "equity": "200",
+          "strategy_id": "s1"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 2,
+      "total_equity": "300"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-002",
+    "title": "真实零权益账户计数仍保留",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050",
+      "SD-101"
+    ],
+    "inputs": {
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "0"
+        },
+        {
+          "account_id": "b",
+          "equity": "-10"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 2,
+      "total_equity": "-10"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-003",
+    "title": "缺权益只影响金额不抹掉已知账户数",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-048",
+      "CALC-050"
+    ],
+    "inputs": {
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "100"
+        },
+        {
+          "account_id": "b",
+          "equity": null
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "account_count": 2,
+      "total_equity": null
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-004",
+    "title": "完整账户空集合真实返回零",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "inputs": {
+      "accounts": []
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 0,
+      "total_equity": "0"
+    }
+  },
+  {
+    "id": "FM-HEALTHSUM-001",
+    "title": "已签认分项得分按40和20和20和20合成",
+    "family": "health_weighted_scores",
+    "case_ids": [
+      "CALC-028"
+    ],
+    "inputs": {
+      "approved_profile": true,
+      "drawdown_score": "100",
+      "net_exposure_score": "80",
+      "margin_score": "60",
+      "match_score": "20"
+    },
+    "expected": {
+      "status": "ok",
+      "health_score": "72"
+    }
+  },
+  {
+    "id": "FM-HEALTHSUM-002",
+    "title": "一个分项缺失不重分配其权重",
+    "family": "health_weighted_scores",
+    "case_ids": [
+      "CALC-027"
+    ],
+    "inputs": {
+      "approved_profile": true,
+      "drawdown_score": "100",
+      "net_exposure_score": "80",
+      "margin_score": null,
+      "match_score": "20"
+    },
+    "expected": {
+      "status": "unavailable",
+      "health_score": null
+    }
+  },
+  {
+    "id": "FM-HEALTHSUM-003",
+    "title": "真实零分不当作缺项",
+    "family": "health_weighted_scores",
+    "case_ids": [
+      "CALC-027",
+      "CALC-028"
+    ],
+    "inputs": {
+      "approved_profile": true,
+      "drawdown_score": "0",
+      "net_exposure_score": "100",
+      "margin_score": "100",
+      "match_score": "100"
+    },
+    "expected": {
+      "status": "ok",
+      "health_score": "60"
+    }
+  },
+  {
+    "id": "FM-HEALTHSUM-004",
+    "title": "未确认分项映射不能把原始风险值当评分",
+    "family": "health_weighted_scores",
+    "case_ids": [
+      "CALC-028"
+    ],
+    "inputs": {
+      "drawdown_score": "0.1",
+      "net_exposure_score": "0.2",
+      "margin_score": "0.3",
+      "match_score": "0.9"
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-POSFIELDS-001",
+    "title": "浮盈保留正负且只对同类型保证金求和",
+    "family": "position_totals",
+    "case_ids": [
+      "CALC-029",
+      "SD-101"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "unrealized_pnl": "100",
+          "used_margin": "30",
+          "margin_type": "initial"
+        },
+        {
+          "account_id": "a",
+          "symbol": "ETH",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "unrealized_pnl": "-40",
+          "used_margin": "20",
+          "margin_type": "initial"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "unrealized_pnl": "60",
+      "used_margin": "50"
+    }
+  },
+  {
+    "id": "FM-POSFIELDS-002",
+    "title": "保证金缺失仍保留完整浮盈总额",
+    "family": "position_totals",
+    "case_ids": [
+      "CALC-029",
+      "CALC-048"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "unrealized_pnl": "100",
+          "used_margin": null,
+          "margin_type": "initial"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "unrealized_pnl": "100",
+      "used_margin": null
+    }
+  },
+  {
+    "id": "FM-POSFIELDS-003",
+    "title": "不同保证金类型不混加但浮盈可求和",
+    "family": "position_totals",
+    "case_ids": [
+      "CALC-029",
+      "CALC-048"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "unrealized_pnl": "100",
+          "used_margin": "30",
+          "margin_type": "initial"
+        },
+        {
+          "account_id": "a",
+          "symbol": "ETH",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "unrealized_pnl": "-40",
+          "used_margin": "20",
+          "margin_type": "maintenance"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "unrealized_pnl": "60",
+      "used_margin": null
+    }
+  },
+  {
+    "id": "FM-ANNUAL-009",
+    "title": "明确清算后口径以M04年化而非累计G除D",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012",
+      "CALC-034"
+    ],
+    "inputs": {
+      "G": "200",
+      "D": "900",
+      "Gclear": "100",
+      "days": "365",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": true,
+      "calculation_windows": {
+        "return": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        },
+        "days": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        }
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "annualized_return": "0.1"
+    }
+  },
+  {
+    "id": "FM-ANNUAL-010",
+    "title": "收益分子与运行日统计窗口不一致不得合算",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-012",
+      "CALC-046"
+    ],
+    "inputs": {
+      "G": "200",
+      "D": "900",
+      "Gclear": "100",
+      "days": "365",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": true,
+      "calculation_windows": {
+        "return": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-08-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        }
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "annualized_return": null
+    }
+  },
+  {
+    "id": "FM-ANNUAL-011",
+    "title": "明确口径但未签认运行日profile时不假定已批准",
+    "family": "annualized_return",
+    "case_ids": [
+      "CALC-013"
+    ],
+    "inputs": {
+      "G": "200",
+      "D": "900",
+      "Gclear": "100",
+      "days": "365",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": false
+    },
+    "expected": {
+      "status": "blocked_contract",
+      "reason": "BLOCKED_CONTRACT"
+    }
+  },
+  {
+    "id": "FM-SHARPE-006",
+    "title": "完整七日权益和同窗清算后收益计算Sharpe",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016"
+    ],
+    "inputs": {
+      "G": "17",
+      "D": "90",
+      "Gclear": "10",
+      "days": "7",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": true,
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        }
+      },
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "99",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "108.9",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "98.01",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "107.811",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-08T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        }
+      ],
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "sharpe": "1.910497317454280"
+    },
+    "tolerance": "1e-14"
+  },
+  {
+    "id": "FM-SHARPE-007",
+    "title": "以完整七日样本构造收益与波动窗口不一致时拒绝Sharpe",
+    "family": "sharpe",
+    "case_ids": [
+      "CALC-016",
+      "CALC-046"
+    ],
+    "inputs": {
+      "G": "17",
+      "D": "90",
+      "Gclear": "10",
+      "days": "7",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": true,
+      "calculation_windows": {
+        "return": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "days": {
+          "from": "2026-09-01T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        },
+        "volatility": {
+          "from": "2026-09-02T00:00:00Z",
+          "to": "2026-09-08T00:00:00Z"
+        }
+      },
+      "series": [
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "100",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-02T00:00:00Z",
+          "equity": "110",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-03T00:00:00Z",
+          "equity": "99",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-04T00:00:00Z",
+          "equity": "108.9",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-05T00:00:00Z",
+          "equity": "98.01",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-06T00:00:00Z",
+          "equity": "107.811",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-07T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        },
+        {
+          "timestamp": "2026-09-08T00:00:00Z",
+          "equity": "97.0299",
+          "closed": true
+        }
+      ],
+      "daily_boundary_profile": {
+        "confirmed": true,
+        "timezone": "UTC",
+        "cadence_seconds": 86400,
+        "complete": true
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "sharpe": null
+    }
+  },
+  {
+    "id": "FM-CALMAR-005",
+    "title": "全年完整权益变化事件与同窗清算后年化收益计算Calmar",
+    "family": "calmar",
+    "case_ids": [
+      "CALC-017"
+    ],
+    "inputs": {
+      "G": "200",
+      "D": "900",
+      "Gclear": "100",
+      "days": "365",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": true,
+      "calculation_windows": {
+        "return": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        },
+        "days": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        },
+        "drawdown": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        }
+      },
+      "series": [
+        {
+          "timestamp": "2025-09-01T00:00:00Z",
+          "equity": "100"
+        },
+        {
+          "timestamp": "2025-10-01T00:00:00Z",
+          "equity": "120"
+        },
+        {
+          "timestamp": "2026-05-01T00:00:00Z",
+          "equity": "90"
+        },
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "110"
+        }
+      ],
+      "history_complete": true,
+      "equity_event_profile": {
+        "all_equity_changes_in_window": true,
+        "boundaries_included": true,
+        "sampling": "all_relevant_equity_events"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "calmar": "0.4"
+    }
+  },
+  {
+    "id": "FM-CALMAR-006",
+    "title": "完整权益事件窗口与收益窗口不一致时拒绝Calmar",
+    "family": "calmar",
+    "case_ids": [
+      "CALC-017",
+      "CALC-046"
+    ],
+    "inputs": {
+      "G": "200",
+      "D": "900",
+      "Gclear": "100",
+      "days": "365",
+      "return_basis": "post_clear_return",
+      "profile_confirmed": true,
+      "calculation_windows": {
+        "return": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        },
+        "days": {
+          "from": "2025-09-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        },
+        "drawdown": {
+          "from": "2026-08-01T00:00:00Z",
+          "to": "2026-09-01T00:00:00Z"
+        }
+      },
+      "series": [
+        {
+          "timestamp": "2025-09-01T00:00:00Z",
+          "equity": "100"
+        },
+        {
+          "timestamp": "2025-10-01T00:00:00Z",
+          "equity": "120"
+        },
+        {
+          "timestamp": "2026-05-01T00:00:00Z",
+          "equity": "90"
+        },
+        {
+          "timestamp": "2026-09-01T00:00:00Z",
+          "equity": "110"
+        }
+      ],
+      "history_complete": true,
+      "equity_event_profile": {
+        "all_equity_changes_in_window": true,
+        "boundaries_included": true,
+        "sampling": "all_relevant_equity_events"
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "calmar": null
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-006",
+    "title": "选定订单均价排除同合约其他订单成交",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "account_id": "a",
+      "order_id": "o1",
+      "fills": [
+        {
+          "id": "f1",
+          "account_id": "a",
+          "order_id": "o1",
+          "quantity": "1",
+          "price": "100",
+          "symbol": "BTCUSDT"
+        },
+        {
+          "id": "f2",
+          "account_id": "a",
+          "order_id": "o2",
+          "quantity": "1",
+          "price": "300",
+          "symbol": "BTCUSDT"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "weighted_average_price": "100"
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-007",
+    "title": "同币种同订单本地ID不混入其他账户成交",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "account_id": "a",
+      "order_id": "o1",
+      "fills": [
+        {
+          "id": "f1",
+          "account_id": "a",
+          "order_id": "o1",
+          "quantity": "1",
+          "price": "100",
+          "symbol": "BTCUSDT"
+        },
+        {
+          "id": "f1",
+          "account_id": "b",
+          "order_id": "o1",
+          "quantity": "1",
+          "price": "300",
+          "symbol": "BTCUSDT"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "weighted_average_price": "100"
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-008",
+    "title": "未选择订单时混合两订单不能生成一个均价",
+    "family": "weighted_fill_price",
+    "case_ids": [
+      "CALC-031"
+    ],
+    "inputs": {
+      "fills": [
+        {
+          "id": "f1",
+          "account_id": "a",
+          "order_id": "o1",
+          "quantity": "1",
+          "price": "100",
+          "symbol": "BTCUSDT"
+        },
+        {
+          "id": "f2",
+          "account_id": "a",
+          "order_id": "o2",
+          "quantity": "1",
+          "price": "300",
+          "symbol": "BTCUSDT"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "weighted_average_price": null
+    }
+  },
+  {
+    "id": "FM-ORDER-006",
+    "title": "相同策略本地订单ID在不同账户分别计数",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030"
+    ],
+    "inputs": {
+      "orders": [
+        {
+          "order_id": "o1",
+          "account_id": "a",
+          "strategy_id": "s",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "filled"
+        },
+        {
+          "order_id": "o1",
+          "account_id": "b",
+          "strategy_id": "s",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "partial"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "order_count": 2,
+      "completed_count": 1,
+      "completion_rate": "0.5"
+    }
+  },
+  {
+    "id": "FM-ORDER-007",
+    "title": "策略局部订单ID相同仍保留各自最终状态",
+    "family": "order_completion",
+    "case_ids": [
+      "CALC-030"
+    ],
+    "inputs": {
+      "orders": [
+        {
+          "order_id": "o1",
+          "account_id": "a",
+          "strategy_id": "s1",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "filled"
+        },
+        {
+          "order_id": "o1",
+          "account_id": "a",
+          "strategy_id": "s2",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "status": "partial"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "order_count": 2,
+      "completed_count": 1,
+      "completion_rate": "0.5"
+    }
+  },
+  {
+    "id": "FM-MATCH-006",
+    "title": "同目标局部ID跨账户不是一次目标替换",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-025",
+      "CALC-026"
+    ],
+    "inputs": {
+      "targets": [
+        {
+          "target_id": "t1",
+          "account_id": "a",
+          "strategy_id": "s",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true
+        },
+        {
+          "target_id": "t1",
+          "account_id": "b",
+          "strategy_id": "s",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "target_count": 2,
+      "matched_count": 1,
+      "match_rate": "0.5"
+    }
+  },
+  {
+    "id": "FM-MATCH-007",
+    "title": "同账户不同策略目标ID相同不能相互覆盖",
+    "family": "plan_match",
+    "case_ids": [
+      "CALC-025",
+      "CALC-026"
+    ],
+    "inputs": {
+      "targets": [
+        {
+          "target_id": "t1",
+          "account_id": "a",
+          "strategy_id": "s1",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": true
+        },
+        {
+          "target_id": "t1",
+          "account_id": "a",
+          "strategy_id": "s2",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "matched": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "target_count": 2,
+      "matched_count": 1,
+      "match_rate": "0.5"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-009",
+    "title": "指定USDT净入金不能把BTC数量直接相加",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002",
+      "CALC-059"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "events": [
+        {
+          "id": "a",
+          "currency": "USDT",
+          "direction": "in",
+          "qualified": true,
+          "amount": "100"
+        },
+        {
+          "id": "b",
+          "currency": "BTC",
+          "direction": "in",
+          "qualified": true,
+          "amount": "1"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "100"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-010",
+    "title": "未指定币种且来源币种混合时不猜汇率",
+    "coverage_note": "混币原值不能直接合计属于已确定守卫，应返回不可计算；将来允许折算时的目标币种、汇率来源与时点仍需另行签认。",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002",
+      "CALC-059"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "id": "a",
+          "currency": "USDT",
+          "direction": "in",
+          "qualified": true,
+          "amount": "100"
+        },
+        {
+          "id": "b",
+          "currency": "BTC",
+          "direction": "in",
+          "qualified": true,
+          "amount": "1"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "net_deposit": null
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-011",
+    "title": "指定币种时来源币种缺失不能当作默认币种",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002",
+      "CALC-059"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "events": [
+        {
+          "id": "a",
+          "qualified": true,
+          "direction": "in",
+          "amount": "100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "net_deposit": null
+    }
+  },
+  {
+    "id": "FM-RECEIPT-010",
+    "title": "USDT账单集合实收不计USD记录",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051",
+      "SET-020"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-09-01T00:00:00Z",
+          "currency": "USDT"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "80",
+          "actual_received_at": "2026-09-02T00:00:00Z",
+          "currency": "USD"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "20",
+      "outstanding": "80",
+      "latest_received_at": "2026-09-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-011",
+    "title": "指定收款币种但确认记录币种未知不可结算",
+    "family": "receipts",
+    "case_ids": [
+      "SET-020"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "received": null,
+      "outstanding": null,
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-005",
+    "title": "按指定计价币种汇总不直接混加USD和USDT",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "100",
+          "currency": "USDT"
+        },
+        {
+          "account_id": "b",
+          "equity": "100",
+          "currency": "USD"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 1,
+      "total_equity": "100"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-006",
+    "title": "同账户局部ID在不同交易所和环境属于不同实体",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050",
+      "SD-101"
+    ],
+    "inputs": {
+      "accounts": [
+        {
+          "account_id": "a",
+          "exchange": "binance",
+          "environment": "test",
+          "equity": "100"
+        },
+        {
+          "account_id": "a",
+          "exchange": "okx",
+          "environment": "test",
+          "equity": "100"
+        },
+        {
+          "account_id": "a",
+          "exchange": "binance",
+          "environment": "paper",
+          "equity": "100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 3,
+      "total_equity": "300"
+    }
+  },
+  {
+    "id": "FM-POSITION-006",
+    "title": "持仓名义按选择币种计算不混币直接相加",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "notional": "100",
+          "currency": "USDT"
+        },
+        {
+          "account_id": "a",
+          "symbol": "ETH",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "notional": "2",
+          "currency": "ETH"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "position_count": 1,
+      "gross_notional": "100"
+    }
+  },
+  {
+    "id": "FM-POSITION-007",
+    "title": "同账户同符号现货和永续保留独立持仓",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTCUSDT",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "market": "spot",
+          "notional": "100"
+        },
+        {
+          "account_id": "a",
+          "symbol": "BTCUSDT",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "market": "perpetual",
+          "notional": "100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "position_count": 2,
+      "gross_notional": "200"
+    }
+  },
+  {
+    "id": "FM-BILLSUM-006",
+    "title": "账单币种明确时不能用另一币种收款填满应收",
+    "family": "bill_summary",
+    "case_ids": [
+      "SET-020",
+      "SET-024"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "bills": [
+        {
+          "id": "b1",
+          "currency": "USDT",
+          "receivable": "100"
+        }
+      ],
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "100",
+          "actual_received_at": "2026-09-01T00:00:00Z",
+          "currency": "USD"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "bill_count": 1,
+      "total_receivable": "100",
+      "received": "0",
+      "outstanding": "100",
+      "collection_progress": "0",
+      "latest_received_at": null
+    }
+  },
+  {
+    "id": "FM-INTERVAL-009",
+    "title": "区间起终累计值币种不同不能直接相减",
+    "coverage_note": "起终累计金额单位不一致时禁止直接相减已明确；跨币转换政策未定不妨碍本例验证不可计算守卫。",
+    "family": "interval_profit",
+    "case_ids": [
+      "CALC-005",
+      "CALC-059"
+    ],
+    "inputs": {
+      "start": {
+        "G": "100",
+        "C": "10",
+        "F": "0",
+        "currency": "USD"
+      },
+      "end": {
+        "G": "200",
+        "C": "20",
+        "F": "0",
+        "currency": "USDT"
+      }
+    },
+    "expected": {
+      "status": "unavailable",
+      "interval_net_profit": null
+    }
+  },
+  {
+    "id": "FM-WALLET-006",
+    "title": "浮盈大于权益时数学钱包余额为负不裁零",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001"
+    ],
+    "inputs": {
+      "E": "100",
+      "U": "150"
+    },
+    "expected": {
+      "status": "ok",
+      "wallet": "-50"
+    }
+  },
+  {
+    "id": "FM-CLEAR-006",
+    "title": "负清算基准但调整后本金仍正可以计算",
+    "family": "post_clear_return",
+    "case_ids": [
+      "CALC-033",
+      "CALC-034"
+    ],
+    "inputs": {
+      "G": "-100",
+      "D": "1000",
+      "Gclear": "-200"
+    },
+    "expected": {
+      "status": "ok",
+      "post_clear_return": "0.125"
+    }
+  },
+  {
+    "id": "FM-CONTRIB-006",
+    "title": "相反收益相互抵消仍有非零绝对值分母",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-022"
+    ],
+    "inputs": {
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "100"
+        },
+        {
+          "id": "b",
+          "profit": "-100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "denominator": "200",
+      "contributions": [
+        {
+          "id": "a",
+          "profit": "100",
+          "contribution": "0.5"
+        },
+        {
+          "id": "b",
+          "profit": "-100",
+          "contribution": "-0.5"
+        }
+      ]
+    }
+  },
+  {
+    "id": "FM-LATENCY-005",
+    "title": "同一时刻触发完成保留真实零延迟",
+    "family": "execution_latency",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "chain_id": "a",
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "latency_seconds": "0"
+    }
+  },
+  {
+    "id": "FM-POSFIELDS-004",
+    "title": "浮盈缺失仅使浮盈不可计算同型保证金仍可用",
+    "family": "position_totals",
+    "case_ids": [
+      "CALC-029",
+      "CALC-048"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTC",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "unrealized_pnl": null,
+          "used_margin": "30",
+          "margin_type": "initial"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "unrealized_pnl": null,
+      "used_margin": "30"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-012",
+    "title": "已拒绝收款不变实收和最近到账",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051",
+      "SET-019"
+    ],
+    "inputs": {
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "rejected",
+          "amount": "80",
+          "actual_received_at": "2026-09-02T00:00:00Z"
+        },
+        {
+          "id": "c",
+          "bill_id": "b1",
+          "status": "pending",
+          "amount": "30",
+          "actual_received_at": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "20",
+      "outstanding": "80",
+      "latest_received_at": "2026-09-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-CONTRIB-007",
+    "title": "选定a和b但b整行缺失时不能把a贡献改成百分之百",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-022",
+      "CALC-048"
+    ],
+    "inputs": {
+      "expected_strategy_ids": [
+        "a",
+        "b"
+      ],
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "denominator": null,
+      "contributions": null
+    }
+  },
+  {
+    "id": "FM-CONTRIB-008",
+    "title": "贡献分母只使用选定且完整的策略集合",
+    "family": "contribution",
+    "case_ids": [
+      "CALC-022",
+      "CALC-046"
+    ],
+    "inputs": {
+      "expected_strategy_ids": [
+        "a",
+        "b"
+      ],
+      "strategies": [
+        {
+          "id": "a",
+          "profit": "100"
+        },
+        {
+          "id": "b",
+          "profit": "-100"
+        },
+        {
+          "id": "c",
+          "profit": "900"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "denominator": "200",
+      "contributions": [
+        {
+          "id": "a",
+          "profit": "100",
+          "contribution": "0.5"
+        },
+        {
+          "id": "b",
+          "profit": "-100",
+          "contribution": "-0.5"
+        }
+      ]
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-007",
+    "title": "账户权益取截止时刻以内最新快照排除未来快照",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-046",
+      "CALC-050"
+    ],
+    "inputs": {
+      "cutoff": "2026-09-02T00:00:00Z",
+      "expected_account_ids": [
+        "a"
+      ],
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "100",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "account_id": "a",
+          "equity": "110",
+          "timestamp": "2026-09-02T00:00:00Z"
+        },
+        {
+          "account_id": "a",
+          "equity": "900",
+          "timestamp": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 1,
+      "total_equity": "110"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-008",
+    "title": "指定账户只有截止点后快照时不得伪装完整零权益",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-046",
+      "CALC-048"
+    ],
+    "inputs": {
+      "cutoff": "2026-09-02T00:00:00Z",
+      "expected_account_ids": [
+        "a"
+      ],
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "900",
+          "timestamp": "2026-09-03T00:00:00Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "account_count": 0,
+      "total_equity": null
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-009",
+    "title": "同一账户多策略绑定下全部基础金额各去重一次",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050",
+      "SD-101"
+    ],
+    "inputs": {
+      "amount_fields": [
+        "equity",
+        "wallet",
+        "unrealized_pnl",
+        "realized_pnl",
+        "fees",
+        "funding"
+      ],
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "12240",
+          "wallet": "11990",
+          "unrealized_pnl": "250",
+          "realized_pnl": "1100",
+          "fees": "80",
+          "funding": "-30",
+          "strategy_id": "s1"
+        },
+        {
+          "account_id": "a",
+          "equity": "12240",
+          "wallet": "11990",
+          "unrealized_pnl": "250",
+          "realized_pnl": "1100",
+          "fees": "80",
+          "funding": "-30",
+          "strategy_id": "s2"
+        },
+        {
+          "account_id": "b",
+          "equity": "100",
+          "wallet": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl": "20",
+          "fees": "2",
+          "funding": "1"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "account_count": 2,
+      "total_equity": "12340",
+      "total_wallet": "12080",
+      "total_unrealized_pnl": "260",
+      "total_realized_pnl": "1120",
+      "total_fees": "82",
+      "total_funding": "-29"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-010",
+    "title": "累计收益字段缺失只影响该总额保留其他完整金额",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-048",
+      "CALC-050"
+    ],
+    "inputs": {
+      "amount_fields": [
+        "equity",
+        "wallet",
+        "unrealized_pnl",
+        "realized_pnl",
+        "fees",
+        "funding"
+      ],
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "12240",
+          "wallet": "11990",
+          "unrealized_pnl": "250",
+          "realized_pnl": "1100",
+          "fees": "80",
+          "funding": "-30"
+        },
+        {
+          "account_id": "b",
+          "equity": "100",
+          "wallet": "90",
+          "unrealized_pnl": "10",
+          "realized_pnl": null,
+          "fees": "2",
+          "funding": "1"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "account_count": 2,
+      "total_equity": "12340",
+      "total_wallet": "12080",
+      "total_unrealized_pnl": "260",
+      "total_realized_pnl": null,
+      "total_fees": "82",
+      "total_funding": "-29"
+    }
+  },
+  {
+    "id": "FM-ACCOUNTS-011",
+    "title": "指定币种汇总时账户币种未知不可偷用默认USDT",
+    "family": "account_totals",
+    "case_ids": [
+      "CALC-050",
+      "CALC-059"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "accounts": [
+        {
+          "account_id": "a",
+          "equity": "100"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "account_count": null,
+      "total_equity": null
+    }
+  },
+  {
+    "id": "FM-POSITION-008",
+    "title": "未选择计价币种时混币持仓名义不能直接汇总",
+    "coverage_note": "无共同计价单位时本次汇总不可计算，不把混币原值相加；未来汇率折算和多币种输出协议仍待签认。",
+    "family": "positions",
+    "case_ids": [
+      "CALC-029",
+      "CALC-059"
+    ],
+    "inputs": {
+      "positions": [
+        {
+          "account_id": "a",
+          "symbol": "BTCUSDT",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "notional": "100",
+          "currency": "USDT"
+        },
+        {
+          "account_id": "a",
+          "symbol": "ETHUSD",
+          "side": "long",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "quantity": "1",
+          "notional": "100",
+          "currency": "USD"
+        }
+      ]
+    },
+    "expected": {
+      "status": "unavailable",
+      "position_count": null,
+      "gross_notional": null
+    }
+  },
+  {
+    "id": "FM-POSFIELDS-005",
+    "title": "完整持仓空集合浮盈及保证金都是实际零",
+    "family": "position_totals",
+    "case_ids": [
+      "CALC-029"
+    ],
+    "inputs": {
+      "positions": []
+    },
+    "expected": {
+      "status": "ok",
+      "unrealized_pnl": "0",
+      "used_margin": "0"
+    }
+  },
+  {
+    "id": "FM-WALLET-007",
+    "title": "已知浮盈不能替代缺失的权益",
+    "family": "wallet",
+    "case_ids": [
+      "CALC-001",
+      "CALC-048"
+    ],
+    "inputs": {
+      "U": "150"
+    },
+    "expected": {
+      "status": "unavailable",
+      "wallet": null
+    }
+  },
+  {
+    "id": "FM-PRINCIPAL-005",
+    "title": "负清算基准扣减本金后仍保留正本金",
+    "family": "billing_principal",
+    "case_ids": [
+      "CALC-036"
+    ],
+    "inputs": {
+      "D": "1000",
+      "Gclear": "-200"
+    },
+    "expected": {
+      "status": "ok",
+      "billing_principal": "800"
+    }
+  },
+  {
+    "id": "FM-DEPOSIT-012",
+    "title": "非合格事件缺币种时间金额不污染合格资金流",
+    "family": "net_deposits",
+    "case_ids": [
+      "CALC-002",
+      "CALC-059"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "window": {
+        "from": "2026-09-01T00:00:00Z",
+        "to": "2026-09-02T00:00:00Z"
+      },
+      "events": [
+        {
+          "id": "a",
+          "qualified": true,
+          "direction": "in",
+          "amount": "100",
+          "currency": "USDT",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "qualified": false
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "net_deposit": "100"
+    }
+  },
+  {
+    "id": "FM-RECEIPT-013",
+    "title": "待审和拒绝记录缺币种时间金额不污染已确认实收",
+    "family": "receipts",
+    "case_ids": [
+      "CALC-051",
+      "SET-019",
+      "SET-020"
+    ],
+    "inputs": {
+      "currency": "USDT",
+      "window": {
+        "from": "2026-09-01T00:00:00Z",
+        "to": "2026-09-02T00:00:00Z"
+      },
+      "receivable": "100",
+      "receipts": [
+        {
+          "id": "a",
+          "bill_id": "b1",
+          "status": "confirmed",
+          "amount": "20",
+          "currency": "USDT",
+          "timestamp": "2026-09-01T00:00:00Z",
+          "actual_received_at": "2026-09-01T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "bill_id": "b1",
+          "status": "pending"
+        },
+        {
+          "id": "c",
+          "bill_id": "b1",
+          "status": "rejected"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "received": "20",
+      "outstanding": "80",
+      "latest_received_at": "2026-09-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "FM-LATESTEXEC-001",
+    "title": "交错执行链的最近触发和最近完成分别独立取最大时间",
+    "family": "execution_latest_times",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:10Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:05Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:06Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "latest_triggered_at": "2026-09-01T00:00:05Z",
+      "latest_completed_at": "2026-09-01T00:00:10Z"
+    }
+  },
+  {
+    "id": "FM-LATESTEXEC-002",
+    "title": "乱序和重复时点不改变最近执行时间",
+    "family": "execution_latest_times",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "chain_id": "b",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:08Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:05Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:08Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:04Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:05Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "latest_triggered_at": "2026-09-01T00:00:05Z",
+      "latest_completed_at": "2026-09-01T00:00:08Z"
+    }
+  },
+  {
+    "id": "FM-LATESTEXEC-003",
+    "title": "最新触发尚未完成时保留另一条链的最近完成而不相减",
+    "family": "execution_latest_times",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "events": [
+        {
+          "chain_id": "a",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:00Z"
+        },
+        {
+          "chain_id": "a",
+          "kind": "completed",
+          "timestamp": "2026-09-01T00:00:09Z"
+        },
+        {
+          "chain_id": "b",
+          "kind": "trigger",
+          "timestamp": "2026-09-01T00:00:10Z"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ok",
+      "latest_triggered_at": "2026-09-01T00:00:10Z",
+      "latest_completed_at": "2026-09-01T00:00:09Z"
+    }
+  },
+  {
+    "id": "FM-LATESTEXEC-004",
+    "title": "完整事件空集合的最近触发和完成均为空",
+    "family": "execution_latest_times",
+    "case_ids": [
+      "CALC-032"
+    ],
+    "inputs": {
+      "events": []
+    },
+    "expected": {
+      "status": "ok",
+      "latest_triggered_at": null,
+      "latest_completed_at": null
+    }
+  },
+  {
+    "id": "FM-FILLPRICE-009",
+    "title": "同订单同合约的成交数量单位不同不能混算均价",
+    "family": "weighted_fill_price",
+    "case_ids": ["CALC-031", "CALC-048"],
+    "inputs": {
+      "account_id": "a",
+      "order_id": "o1",
+      "fills": [
+        {"id": "f1", "account_id": "a", "order_id": "o1", "symbol": "BTCUSDT", "quantity": "1", "price": "100", "quantity_unit": "base_asset", "price_unit": "USDT_per_BTC"},
+        {"id": "f2", "account_id": "a", "order_id": "o1", "symbol": "BTCUSDT", "quantity": "10", "price": "110", "quantity_unit": "contract", "price_unit": "USDT_per_BTC"}
+      ]
+    },
+    "expected": {"status": "unavailable", "weighted_average_price": null}
+  },
+  {
+    "id": "FM-FILLPRICE-010",
+    "title": "同订单有效成交缺数量不能跳过后返回其余成交均价",
+    "family": "weighted_fill_price",
+    "case_ids": ["CALC-031", "CALC-048"],
+    "inputs": {
+      "account_id": "a",
+      "order_id": "o1",
+      "fills": [
+        {"id": "f1", "account_id": "a", "order_id": "o1", "symbol": "BTCUSDT", "quantity": "1", "price": "100", "quantity_unit": "base_asset", "price_unit": "USDT_per_BTC"},
+        {"id": "f2", "account_id": "a", "order_id": "o1", "symbol": "BTCUSDT", "quantity": null, "price": "300", "quantity_unit": "base_asset", "price_unit": "USDT_per_BTC", "valid": true}
+      ]
+    },
+    "expected": {"status": "unavailable", "weighted_average_price": null}
+  },
+  {
+    "id": "FM-FILLPRICE-011",
+    "title": "同订单有效成交缺价格不能跳过或按零价格参与均价",
+    "family": "weighted_fill_price",
+    "case_ids": ["CALC-031", "CALC-048"],
+    "inputs": {
+      "account_id": "a",
+      "order_id": "o1",
+      "fills": [
+        {"id": "f1", "account_id": "a", "order_id": "o1", "symbol": "BTCUSDT", "quantity": "1", "price": "100", "quantity_unit": "base_asset", "price_unit": "USDT_per_BTC"},
+        {"id": "f2", "account_id": "a", "order_id": "o1", "symbol": "BTCUSDT", "quantity": "2", "quantity_unit": "base_asset", "price_unit": "USDT_per_BTC", "valid": true}
+      ]
+    },
+    "expected": {"status": "unavailable", "weighted_average_price": null}
+  },
+  {
+    "id": "FM-MATCH-008",
+    "title": "有效目标匹配结果为null不能当未匹配计算完整比率",
+    "family": "plan_match",
+    "case_ids": ["CALC-025", "CALC-048"],
+    "inputs": {
+      "targets": [
+        {"target_id": "a", "account_id": "a", "strategy_id": "s", "timestamp": "2026-09-01T00:00:00Z", "matched": true},
+        {"target_id": "b", "account_id": "a", "strategy_id": "s", "timestamp": "2026-09-01T00:00:00Z", "matched": null}
+      ]
+    },
+    "expected": {"status": "unavailable", "target_count": null, "matched_count": null, "match_rate": null}
+  },
+  {
+    "id": "FM-MATCH-009",
+    "title": "有效目标缺匹配结果字段不能从完整分母中静默删除",
+    "family": "plan_match",
+    "case_ids": ["CALC-025", "CALC-048"],
+    "inputs": {
+      "targets": [
+        {"target_id": "a", "account_id": "a", "strategy_id": "s", "timestamp": "2026-09-01T00:00:00Z", "matched": true},
+        {"target_id": "b", "account_id": "a", "strategy_id": "s", "timestamp": "2026-09-01T00:00:00Z"}
+      ]
+    },
+    "expected": {"status": "unavailable", "target_count": null, "matched_count": null, "match_rate": null}
+  },
+  {
+    "id": "FM-MATCH-010",
+    "title": "有效目标明确全部未匹配时返回真实零匹配率",
+    "family": "plan_match",
+    "case_ids": ["CALC-025", "CALC-026"],
+    "inputs": {
+      "targets": [
+        {"target_id": "a", "account_id": "a", "strategy_id": "s", "timestamp": "2026-09-01T00:00:00Z", "matched": false},
+        {"target_id": "b", "account_id": "a", "strategy_id": "s", "timestamp": "2026-09-01T00:00:00Z", "matched": false}
+      ]
+    },
+    "expected": {"status": "ok", "target_count": 2, "matched_count": 0, "match_rate": "0"}
+  },
+  {
+    "id": "FM-ORDER-008",
+    "title": "最新订单状态为null不能用旧完成状态或未完成状态代替",
+    "family": "order_completion",
+    "case_ids": ["CALC-030", "CALC-048"],
+    "inputs": {
+      "orders": [
+        {"order_id": "o1", "account_id": "a", "timestamp": "2026-09-01T00:00:00Z", "status": "filled"},
+        {"order_id": "o1", "account_id": "a", "timestamp": "2026-09-02T00:00:00Z", "status": null}
+      ]
+    },
+    "expected": {"status": "unavailable", "order_count": null, "completed_count": null, "completion_rate": null}
+  },
+  {
+    "id": "FM-ORDER-009",
+    "title": "最新订单缺状态字段不能静默排除并返回百分百完成",
+    "family": "order_completion",
+    "case_ids": ["CALC-030", "CALC-048"],
+    "inputs": {
+      "orders": [
+        {"order_id": "o1", "account_id": "a", "timestamp": "2026-09-01T00:00:00Z", "status": "filled"},
+        {"order_id": "o2", "account_id": "a", "timestamp": "2026-09-01T00:00:00Z"}
+      ]
+    },
+    "expected": {"status": "unavailable", "order_count": null, "completed_count": null, "completion_rate": null}
+  },
+  {
+    "id": "FM-ORDER-010",
+    "title": "最新订单状态未知不能按确定未完成统计完成率",
+    "family": "order_completion",
+    "coverage_note": "status为测试侧归一化来源状态，真实适配器须先映射已支持状态；本例不规定交易所原生枚举全集。",
+    "case_ids": ["CALC-030", "CALC-048"],
+    "inputs": {
+      "orders": [
+        {"order_id": "o1", "account_id": "a", "timestamp": "2026-09-01T00:00:00Z", "status": "filled"},
+        {"order_id": "o2", "account_id": "a", "timestamp": "2026-09-01T00:00:00Z", "status": "unknown"}
+      ]
+    },
+    "expected": {"status": "unavailable", "order_count": null, "completed_count": null, "completion_rate": null}
+  },
+  {
+    "id": "FM-CLEAR-007",
+    "title": "清算调整后本金为负时展示收益率不可计算",
+    "family": "post_clear_return",
+    "case_ids": ["CALC-034", "CALC-048"],
+    "inputs": {"G": "200", "Gclear": "100", "D": "-200"},
+    "expected": {"status": "unavailable", "post_clear_return": null}
+  },
+  {
+    "id": "FM-BILLRETURN-005",
+    "title": "计费本金为负不能把正计费收益算成负收益率",
+    "family": "billing_return",
+    "case_ids": ["CALC-035", "CALC-036", "CALC-048"],
+    "inputs": {"G": "1100", "Gbase": "1000", "D": "-2000", "Gclear": "1000"},
+    "expected": {"status": "unavailable", "billing_return": null}
+  },
+  {
+    "id": "FM-BILLRETURN-006",
+    "title": "正本金下计费毛收益恰为零时返回真实零收益率",
+    "family": "billing_return",
+    "case_ids": ["CALC-035", "CALC-036"],
+    "inputs": {"G": "1000", "Gbase": "1000", "D": "9000", "Gclear": "1000"},
+    "expected": {"status": "ok", "billing_return": "0"}
+  },
+  {
+    "id": "FM-BILLSUM-007",
+    "title": "选定账单有整行缺失时不能把已取部分当完整总额",
+    "family": "bill_summary",
+    "coverage_note": "通过选择全集与来源集合不一致验证完整性守卫，不代表已经执行真实分页接口。",
+    "case_ids": ["SET-024", "SET-051"],
+    "inputs": {
+      "bill_ids": ["b1", "b2"],
+      "bills": [{"id": "b1", "receivable": "100"}],
+      "receipts": [
+        {"id": "r1", "bill_id": "b1", "status": "confirmed", "amount": "50", "actual_received_at": "2026-09-01T00:00:00Z"},
+        {"id": "r2", "bill_id": "b2", "status": "confirmed", "amount": "150", "actual_received_at": "2026-09-02T00:00:00Z"}
+      ]
+    },
+    "expected": {"status": "unavailable", "bill_count": null, "total_receivable": null, "received": null, "outstanding": null, "collection_progress": null, "latest_received_at": null}
+  }
+]

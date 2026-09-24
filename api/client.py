@@ -55,6 +55,11 @@ class HTTPClient:
         if close is not None:
             close()
 
+    @property
+    def base_url(self) -> str:
+        """返回实际请求所用基础地址，用于写操作的环境边界校验。"""
+        return self._settings.base_url
+
     def request(
         self,
         method: str,
@@ -67,6 +72,7 @@ class HTTPClient:
         timeout_seconds: float | None = None,
         retryable: bool | None = None,
         include_authentication: bool = True,
+        allow_redirects: bool | None = None,
     ) -> requests.Response:
         """发送一个 JSON HTTP 请求并按配置重试可安全重放的请求。
 
@@ -75,12 +81,15 @@ class HTTPClient:
         ``timeout_seconds`` 可覆盖默认超时；``retryable`` 可显式声明业务请求是否可安全重放，
         未传时按照 HTTP 幂等方法判断。
         ``include_authentication=False`` 明确移除 Authorization，仅用于独立未授权协议请求。
+        ``allow_redirects=False`` 禁止跳转和请求体自动重放；省略时保持 Session 默认行为。
         返回服务端的原始 ``requests.Response``，由上层 API、Service 或 Case 判断业务结果；网络错误在不可重试或重试耗尽时抛出。
         """
 
         if raw_body is not None and json_body is not None:
             raise ValueError("raw_body and json_body are mutually exclusive")
         body_options = {"data": raw_body} if raw_body is not None else {}
+        if allow_redirects is not None:
+            body_options["allow_redirects"] = allow_redirects
         url = self._build_url(path)
         normalized_method = method.upper()
         request_is_retryable = (

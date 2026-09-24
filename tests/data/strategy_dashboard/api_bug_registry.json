@@ -1,0 +1,17 @@
+[
+  {
+    "title": "来源策略可打开详情但关联账号和数据接口返回不存在",
+    "first_confirmed_on": "2026-09-24",
+    "environment": "test",
+    "module": "来源策略详情与数据查询",
+    "identity": {
+      "strategy_definition_id": "nt:qv_zhile_test",
+      "strategy_exchange": "binance",
+      "account_id": "bn_test_leeman"
+    },
+    "expected": "当前目录允许查看且来源详情可识别的同一策略身份，在当前前端声明的来源和交易所范围下，可继续查询关联账号、指标、曲线及交易数据；缺数据不能误报策略身份不存在。",
+    "observed": "目录及带 metric_source=prometheus、strategy_exchange=binance 的详情返回 200；关联账号返回 404/STRATEGY_NOT_FOUND，analytics 和 trading 返回 404/SUBJECT_NOT_FOUND。",
+    "evidence_report": "reports/quant-all-api-regression-20260924-0958/interface-current/current-contract-audit.json",
+    "counting_rule": "一个来源身份链路问题；重复请求和不同端点的同类 404 不拆成多个 Bug。"
+  }
+]
