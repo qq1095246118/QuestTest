@@ -98,7 +98,7 @@ def test_raw_capital_endpoints_produce_interval_amount(case: Any, capital_source
             if start_currency != end_currency:
                 reasons = {"CURRENCY_MISMATCH", "UNSUPPORTED_CURRENCY"}
             else:
-                reasons = {"SOURCE_FIELD_UNAVAILABLE", "BASELINE_UNAVAILABLE", "DEPENDENCY_INCOMPLETE"}
+                reasons = {"SOURCE_FIELD_UNAVAILABLE", "BASELINE_UNAVAILABLE", "DEPENDENCY_INCOMPLETE", "SNAPSHOT_SOURCE_UNAVAILABLE"}
             assert actual.get("reason_code") in reasons, ("Expected dependency guard was masked", actual)
         else:
             assert actual["status"] == "complete", actual

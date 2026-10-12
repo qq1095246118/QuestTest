@@ -1,6 +1,6 @@
 # 分润平台公式场景覆盖依据与扩展清单
 
-本文件是公式验收范围和自动化数据设计依据，不把清单条目计入正式用例数，也不把文档检查通过当作真实业务通过。现有 175 条主用例及其稳定中文标题保持不变；`CALC-001～050` 与 `docs/strategy-dashboard-follow-up-cases.md` 的预留编号不重新占用。
+本文件是公式验收范围和自动化数据设计依据，不把清单条目计入正式用例数，也不把文档检查通过当作真实业务通过。原有 175 条主用例及其稳定中文标题保持不变，当前注册目录另有 51 条补充 Case；其中 43 条是历史 follow-up/跨模块场景，8 条是剩余跨层与生命周期场景。`CALC-001～050` 与 `docs/strategy-dashboard-follow-up-cases.md` 的预留编号不重新占用。
 
 2026-09-23 已定位并只读核对最新版 16 页《量化交易 V2 业务与计算总览》，正文更新时间 2026-09-19，当前位于 `/Users/wrh/.Trash/量化交易 V2 业务与计算总览.pdf`（没有移动或恢复用户文件）。公式采用该版第 5～8 页，窗口/初始化/财务采用第 8～12 页，TBD 采用第 13～15 页。同时对照根目录 2026-09-18 的旧 43 页稿、`design/02-calculation-cases.md`、`design/03-alerts-and-settlement.md` 和 follow-up 清单。以下 `confirmed` 指最新版给出明确业务算式，不声称接口已经实现或通过；`contract_pending` 指只能按已签认配置选择唯一算法，不能猜一个常用公式；`workflow` 指必须发生真实业务动作、查询动作后结果才能验收。
 
@@ -103,11 +103,11 @@ python3 -m scripts.report_quant_formula_coverage \
   --markdown reports/quant-formula-scenarios.md
 ```
 
-生成文件逐条包含中文标题、原始输入、固定预期、主用例映射、自动化入口、实际来源适配状态和单列的待定字段。已有175条主 Case 的元数据验证已与真实业务分开：未开启真实执行时不再当成业务通过。
+生成文件逐条包含中文标题、原始输入、固定预期、主用例映射、自动化入口、实际来源适配状态和单列的待定字段。226条注册主 Case 的元数据验证已与真实业务分开：未开启真实执行时不再当成业务通过。
 
 ## 初版场景文件与审计修复记录（历史，2026-09-23早期）
 
-最终读取的两个文件共 **271 个参数化场景、49 个 family**，不改变175条历史主用例数。这里是自动化输入和独立预期的设计/实现统计，不是平台业务通过统计。可用 `python3 -m scripts.report_quant_formula_coverage --output reports/quant-formula-coverage.json` 重新生成每条场景的适配状态。
+最终读取的公式文件共 **349 个参数化场景、52 个 family**，不改变226条注册主用例数。这里是自动化输入和独立预期的设计/实现统计，不是平台业务通过统计。可用 `python3 -m scripts.report_quant_formula_coverage --output reports/quant-formula-coverage.json` 重新生成每条场景的适配状态。
 
 - `formula_finance.json`：224条、30个family；142个数值结果、74个不可计算结果、8个具有具体输入的规则阻塞结果。216条具有数值/空值断言。
 - `formula_contract_pending.json`：47条、19个family；全部有区别性输入和明确待定决策，不再保留`inputs={}`；每条`contract_requirements`说明待签认点及为什么无法唯一计算，预期统一`blocked_contract`。预期没有调用Oracle生成。

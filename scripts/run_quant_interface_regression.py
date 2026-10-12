@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import sys
 import time
 import uuid
 from collections import defaultdict
@@ -17,6 +18,16 @@ from typing import Any
 
 import requests
 import yaml
+
+# Keep direct ``python scripts/...`` execution bound to this checkout after a
+# workspace move, rather than an older editable installation of ``service``.
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from service.strategy_dashboard_strategy_scope import (
+    strategy_overview_differences,
+    strategy_overview_scopes,
+)
 
 METRICS = (
     "margin_equity,wallet_balance,realized_pnl_gross,unrealized_pnl,cumulative_return,"
@@ -164,7 +175,9 @@ class Regression:
             self.add_finding("BLOCKED", "接口请求网络异常", f"{name} 未取得 HTTP 响应：{entry.get('error_message', entry.get('error'))}", [name])
             return
         error_code = body.get("error", {}).get("code") if isinstance(body, dict) and isinstance(body.get("error"), dict) else None
-        expected_business_errors = {"SOURCE_STRATEGY_AMBIGUOUS", "HISTORY_NOT_SUPPORTED"}
+        # A same-name overview is allowed to span exchanges; ambiguity must not
+        # be accepted as a valid refusal of that overview request.
+        expected_business_errors = {"HISTORY_NOT_SUPPORTED"}
         if status >= 500:
             self.add_finding("BUG_CANDIDATE", "接口返回服务端错误", f"{name} 返回 HTTP {status}", [name])
         elif status >= 400:
@@ -203,7 +216,11 @@ class Regression:
         ids = []
         for item in data.get("items", []) if isinstance(data.get("items"), list) else []:
             if entry["path"] == "/quantitative-trading/strategies" and item.get("strategy_definition_id") is not None:
-                ids.append((str(item["strategy_definition_id"]), str(item.get("exchange") or "")))
+                # Strategy management is one row per strategy-account relation;
+                # the same definition/exchange may legitimately repeat for different accounts.
+                account_ids = item.get("account_ids")
+                account_id = account_ids[0] if isinstance(account_ids, list) and account_ids else item.get("account_id")
+                ids.append((str(item["strategy_definition_id"]), str(item.get("exchange") or ""), str(account_id or "")))
                 continue
             identity = item.get("id") or item.get("assignment_id") or item.get("order_id") or item.get("fill_id") or item.get("signal_id") or item.get("bill_id") or item.get("account_id") or item.get("strategy_definition_id")
             if identity is not None:
@@ -233,28 +250,30 @@ class Regression:
         for account_id in all_account_ids:
             if not account_id.isdigit():
                 self.add_finding("DATA_GAP", "目录包含不可用于账号详情接口的外部账号标识", f"目录返回 account_id={account_id!r}，详情与交易端点只接受数字 local_account_id，已跳过该样本", ["accounts"])
-        strategy_rows = list(dict.fromkeys((str(item.get("strategy_definition_id") or item.get("id")), str(item.get("exchange") or "")) for item in strategies if item.get("strategy_definition_id") is not None or item.get("id") is not None))
+        # Every stable ID remains an entry point to a same-name overview. The
+        # clicked list row's exchange must not narrow any detail section.
+        strategy_ids = list(dict.fromkeys(
+            ident for scope in strategy_overview_scopes(strategies)
+            for ident in scope.definition_ids
+        ))
         for account_id in account_ids:
             self.call(f"account-{account_id}-detail", f"/admin/quant-accounts/{account_id}")
             self.check_pagination(self.call(f"account-{account_id}-assignments", f"/quantitative-trading/accounts/{account_id}/assignments", {"status": "all", "from": iso(self.window_from), "to": iso(self.window_to), "scope": "lifetime", "metric_basis": "accrual", "metric_source": "prometheus", "limit": 100}))
-        for strategy_id, exchange in strategy_rows:
-            prefix = f"strategy-{strategy_id}-{exchange or 'unspecified'}"
-            scoped = {"strategy_exchange": exchange} if exchange else {}
-            self.call(prefix + "-detail", f"/quantitative-trading/strategy-definitions/{strategy_id}", scoped | {"metric_source": "prometheus"})
-            self.check_pagination(self.call(prefix + "-accounts", f"/quantitative-trading/strategy-definitions/{strategy_id}/accounts", scoped | {"assignment_status": "all", "scope": "lifetime", "metric_basis": "accrual", "from": iso(self.window_from), "to": iso(self.window_to), "limit": 100}))
+        for strategy_id in strategy_ids:
+            prefix = f"strategy-{strategy_id}-overview"
+            self.call(prefix + "-detail", f"/quantitative-trading/strategy-definitions/{strategy_id}", {"metric_source": "prometheus"})
+            self.check_pagination(self.call(prefix + "-accounts", f"/quantitative-trading/strategy-definitions/{strategy_id}/accounts", {"assignment_status": "all", "metric_source": "prometheus", "scope": "lifetime", "metric_basis": "accrual", "from": iso(self.window_from), "to": iso(self.window_to), "limit": 100}))
 
-        subjects: list[tuple[str, str, str]] = [("portfolio", "", "")] + [("account", ident, "") for ident in account_ids] + [("strategy", ident, exchange) for ident, exchange in strategy_rows]
-        for subject_type, subject_id, exchange in subjects:
+        subjects: list[tuple[str, str]] = [("portfolio", "")] + [("account", ident) for ident in account_ids] + [("strategy", ident) for ident in strategy_ids]
+        for subject_type, subject_id in subjects:
             base: dict[str, Any] = {"subject_type": subject_type, "scope": "lifetime", "metric_basis": "accrual", "population": "all", "from": iso(self.window_from), "to": iso(self.window_to), "metric_source": "prometheus"}
             if subject_id:
                 base["subject_id"] = subject_id
             if subject_type == "strategy":
                 base["aggregation"] = "linked_accounts"
-                if exchange:
-                    base["strategy_exchange"] = exchange
             prefix = f"{subject_type}-{subject_id or 'portfolio'}"
             if subject_type == "strategy":
-                prefix += "-" + (exchange or "unspecified")
+                prefix += "-overview"
             self.call(prefix + "-summary", "/quantitative-trading/analytics/summary", base | {"metrics": METRICS})
             self.call(prefix + "-risk", "/quantitative-trading/analytics/risk", base)
             self.call(prefix + "-series", "/quantitative-trading/analytics/series", base | {"types": SERIES_TYPES, "granularity": "1d", "include_markers": "true"})
@@ -265,17 +284,15 @@ class Regression:
                 self.call(prefix + "-contributions", "/quantitative-trading/analytics/contributions", base | {"selection_kind": "strategy", "denominator_scope": "filtered"})
 
         jobs: list[tuple[str, str, dict[str, Any]]] = []
-        for subject_type, subject_id, exchange in [("account", ident, "") for ident in account_ids] + [("strategy", ident, exchange) for ident, exchange in strategy_rows]:
+        for subject_type, subject_id in [("account", ident) for ident in account_ids] + [("strategy", ident) for ident in strategy_ids]:
             endpoints = tuple(endpoint for endpoint in TRADING_ENDPOINTS if endpoint != "cash-flows" or subject_type == "account")
             for endpoint in endpoints:
                 params: dict[str, Any] = {"subject_type": subject_type, "subject_id": subject_id, "limit": 100}
-                if subject_type == "strategy" and exchange:
-                    params["strategy_exchange"] = exchange
                 if subject_type == "strategy" and endpoint == "positions":
                     params.update({"metric_source": "prometheus", "aggregation": "linked_accounts"})
                 if endpoint in TIME_ENDPOINTS:
                     params.update({"from": iso(self.window_from), "to": iso(self.window_to)})
-                prefix = f"{subject_type}-{subject_id}" + ("-" + (exchange or "unspecified") if subject_type == "strategy" else "")
+                prefix = f"{subject_type}-{subject_id}" + ("-overview" if subject_type == "strategy" else "")
                 jobs.append((f"{prefix}-{endpoint}", f"/quantitative-trading/trading/{endpoint}", params))
         with ThreadPoolExecutor(max_workers=3) as pool:
             futures = [pool.submit(self.call, name, path, params) for name, path, params in jobs]
@@ -318,48 +335,38 @@ class Regression:
                 self.add_finding("BUG_CANDIDATE", "保证金使用率与金额不一致", f"{entry['name']} expected={used / equity:.10f}, actual={utilization:.10f}", [entry["name"]])
 
     def check_identity_consistency(self) -> None:
-        """Compare list/detail status and membership fields returned by the same API release."""
+        """Compare a same-name overview against full, unfiltered list membership.
+
+        An exchange/account row is not the detail population; mixed status does
+        not imply a mismatch. An incomplete directory cannot prove membership.
+        """
         strategies_entry = next((item for item in self.results if item["name"] == "strategies"), None)
         if not strategies_entry:
             return
-        listed = {
-            (str(item.get("strategy_definition_id")), str(item.get("exchange") or "")): item
-            for item in items_of(strategies_entry.get("body"))
-            if item.get("strategy_definition_id")
-        }
-        for (strategy_id, exchange), summary in listed.items():
-            detail_name = f"strategy-{strategy_id}-{exchange or 'unspecified'}-detail"
-            detail_entry = next((item for item in self.results if item["name"] == detail_name), None)
-            if not detail_entry or detail_entry.get("status") != 200:
-                continue
-            detail = data_obj(detail_entry.get("body")) or {}
-            detail = detail.get("strategy") if isinstance(detail.get("strategy"), dict) else {}
-            list_status = summary.get("runtime_status")
-            detail_status = detail.get("runtime_status")
-            if list_status != detail_status:
-                self.add_finding(
-                    "BUG_CANDIDATE",
-                    "策略列表与策略详情运行状态不一致",
-                    f"{summary.get('code') or strategy_id} / {exchange} 列表 runtime={list_status}，详情 runtime={detail_status}",
-                    ["strategies", detail_name],
-                )
-            list_ids = {str(value) for value in summary.get("account_ids", [])}
-            detail_ids = {str(value) for value in detail.get("account_ids", [])}
-            list_count, detail_count = summary.get("account_count"), detail.get("account_count")
-            if list_count != detail_count or list_ids != detail_ids:
-                self.add_finding(
-                    "OBSERVATION",
-                    "策略列表与策略详情关联账号口径不一致",
-                    f"{summary.get('code') or strategy_id} 列表 account_count/account_ids={list_count}/{sorted(list_ids)}，详情={detail_count}/{sorted(detail_ids)}",
-                    ["strategies", detail_name],
-                )
-            if detail_count is not None and detail_count != len(detail_ids):
-                self.add_finding(
-                    "OBSERVATION",
-                    "策略详情关联账号数量与账号 ID 列表长度不一致",
-                    f"{summary.get('code') or strategy_id} 详情 account_count={detail_count}，account_ids 实际返回 {len(detail_ids)} 个",
-                    [detail_name],
-                )
+        catalog = data_obj(strategies_entry.get("body")) or {}
+        selection = strategies_entry.get("params") or {}
+        filtered = any(selection.get(field) for field in (
+            "search", "strategy_search", "exchange", "strategy_exchange",
+            "runtime_status", "display_status", "researcher_user_id", "account_ids",
+            "strategy_definition_ids",
+        )) or selection.get("population") not in (None, "all")
+        if catalog.get("has_more") is True or (catalog.get("page_info") or {}).get("has_more") is True or filtered:
+            self.add_finding("DATA_GAP", "策略总览缺少完整未筛选目录",
+                             "当前目录为分页片段或筛选子集，不能用它判定跨交易所总览漏算/多算", ["strategies"])
+            return
+        for scope in strategy_overview_scopes(items_of(strategies_entry.get("body"))):
+            for strategy_id in scope.definition_ids:
+                detail_name = f"strategy-{strategy_id}-overview-detail"
+                entry = next((item for item in self.results if item["name"] == detail_name), None)
+                if not entry or entry.get("status") != 200:
+                    continue
+                detail = (data_obj(entry.get("body")) or {}).get("strategy")
+                if not isinstance(detail, dict):
+                    self.add_finding("DATA_GAP", "策略详情缺少可核对的策略对象", detail_name, [detail_name])
+                    continue
+                for difference in strategy_overview_differences(scope, detail):
+                    self.add_finding(difference["kind"], difference["title"], difference["detail"],
+                                     ["strategies", detail_name])
 
     def write_report(self) -> Path:
         self.output.mkdir(parents=True, exist_ok=True)

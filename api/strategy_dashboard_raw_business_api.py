@@ -29,4 +29,11 @@ class RawBusinessFixtureAPI:
             headers={"X-Quant-Contract": "2", "Cache-Control": "no-cache"},
             retryable=False, allow_redirects=False,
         )
-        return {"http_status": response.status_code, "body": response.json()}
+        try:
+            body = response.json()
+        except ValueError:
+            # Preserve actual non-JSON 500/502 evidence instead of masking the
+            # backend status behind a test-client JSONDecodeError.
+            return {"http_status": response.status_code, "body": None,
+                    "raw_body": response.text[:2048], "content_type": response.headers.get("Content-Type")}
+        return {"http_status": response.status_code, "body": body}

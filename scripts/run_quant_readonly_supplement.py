@@ -200,7 +200,9 @@ class Supplement(Regression):
             # A live source refresh may legitimately expire the first snapshot.
             # Start from a new first page; never append a new generation to it.
             accounts = self.full_pages("accounts-fresh-retry", "/admin/quant-accounts", common, identity_key="account_id", numbered=True)
-        strategies = self.full_pages("strategies", "/quantitative-trading/strategies", common | {"metric_source": "prometheus"}, identity_key=("strategy_definition_id", "exchange"))
+        # List rows retain account relationships even when name/definition and
+        # exchange repeat; the detail overview is a different aggregation scope.
+        strategies = self.full_pages("strategies", "/quantitative-trading/strategies", common | {"metric_source": "prometheus"}, identity_key=("strategy_definition_id", "exchange", "account_ids"))
         self.check_filters(accounts, strategies)
         metrics = METRICS
         for account in accounts:

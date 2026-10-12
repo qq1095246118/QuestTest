@@ -1,4 +1,4 @@
-"""策略看板 175 条结果级用例的 pytest 注册入口。
+"""策略看板结果级用例的 pytest 注册入口。
 
 元数据检查仅由 ``test_strategy_dashboard_case_definition_is_detailed`` 执行。
 默认 ``contract`` 模式下业务入口明确跳过，不把重复元数据检查显示为业务通过。
@@ -35,10 +35,10 @@ def _case_id(case: StrategyDashboardCase) -> str:
 
 
 def test_strategy_dashboard_case_catalog_is_complete() -> None:
-    """确认五阶段设计用例已全部注册且编号唯一。"""
+    """确认主用例和本轮补充用例已全部注册且编号唯一。"""
 
-    assert len(_CASES) == 175
-    assert len({case.case_id for case in _CASES}) == 175
+    assert len(_CASES) == 226
+    assert len({case.case_id for case in _CASES}) == 226
 
 
 @pytest.mark.unit

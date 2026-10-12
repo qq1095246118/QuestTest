@@ -428,7 +428,7 @@
       "parent_case_id": "SD-106",
       "title": "同名策略的不同来源金额保持归属",
       "group": "身份和关联",
-      "input_summary": "同名策略分别产生10和20的收益事件",
+      "input_summary": "同名策略跨Binance/OKX产生10和20的收益，相似名称策略产生90，随后重放第一条事件",
       "source_responses": [
         {
           "source_status": "complete",
@@ -437,18 +437,30 @@
               {
                 "local_strategy_id": "s1",
                 "strategy_name": "同名策略",
-                "external_run_id": "r1"
+                "external_run_id": "r1",
+                "exchange": "binance",
+                "account_id": "fixture_account_a"
               },
               {
                 "local_strategy_id": "s2",
                 "strategy_name": "同名策略",
-                "external_run_id": "r2"
+                "external_run_id": "r2",
+                "exchange": "okx",
+                "account_id": "fixture_account_b"
+              },
+              {
+                "local_strategy_id": "s3",
+                "strategy_name": "同名策略_extra",
+                "external_run_id": "r3",
+                "exchange": "binance",
+                "account_id": "fixture_account_c"
               }
             ],
             "events": [
               {
                 "event_id": "e1",
                 "account_id": "fixture_account_a",
+                "exchange": "binance",
                 "event_type": "realized_profit",
                 "amount": "10",
                 "currency": "USDT",
@@ -457,12 +469,40 @@
               },
               {
                 "event_id": "e2",
-                "account_id": "fixture_account_a",
+                "account_id": "fixture_account_b",
+                "exchange": "okx",
                 "event_type": "realized_profit",
                 "amount": "20",
                 "currency": "USDT",
                 "event_time": "2026-09-20T10:00:00Z",
                 "external_run_id": "r2"
+              },
+              {
+                "event_id": "e3",
+                "account_id": "fixture_account_c",
+                "exchange": "binance",
+                "event_type": "realized_profit",
+                "amount": "90",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z",
+                "external_run_id": "r3"
+              }
+            ]
+          }
+        },
+        {
+          "source_status": "complete",
+          "body": {
+            "events": [
+              {
+                "event_id": "e1",
+                "account_id": "fixture_account_a",
+                "exchange": "binance",
+                "event_type": "realized_profit",
+                "amount": "10",
+                "currency": "USDT",
+                "event_time": "2026-09-20T10:00:00Z",
+                "external_run_id": "r1"
               }
             ]
           }
@@ -471,11 +511,21 @@
       "expected": {
         "event_strategy": {
           "e1": "s1",
-          "e2": "s2"
+          "e2": "s2",
+          "e3": "s3"
         },
+        "overview": {
+          "strategy_name": "同名策略",
+          "strategy_ids": ["s1", "s2"],
+          "account_ids": ["fixture_account_a", "fixture_account_b"],
+          "realized_profit": "30"
+        },
+        "unique_event_count": 3,
         "assertions": [
-          "按稳定ID核对事实，不按名称跨策略串数据",
-          "接口如合法按名称聚合，底层身份和各自明细仍应可追溯"
+          "底层事件仍归属各自稳定策略、账号和交易所身份；重复投递不新增事实",
+          "列表保留同名策略的跨交易所行；各入口的详情合法聚合为30，不是10或20",
+          "相似名称策略的90不进入同名策略总览，账号详情仍保持独立",
+          "跨交易所相同局部事件ID不得互相覆盖，重复关系不得重复计费或汇总"
         ]
       },
       "required_contract": [],

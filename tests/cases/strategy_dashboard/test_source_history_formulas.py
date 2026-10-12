@@ -163,3 +163,77 @@ def test_raw_realized_events_compute_current_statistics_profile(case: dict[str, 
                 assert abs(Decimal(actual["value"]) - Decimal(expected)) <= Decimal("0.00000001"), evidence["assertions"]
         evidence["assertion_passed"] = True
     assert evidence["cleanup_verified_zero"] is True
+
+
+def test_cross_metric_results_share_one_frozen_window_and_source_generation(history_runtime: Any) -> None:
+    """CALC-064: risk and return cards must not silently mix snapshots or windows."""
+    client, repository, actor_id = history_runtime
+    inputs = {"equity_path": ["100", "110", "99", "108.9"], "days": 8, "G": "8.9", "D": "100"}
+    plan = history_input_plan(inputs)
+    metrics = "cumulative_return,annualized_return,volatility,sharpe_ratio,calmar_ratio,current_drawdown,max_drawdown"
+    flow = RawBusinessFixtureFlow(repository, RawBusinessFixtureAPI(client), actor_id)
+    with flow.execute(lambda base: bind_history_payload(base, plan), metrics=metrics,
+                      context={"from": plan["from"], "to": plan["to"]},
+                      from_at=plan["from"], to_at=plan["to"]) as evidence:
+        response = evidence["summary_response"]
+        assert response["http_status"] == 200
+        body = response["body"]
+        assert body["success"] is True and body["meta"]["mock"] is False
+        assert body["meta"]["snapshot_id"] == evidence["fixture_id"]
+        data = body["data"]
+        for boundary in ("from", "to"):
+            actual = datetime.fromisoformat(data["context"][boundary].replace("Z", "+00:00"))
+            expected = datetime.fromisoformat(plan[boundary].replace("Z", "+00:00"))
+            assert actual == expected, {"boundary": boundary, "actual": actual, "expected": expected}
+        results = data["metrics"]
+        assert set(results) >= {"cumulative_return", "annualized_return", "volatility",
+                                "sharpe_ratio", "calmar_ratio", "current_drawdown", "max_drawdown"}
+        observed = {metric.get("observed_at") for metric in results.values()
+                    if metric.get("observed_at") is not None}
+        assert len(observed) <= 1, {"observed_at": sorted(observed), "metrics": results}
+        assert all(metric.get("snapshot_id", evidence["fixture_id"]) == evidence["fixture_id"]
+                   for metric in results.values())
+    assert evidence["cleanup_verified_zero"] is True
+
+
+@pytest.mark.parametrize("missing_field", ["D", "G", "E"])
+def test_missing_raw_field_degrades_only_dependent_metrics(missing_field: str, history_runtime: Any) -> None:
+    """CALC-065: a missing source field must not be replaced by zero or another card."""
+    client, repository, actor_id = history_runtime
+    inputs = {"equity_path": ["100", "105", "110"], "days": 8, "G": "10", "D": "100"}
+    plan = history_input_plan(inputs)
+
+    def build(base: dict[str, Any]) -> dict[str, Any]:
+        payload = bind_history_payload(base, plan)
+        for snapshot in payload["snapshots"]:
+            raw = snapshot["Payload"]
+            field = {"D": "net_deposit", "G": "realized_pnl_gross", "E": "margin_equity"}[missing_field]
+            raw[field] = None
+            raw["field_status"][field] = {"status": "unavailable", "reason_code": "SOURCE_FIELD_UNAVAILABLE",
+                                            "observed_at": snapshot["ObservedAt"]}
+        return payload
+
+    metrics = "margin_equity,wallet_balance,cumulative_return,annualized_return,volatility,current_drawdown,max_drawdown"
+    flow = RawBusinessFixtureFlow(repository, RawBusinessFixtureAPI(client), actor_id)
+    with flow.execute(build, metrics=metrics, context={"from": plan["from"], "to": plan["to"]},
+                      from_at=plan["from"], to_at=plan["to"]) as evidence:
+        response = evidence["summary_response"]
+        assert response["http_status"] == 200
+        data = response["body"]["data"]
+        results = data["metrics"]
+        if missing_field in {"D", "G"}:
+            for metric in ("cumulative_return", "annualized_return"):
+                assert results[metric]["value"] is None
+                assert results[metric]["status"] in {"unavailable", "partial"}
+        else:
+            for metric in ("volatility", "current_drawdown", "max_drawdown"):
+                assert results[metric]["value"] is None
+                assert results[metric]["status"] in {"unavailable", "partial"}
+        # The fixture removes only one raw field. Wallet balance remains an
+        # explicit independent source fact, rather than a required D+G derivation.
+        assert Decimal(results["wallet_balance"]["value"]) == Decimal("110")
+        if missing_field == "E":
+            assert results["margin_equity"]["value"] is None
+        else:
+            assert Decimal(results["margin_equity"]["value"]) == Decimal("110")
+    assert evidence["cleanup_verified_zero"] is True

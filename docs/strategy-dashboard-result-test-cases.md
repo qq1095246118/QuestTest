@@ -18,31 +18,35 @@
 
 ## 详细用例文件
 
+2026-10-08用户确认策略管理的聚合边界：列表保留同名策略的交易所/账号行，详情为该名称的跨交易所总览。SD-106、SD-109、BV-106、BV-108、BV-117、VIEW-142、VIEW-145及SD-106-SAME-NAME已按此更正，稳定编号不变。可加金额按完整合法成员和事实去重后对账；比例类不简单求和。账号详情仍按稳定账号身份隔离。接口回归默认不向策略详情、账号集合、summary/risk/series及交易端点携带strategy_exchange，混合状态不再与单条列表记录比较。此前“策略详情跳转丢失交易所范围，导致跨交易所数据和状态混入”为测试口径误判，已撤销；旧运行报告保留为历史证据，不覆盖改写。
+
 | 模块 | 用例编号 | 数量 | 文件 | 覆盖内容 |
 | --- | --- | ---: | --- | --- |
 | 策略数据接入与基础页面 | SD-101～SD-120、BV-101～BV-140 | 60 | [01-data-and-pages.md](../tests/cases/strategy_dashboard/design/01-data-and-pages.md) | 策略/账号身份、状态、归属、持仓、执行链、当前/历史/清算/真实净值、字段映射、分页、筛选、空态、刷新和页面缓存 |
 | 基础字段与复杂指标 | CALC-001～CALC-050 | 50 | [02-calculation-cases.md](../tests/cases/strategy_dashboard/design/02-calculation-cases.md) | 钱包/权益、净入金、收益、年化、波动、回撤、归因、执行、持仓、清算后收益、计费周期和不可计算状态 |
 | 告警、分润与清算 | AL-001～AL-011、SET-001～SET-024、SET-027～SET-056 | 65 | [03-alerts-and-settlement.md](../tests/cases/strategy_dashboard/design/03-alerts-and-settlement.md) | 收益/资金/回撤/强平告警、账户级账单、门槛、锁单、收款登记/审核、部分/全额到账、跨月统计、清算、失败重试和后继周期 |
+| 历史 follow-up 与跨模块补充 | CALC-051～071、DATA-121～128、API-142～146、VIEW-141～146、FLOW-141～143、ALERT-012 | 43 | [04-follow-up-cases.md](../tests/cases/strategy_dashboard/design/04-follow-up-cases.md) | 公式边界补充、跨接口代次、分页/筛选/乱序、详情复合响应、来源修订、动作读穿和并发幂等 |
+| 跨层数据与生命周期 | DATA-129～DATA-132、FLOW-144～FLOW-147 | 8 | [05-remaining-coverage-cases.md](../tests/cases/strategy_dashboard/design/05-remaining-coverage-cases.md) | 来源撤回、批次回滚、首次同步 partial、绑定并发、动作超时、锁单竞态、同周期幂等和停用/解绑并发 |
 
-当前细化后共 **175 条独立结果级场景**：60 条数据和页面、50 条计算、11 条告警、54 条分润/收款/清算。旧的 82 条粗粒度表格仅作为历史映射，不再重复执行。
+原始主目录有 **175 条独立结果级场景**：60 条数据和页面、50 条计算、11 条告警、54 条分润/收款/清算。2026-09-26 迁移历史 follow-up 并补充跨层场景 43 条，随后补入本文件 8 条剩余生命周期场景，当前注册目录共 **226 条**；旧的 82 条粗粒度表格仅作为历史映射，不再重复执行。
 
 基础数据接入另补充了 [38 个可控数据子场景](../tests/cases/strategy_dashboard/ingestion-boundary-cases.md) 及其 [合成输入数据](../tests/data/strategy_dashboard/ingestion_boundaries.json)，沿用 SD-101～SD-120 的主用例编号。它们覆盖字段边界、身份碰撞、重复投递、状态变化、持仓、订单成交、时点更新和批次不完整；当前状态是已设计、尚未注入平台，不增加主用例数量，也不计为真实业务通过。
 
 页面展示补充了 [24 个可控展示子场景](../tests/cases/strategy_dashboard/page-display-boundary-cases.md) 及其 [合成展示数据](../tests/data/strategy_dashboard/page_display_boundaries.json)，关联既有 SD-103 与 BV 主用例。覆盖长文本、大数与精度、图表标签和提示框、不同数据状态、桌面窄容器和滚动交互；当前状态是已设计、尚未真实渲染验证，不增加主用例或通过数量。
 
-2026-09-23 增加原始输入公式专项，覆盖依据、逐公式边界及尚待签认项见 [公式场景矩阵](strategy-dashboard-formula-coverage.md)，运行入口和真实数据接入要求见 [公式自动化说明](strategy-dashboard-formula-injection.md)。固定输入/固定预期已保存为独立场景数据，参考算法与业务接口执行分层；本地数学测试通过、元数据检查通过与真实造数后的业务通过分开统计。旧的 175 条主用例不扩号，也不与其参数化子场景累加为独立主用例数。
+2026-09-23 增加原始输入公式专项，覆盖依据、逐公式边界及尚待签认项见 [公式场景矩阵](strategy-dashboard-formula-coverage.md)，运行入口和真实数据接入要求见 [公式自动化说明](strategy-dashboard-formula-injection.md)。固定输入/固定预期已保存为独立场景数据，参考算法与业务接口执行分层；本地数学测试通过、元数据检查通过与真实造数后的业务通过分开统计。226 条注册主用例仍不与参数化公式子场景相加；补充 Case 的真实入口状态见 [补充 Case](../tests/cases/strategy_dashboard/design/04-follow-up-cases.md) 和 [剩余跨层 Case](../tests/cases/strategy_dashboard/design/05-remaining-coverage-cases.md)。
 
 用户已经接受：选定范围缺历史图表补零、交易查询失败展示为空表、自动刷新失败保留旧数据，以及一定范围内普通小数使用极小数格式。后续不得据旧页面用例重新将这些行为报为缺陷；补零仍不得回流成后端真实权益或日收益。年化 M05 按最新版“同口径收益率/同口径天数×365”核对，不将所有对象统一改为账户累计 G/D。
 
 ## 自动化执行入口
 
-pytest 入口位于 [test_result_cases.py](../tests/cases/strategy_dashboard/test_result_cases.py)，会注册全部 175 条稳定编号。执行命令：
+pytest 入口位于 [test_result_cases.py](../tests/cases/strategy_dashboard/test_result_cases.py)，会注册全部 226 条稳定编号。执行命令：
 
 ```bash
 pytest -q tests/cases/strategy_dashboard
 ```
 
-执行入口有两个明确模式。默认的 `contract` 模式逐条检查 175 条用例是否具备稳定编号、前置/数据、具体步骤和期望/断言；它只证明用例描述结构完整，不能证明真实接口适配器可执行，也不产生业务接口通过结论。命令如下：
+执行入口有两个明确模式。默认的 `contract` 模式逐条检查 226 条用例是否具备稳定编号、前置/数据、具体步骤和期望/断言；它只证明用例描述结构完整，不能证明真实接口适配器可执行，也不产生业务接口通过结论。命令如下：
 
 ```bash
 pytest -q tests/cases/strategy_dashboard

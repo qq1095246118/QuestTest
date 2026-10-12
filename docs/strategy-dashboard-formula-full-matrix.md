@@ -137,7 +137,7 @@
 
 固定期望是人工选定算例，不在测试启动时调用被测算法生成 expected。每次新增/修改真实 adapter 还须验证：固定对象身份、实际 formula_version、来源窗口/水位、mock=false、精确清理本次资源；所需原始来源没有消费路径时报告准确缺口，不读取本地 oracle 冒充服务端结果。
 
-最终数量以 `python3 -m scripts.report_quant_formula_coverage` 的实际收集结果为准。主业务用例、参数化公式场景、自然样本对账次数和框架单测分别统计；历史175个主Case不能与公式实例数相加当作同一个口径。
+最终数量以 `python3 -m scripts.report_quant_formula_coverage` 的实际收集结果为准。主业务用例、参数化公式场景、自然样本对账次数和框架单测分别统计；226个注册主Case不能与公式实例数相加当作同一个口径。
 
 ## 8. 执行事件真实路径验证记录
 

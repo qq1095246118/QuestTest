@@ -4,7 +4,7 @@
 
 `BV-101 总览“运行中数据”口径` 已在主用例中设计，但历史注册入口没有实现这次页面链路的数值断言。现有 18 个 `portfolio_source_profiles` 验证隔离多账户输入、默认来源和 `population=all`；自然来源风险用例验证单账户风险统计。它们均不替代当前页面的 `population=running / metric_source=prometheus` 汇总对账，因此保留，不重复改造成这组。
 
-原始对账入口：`tests/cases/strategy_dashboard/test_source_current_overview.py`，18 个检查实例。扩展查询入口：`tests/cases/strategy_dashboard/test_source_current_overview_queries.py`，28 个参数化实例。两组合计 46 个实例，分别登记，部分落地 BV-101 的接口数据验收，不声明完成页面渲染验证，不加到固定输入公式场景或 175 个历史主用例数量中。
+原始对账入口：`tests/cases/strategy_dashboard/test_source_current_overview.py`，18 个检查实例。扩展查询入口：`tests/cases/strategy_dashboard/test_source_current_overview_queries.py`，28 个参数化实例。两组合计 46 个实例，分别登记，部分落地 BV-101 的接口数据验收，不声明完成页面渲染验证，不加到固定输入公式场景或 226 个注册主用例数量中。
 
 以下是原始 18 项对账：
 
