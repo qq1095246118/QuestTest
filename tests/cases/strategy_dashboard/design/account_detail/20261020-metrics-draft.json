@@ -1,0 +1,4810 @@
+[
+  {
+    "case_id": "ADC-MET-001",
+    "section": "资金与来源",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "保证金保留源金额",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "M0：D=2000，G=205，U=125.30，C=20（正支出），F=+2；同刻源保证金E=2312.30、钱包W=2187。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "保证金=2312.30 USDT；不误显示钱包2187或持仓占用保证金100；源E只读取/按已确认适配映射，不为收益率改写。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-002",
+    "section": "资金与来源",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "真实零保证金",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同刻来源E=0，字段状态可用；其他金额合法。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "保证金value=0且可用；页面显示0，不能转为缺失。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-003",
+    "section": "资金与来源",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "负保证金不擅自裁零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同刻来源E=-12.34，来源明确给出可用金额。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "保证金=-12.34 USDT，保留符号；不裁成0，不取绝对值。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-001",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-004",
+    "section": "资金与来源",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "保证金缺字段",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "仅E缺键，G=205、D=2000完整。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "保证金不可用(value=null、原因可追踪、页面—)；总收益率仍10.25%，不整页失败。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-003",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-005",
+    "section": "资金与来源",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "保证金显式null",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "E=null，来源字段显式不可用，G/D可算。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "保证金不可用且保留源原因；不得把null当0；总收益率仍10.25%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-006",
+    "section": "资金与来源",
+    "fields": [
+      "未实现盈亏（USDT）"
+    ],
+    "title": "正浮盈",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "M0 U=125.30。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "未实现盈亏=+125.30 USDT，与源同刻同身份；不能显示已实现205。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-007",
+    "section": "资金与来源",
+    "fields": [
+      "未实现盈亏（USDT）"
+    ],
+    "title": "负浮盈",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "U=-75.25，其他来源字段独立提供。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "未实现盈亏=-75.25 USDT，保留负号。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-008",
+    "section": "资金与来源",
+    "fields": [
+      "未实现盈亏（USDT）"
+    ],
+    "title": "零浮盈",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "来源U=0且可用，持仓允许存在。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "未实现盈亏为可用0；不能由0推断无持仓或无来源。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-009",
+    "section": "资金与来源",
+    "fields": [
+      "未实现盈亏（USDT）"
+    ],
+    "title": "浮盈缺失",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "U=null，G=205、D=2000完整。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "未实现盈亏不可用；已实现205和总收益率10.25%仍可用。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-004",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-010",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "全历史已实现正数",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "M0 G=205，当前策略刚切换且无新收益。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "已实现盈亏205 USDT；不是当前策略新增0，也不是G-C+F=187。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-001",
+      "V2-MET-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-011",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "全历史已实现负数",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=-100，D=2000。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "已实现盈亏=-100 USDT；总收益率=-5%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-012",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "已实现真实零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=0，D=2000。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "已实现盈亏为可用0；总收益率=0%，不是不可用。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-002",
+      "V2-SRC-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-013",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "已实现缺字段",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G缺键，D=2000、E及U有独立真实源。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "已实现及依赖G的总收益率不可用；E/U仍显示各自源金额。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-014",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "浮盈变化不转为已实现",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "两个同范围点G=205、D=2000不变，U从125.30变-50。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "两个点已实现均205，总收益率均10.25%；不把浮亏计入已实现。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-001",
+      "V2-SEG-016"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-015",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "入出金不当成交盈亏",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D从1000经入500、出200变1300；G始终100。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "已实现仍100；资金变化总计+300，不能把G变400或-200。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-007",
+      "V2-SEG-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-016",
+    "section": "资金与来源",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "本金包含初始本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "初始本金2000，后续转入0、转出0，G=205。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "有效最新本金D=2000，总收益率=10.25%；不以净新增0作分母。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-006",
+      "V2-MET-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-017",
+    "section": "资金与来源",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "本金按真实净流入更新",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "初始1000，真实入500，真实出200，G=130。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "D=1300，收益率=10%；本金不是300，也不是1500。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-007",
+      "V2-SEG-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-018",
+    "section": "资金与来源",
+    "fields": [
+      "总手续费（USDT）"
+    ],
+    "title": "费用支出单独保留",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "已确认源适配给出正支出C=20，G=205。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "总手续费=20 USDT（支出语义）；已实现仍205，不能再次从G扣成185。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-005",
+      "V2-TRD-009"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "C按当前已确认正支出口径；来源负支出→C的符号转换由适配证据证明，不能直接取绝对值覆盖返佣。"
+  },
+  {
+    "case_id": "ADC-MET-019",
+    "section": "资金与来源",
+    "fields": [
+      "总手续费（USDT）"
+    ],
+    "title": "手续费真实零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "费用来源完整、C=0。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "总手续费为可用0 USDT。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-020",
+    "section": "资金与来源",
+    "fields": [
+      "总手续费（USDT）"
+    ],
+    "title": "手续费缺失不补零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "C=null，G=205、D=2000。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "手续费不可用；总收益率仍10.25%，不因缺C把全部收益指标清空。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-004",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-021",
+    "section": "资金与来源",
+    "fields": [
+      "累计资费（USDT）"
+    ],
+    "title": "收到资金费",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "F=+2 USDT，G=205。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "累计资费=+2 USDT；不能显示费率，也不重复增加G或收益率。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-005",
+      "V2-SRC-019"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-022",
+    "section": "资金与来源",
+    "fields": [
+      "累计资费（USDT）"
+    ],
+    "title": "支付资金费",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "F=-3.25 USDT。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "累计资费=-3.25 USDT，保留支付符号。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-005"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-023",
+    "section": "资金与来源",
+    "fields": [
+      "累计资费（USDT）"
+    ],
+    "title": "资金费真实零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "资金费来源完整，F=0。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "累计资费为可用0 USDT。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-024",
+    "section": "资金与来源",
+    "fields": [
+      "累计资费（USDT）"
+    ],
+    "title": "资金费缺失",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "F=null，其余资金及G/D完整。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "累计资费不可用；保证金等独立源值和总收益率仍可用。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-004",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-025",
+    "section": "资金与来源",
+    "fields": [
+      "总手续费（USDT）"
+    ],
+    "title": "重复累计快照不累加",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一费用计数器周期累计0→10→15→15；完整账户期初累计0。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "期末总手续费=15；10→15段增量5；不是40，也不因重复15变30。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-008",
+      "V2-SRC-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-026",
+    "section": "资金与来源",
+    "fields": [
+      "总手续费（USDT）"
+    ],
+    "title": "计数器重置保留各周期增量",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "周期A累计0→100后封存；周期B从0→8，运行实例证据完整。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "全历史手续费=108；周期B增量8；不产生-92或漏掉旧周期100。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-009",
+      "V2-SRC-010"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-027",
+    "section": "资金与来源",
+    "fields": [
+      "累计资费（USDT）"
+    ],
+    "title": "费率不当金额相加",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "两条资金费amount为+2、-0.75 USDT，rate为0.0001、-0.00005。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "累计资费=1.25 USDT；不是费率和0.00005。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-019"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-028",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "相同事实多来源不重复入账",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一G事实在performance和nav都有G=205且身份、时间和周期相同。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "已实现=205；收益率=10.25%，不合成410。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-029",
+    "section": "资金与来源",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "重复成交或资金事实去重",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一来源身份的已实现增量+10投递两次；基线G=195。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "G=205，收益率=10.25%；不能G=215。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-030",
+    "section": "资金与来源",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "同名账户不串金额",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "本账户E=2312.30；另一账户同名E=9999，且其NT局部ID不同。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "本详情保证金仅2312.30；不按名称合并为12311.30。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-012",
+      "V2-SRC-015"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-031",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "正收益固定算例",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=205，D=2000，不预填r或NAV。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "r=0.1025，页面10.25%；内部产品NAV=1.1025。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-032",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "负收益固定算例",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=-100，D=2000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "r=-0.05，页面-5%；产品NAV=0.95。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-033",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "真实零收益",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=0，D=2000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "r=0且可用，NAV=1；不能因0显示—。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-034",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "零本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=10，D=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "总收益率及依赖该r的NAV不可用，value=null；不返回Infinity/NaN，不500。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-035",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "负本金",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=10，D=-100。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "总收益率及依赖该r的NAV不可用；不输出-10%伪装正常。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-036",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "本金显式null",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=10，D=null。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "总收益率不可用，保留本金缺失原因；不以0或最新保证金替换D。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-037",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "仅有划转净额不能替代本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "初始本金证据缺失，仅后续累计净入100，G=10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "总收益率不可用；不能无证据按10/100输出10%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-017",
+      "V2-MET-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-038",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "追加本金后使用最新完整本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "原D=1000、G=100；真实入1000后D=2000，G不变。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "当前账户收益率由10%变5%，NAV=1.05；不使用资金段本金和3000得到3.3333%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-004",
+      "V2-SEG-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-039",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "部分出金后使用最新本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D=2000、G=100；真实出500后D=1500。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "当前r=1/15≈0.0666666666666667，页面约6.6667%；G仍100。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SEG-012",
+      "V2-MET-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-040",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "切换策略不清空收益",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "A期间G增量100，切B后G增量0；D从1000变2000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户全历史G=100，r=5%；不能变0或按旧本金算10%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-004",
+      "V2-SEG-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-041",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "A到B再回A保留全部收益",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "三段已实现增量+10、-5、+25；最新D=1000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户G=30，r=3%，NAV=1.03；不只算当前A段25或A两段35。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SEG-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-042",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "采样增多不重复本金",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一账户同一资金段D=2000、期末G=205；额外增加10条重复/中间快照。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "期末r始终10.25%，不是205/(2000×快照数)。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-007"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-043",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "手续费和资费不重复修正分子",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "M0 G=205，C=20，F=+2，D=2000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户r=10.25%；不能使用(205-20+2)/2000=9.35%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-001",
+      "V2-SRC-005"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-044",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "浮盈变化不改变已实现口径收益率",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=205、D=2000不变，U分别+100和-100。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "两个时点r均10.25%，NAV均1.1025；不使用(G+U)/D。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-001",
+      "V2-SRC-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-045",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "仅切换分润基准不改变全历史收益",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=205、D=2000不变；仅准备不同Gbase/旧已确认账单展示起点。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "lifetime账户r仍10.25%；不减去分润基准、不加入已分润收益重复资本。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-004",
+      "V2-REC-009"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-046",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "另一账户同策略不进入本详情",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "本账户G=205、D=2000；同策略另账户G=900、D=3000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "本账户r=10.25%，不是合并1105/5000=22.1%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-015",
+      "V2-AGG-008"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-047",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "缩短绘图窗口不缩短全历史统计",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "完整历史G=205、D=2000；90天图窗内仅新增G=5；请求仅修改图窗from/to。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "核心r仍10.25%；N02指标口径仍由metric_from/to决定，不能误变5/2000=0.25%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-UI-001",
+      "V2-MET-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-048",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "细小收益以原值计算",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G=0.00000001，D=3。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "r=0.000000003333333333333333…，NAV=1.000000003333333333333333…；即使页面舍入为0%，原值和排序不归零。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-UI-010",
+      "V2-MET-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-049",
+    "section": "总收益率与产品净值",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "停止账户历史不被删除",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "账户已确认停止，历史G=205、D=2000，仍有访问权限。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户详情历史已实现205、r10.25%保留；不能因当前无运行将全部历史清空。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SEG-007",
+      "V2-MET-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-050",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "七天前一分钟",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05；有效时长6天23小时59分钟。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化不可用；r仍5%；不能按7天保底计算。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-009"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-051",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "恰满七天",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05，d=7。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=2.607142857142857…，页面260.7142857142857…%。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-010"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-052",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "超过七天按实际十天",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05，d=10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=1.825，页面182.5%；不是按7天计算，也不是CAGR。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-053",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "保留小数天",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05，d=7.5（180小时）。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=2.433333333333333…，页面243.3333333333333…%；不能把d截成7或8。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-054",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "满七天真实零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0，d=7。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化为可用0，与不足七天不可用区分。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-012"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-055",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "亏损简单年化允许低于负百分百",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=-0.05，d=7。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=-2.607142857142857…，页面-260.7142857142857…%；不裁成-100%。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-056",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "一年365天",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05，d=365。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=0.05，页面5%。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-057",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "366天仍乘365",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05，d=366。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=0.0498633879781420765…，页面4.9863387978142…%；不改乘366。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-058",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "时长缺失",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05且可用，但无首单/合法时长输入。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化不可用且保留时长来源原因；总收益率仍5%。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-014"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-059",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "创建与首单相差多日",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "账户创建/绑定距截止30天，首笔真实量化订单距截止10天，持续运行。r=0.05。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "使用首单时长10天，年化182.5%，不能按30天算60.8333%。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-014"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-060",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "切策略不从新绑定重新计时",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "首单距截止10天，1天前切策略，r=0.05。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户年化182.5%；不能按当前策略1天判账户年化不可用。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-014",
+      "V2-SEG-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-061",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "历史点门槛按当时判断",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一账户当前已运行10天，N02请求包含第6天和第7天历史点；两点当时r均0.05。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "第6天年化null；第7天2.607142857142857…；不能用当前10天资格为早期点补算。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-015"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-062",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "旧公式缓存不得复用",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同对象不足7天，旧generation带有按max(d,7)计算的年化；新版本发布。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "新读取的年化null，formula_version为当前门槛版本；不得将旧数值标成新版本。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-016",
+      "V2-ASY-025"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-063",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "运行时长零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05，d=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化不可用且标准JSON；不返回除零、Infinity或500。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-009",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-064",
+    "section": "年化收益率与时长",
+    "fields": [
+      "年化收益率"
+    ],
+    "title": "来源缺首单估计状态不可伪装",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "无可验证首笔量化订单，存在替代起点及已有批准的估计规则。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "若沿用已批准替代时长，必须标estimated并保留起点依据；无法绑定该规则时本例待口径绑定，不能默认用创建时间。",
+    "source_tables": [
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "fact_order",
+      "fact_fill",
+      "fact_performance_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-014"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；TIME",
+    "status": "待口径绑定",
+    "notes": "需绑定技术现有首单缺失回退规则及明确预期时长，不新创回退公式。"
+  },
+  {
+    "case_id": "ADC-MET-065",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "完整分钟峰谷及新高",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "DD0：D恒1000；G按时间0→200→-100→100→300，对应NAV1→1.2→0.9→1.1→1.3。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "最大回撤=0.25（25%）；末实时回撤=0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-066",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "同一天出现峰谷",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D恒1000；同一日分钟G=0→200→-100→100。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "最大回撤25%；末实时回撤=1/12≈8.3333333333333%，为正数。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-067",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "先低后高不倒推峰值",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D恒1000；G=-100→0→200，NAV0.9→1→1.2，测试范围无更早高点。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "实时回撤=0、最大回撤=0；不使用后来的1.2回算早先0.9生成25%。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-068",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "持续相同净值",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D恒1000、G恒100，至少3个真实分钟点。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "实时回撤和最大回撤均为可用0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-069",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "净值单调上升",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D恒1000，G=0→100→200→300。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "实时回撤和最大回撤均为可用0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-070",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "当前恢复但最大值保留",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "NAV1→1.2→0.9→1.3→1.17，均由G/D构成。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "末实时回撤10%，最大回撤仍25%；新高后不能清除已发生最大回撤。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-071",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "重复分钟事实去重",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "DD0中峰值1.2和谷值0.9的相同来源记录各投递2次。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "最大回撤仍25%、末实时0，样本去重身份可追踪。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-005"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-072",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "乱序到达按事件时间恢复",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "DD0按到达顺序1、0.9、1.3、1.2、1.1投递，事件时间仍为DD0顺序。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "正常修订发布后最大回撤25%、末实时0；不按到达顺序制造额外回撤。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-005"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-073",
+    "section": "实时与最大回撤",
+    "fields": [
+      "最大回撤"
+    ],
+    "title": "缺谷值时不伪装完整",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同日真实序列1→1.2→0.9→1.1，但0.9尚未到达。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "覆盖状态明确为缺点/稀疏或按当前规则不可用；不能声称完整分钟覆盖。若允许稀疏计算，已观测值仅1/12；数值输出契约待绑定。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-006"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "待口径绑定",
+    "notes": "需绑定现有缺分钟覆盖契约；不把缺一分钟本身一律规定为整指标不可用。"
+  },
+  {
+    "case_id": "ADC-MET-074",
+    "section": "实时与最大回撤",
+    "fields": [
+      "最大回撤"
+    ],
+    "title": "迟到谷值恢复真实最大值",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "承接上一输入，真实事件时间的0.9到达并经正式修订重算。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "新发布最大回撤=25%；缺点覆盖原因按实际完整性消除，不能永久停留在8.3333%。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-006",
+      "V2-ASY-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-075",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "缺本金只隔离依赖指标",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "所有分钟G存在，但全部D缺失且没有其他合法本金。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "产品NAV、实时回撤、最大回撤均不可用；原始G及独立U仍可用，不用权益净值替换产品净值。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-007",
+      "V2-MET-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-076",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "零峰值不除零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "测试范围只有D=1000、G=-1000的有效资金输入，产品NAV始终0；不存在正峰值。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "回撤不可计算，value=null且有零峰值原因；不返回NaN/Infinity或500。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-007"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-077",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "浮盈变化不替换产品净值",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D=1000、G=100恒定，U按0→300→-300变化。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "产品NAV恒1.1，实时/最大回撤均0；不能从保证金/权益变化产生回撤。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-010",
+      "V2-MET-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-078",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "费用变化不额外扣产品净值",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "D=1000、G=100恒定，C从0变20，F从0变-3；源保证金相应变动。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "产品NAV仍1.1，实时/最大回撤0；不能再次用G-C+F重算该账户产品净值。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-010",
+      "V2-SRC-005"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-079",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤"
+    ],
+    "title": "资金变化按账户产品公式体现",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "先D=1000、G=200，后真实入1000使D=2000、G仍200；NAV1.2→1.1。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "按已确认账户产品NAV计算实时回撤=1/12≈8.3333333333333%；不擅自改成时间加权消除该变化。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SEG-011",
+      "V2-RISK-010"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-080",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "日展示保留日内最大回撤",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同日NAV1→1.2→0.9→1.1；N02 granularity=1d。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "日展示最大回撤25%，末实时8.3333333333333%；不得仅用日末1.1重算成最大0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-002",
+      "V2-UI-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-081",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤"
+    ],
+    "title": "详情正回撤不套管理顶部公式",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同样账户产品NAV高点1.2、当前0.9；账号管理顶部同时存在非正保证金回撤。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户详情实时回撤=+25%；不能显示-25%或替换为账号管理顶部公式。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-010"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "2999当前页面出现负值只是部署观察；预期依据当前确认的详情产品净值正回撤规则。"
+  },
+  {
+    "case_id": "ADC-MET-082",
+    "section": "实时与最大回撤",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "没有合格分钟样本",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "账户身份存在但无任何合格G/D分钟点。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "两个回撤指标不可用；不能把空序列展示为真实0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-007",
+      "V2-ASY-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-083",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "十个闭合日标准样本",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10：日收益[1%,-1%,2%,-2%,1%]重复2遍；d=10，r=1.5%。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "n=10，日样本均值0.002；σ日=0.01549193338482966754…；σ年=0.29597297173897484114…；卡片按年化波动单位展示约29.59729717%。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-018"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-084",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "五个闭合日使用n减一",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R5：日收益+1%,-1%,+2%,-2%,+1%。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "n=5，σ日=0.01643167672515498340…；σ年=0.31392674304684524599…；不是总体标准差。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-018"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-085",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "没有有效闭合日",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "有当日分钟数据，但n=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "波动率不可用；分钟资金字段继续显示，不将未闭合日补成完整样本。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-019",
+      "V2-RISK-014"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-086",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "仅一个有效日",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "有效日收益仅+1%，n=1。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "波动率不可用；不能把样本方差除以0或报0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-019"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-087",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "恰两个有效日",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日收益+1%、-1%，n=2。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "σ日=0.01414213562373095048…；σ年=0.27018512172212592061…，可用。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-019"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-088",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "所有日收益相同",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "3个有效日收益均+1%。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "σ日=0、σ年=0，波动率为可用0；夏普分母0单独不可用。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-020"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-089",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "本金变化按日末本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日1已实现增量10、末本金1000；日2增量20、末本金2000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "两个日收益均1%，σ日/年均0；不能按USDT金额10/20算出非零波动。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-011",
+      "V2-RISK-017"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-090",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "日内多次划转不用平均本金",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同日初D=1000，日内入1000、出500，末D=1500，日已实现增量15。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "本日收益=1%；不是15/1000=1.5%，也不取日内平均D。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-011"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-091",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "日界前取最后合格真实样本",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "UTC+8午夜边界前20分钟和1分钟均有合格点，G分别9、10，D均1000；前日G=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "日末取边界前1分钟，日增量10、本日收益1%；不是0.9%。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-012"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-092",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "窗口内末样本可用",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日界前29分59秒为最后真实合格样本，G=10、D=1000，前日G=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "该点具备30分钟窗内资格，本日收益1%；不可因没有整点样本丢弃。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-093",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "恰30分钟边界",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "最后真实样本位于日界前恰30分钟，G=10、D=1000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "需按已批准窗口下限包含关系决定该点资格；本例在绑定前不得计执行通过。若包含，则本日收益1%。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "待口径绑定",
+    "notes": "只待精确窗口包含关系，不改变分钟精度/日收益公式。"
+  },
+  {
+    "case_id": "ADC-MET-094",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "超过30分钟的样本不得顶替",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "最后合格点在日界前30分1秒，之后无真实合格点。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "本日无合格日末输入，不将过老点当日末；日样本数不增加。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-095",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "未来样本排除",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日界前1分钟真实G=10；另有边界后1分钟G=999，D=1000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "已闭合日按G=10而非999；不使用未来观测改写该日收益。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-015"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-096",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "日末null样本不得当成真实零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "边界前5分钟G=10、D=1000合法；更晚1分钟G=null显式无效。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "若最后有效样本选取规则允许回取，取5分钟前本日收益1%；不得把显式null当G=0。具体无效点回取优先级绑定现有loader。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-012",
+      "V2-RISK-015"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "待口径绑定",
+    "notes": "需确认显式无效点是否使该日整体失效，还是按最后有效样本回取；不是收益率公式变更。"
+  },
+  {
+    "case_id": "ADC-MET-097",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "未确认划转不更新日末资本",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日末D=1000已确认；另有待确认入金1000，真实日增量G=10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "合格本金仍1000，本日收益1%；不能提前用2000稀释到0.5%。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-015"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-098",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "中间缺日不压成一天",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日1末G=10；日2无合格样本；日3末G=30，D=1000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "不得把跨两日增量20当成日3单日2%，也不虚构日2为0%；只有具备合法相邻日端点的样本进入统计。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-016"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-099",
+    "section": "日样本构造与波动率",
+    "fields": [
+      "波动率（标准差）"
+    ],
+    "title": "北京时间边界不按UTC日切",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "相同事实分别用2026-09-02T00:00:00+08:00和2026-09-01T16:00:00Z表示日界；此前一分钟增量10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "两种时间表示选中同一绝对时刻和相同日收益1%；不能错误延后8小时切日。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-016",
+      "V2-RISK-012"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-100",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "页面均值不同于样本均值",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10，r=0.015，d=10；显式年利率5%。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "页面μ=0.0015，不是样本均值0.002；rf日=0.00013368061711344035…；夏普日=0.08819553692533401067…；卡片年化夏普=1.68497336707290526810…。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-021",
+      "V2-RISK-026"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-101",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "卡片与趋势频率",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一R10截止点，同一利率5%，N01和N02读同范围。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "summary卡片=1.68497336707290526810…；series日值=0.08819553692533401067…；二者比√365，annualized_value/频率元数据对应。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-028"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-102",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "零标准差",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "多个有效日收益均1%，页面r/d可用，rf年5%。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "夏普不可用、value=null；波动率仍为可用0，不返回Infinity。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-020"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-103",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "显式配置优先自动源",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10；显式配置年5%，FRED年4%，财政部年3%，均有可用日期。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "使用年5%；卡片1.68497336707290526810…；来源标配置，不能择最高/最新自动源覆盖。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-022"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-104",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "FRED成功",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "无显式配置；FRED一年期收益率5%有效；财政部可用4%。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "选择FRED5%，卡片夏普1.68497336707290526810…；保留FRED来源与可用日期。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-023"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-105",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "FRED失败财政部成功",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "无显式配置；FRED失败，财政部一年期5%有效。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "选择财政部5%，卡片夏普1.68497336707290526810…；不能因首源失败直接缺失或默认0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-023"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-106",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "两源失败但旧值仍有效",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "本轮FRED/财政部都失败，保存的年5%旧值可用日期距截止13天。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "可按有效旧利率5%计算卡片1.68497336707290526810…；保留真实来源日期，不能标为本轮新采样。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-024",
+      "V2-RISK-025"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-107",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "两源失败且旧值过期",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "无配置；自动源均失败，唯一旧利率5%的可用日期距截止15天。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "夏普不可用；不能取过期值或默认0；波动率0.29597297173897484114…及索提诺2.86574597618142002687…仍可用。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-024",
+      "V2-RISK-031"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-108",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "无任何利率证据",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "无配置、无缓存、两自动源失败。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "夏普不可用并显示原因；不得默认为无风险0；独立指标不受连带清空。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-024",
+      "V2-RISK-031"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-109",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "十四天边界",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "唯一利率年5%，available_date距截止恰14天；无其他有效值。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "按已批准日期有效窗包含关系处理；绑定前待口径绑定。若14天含边界，则夏普为R10标准值1.68497336707290526810…。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-025"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "待口径绑定",
+    "notes": "需确认自然日期/精确时长及14天边界包含关系；不改变主公式。"
+  },
+  {
+    "case_id": "ADC-MET-110",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "未来可用利率排除",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "存在available_date晚于统计截止的年5%利率；没有其他合格值。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "历史该点夏普不可用；不能用后来公布的数据回填为当时可见。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-025"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-111",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "一年利率转日利率不直接除365",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10；rf年=0.05。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "rf日=(1.05)^(1/365)-1=0.00013368061711344035…；不得使用0.05/365=0.000136986301369863…；卡片标准值1.68497336707290526810…。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-026"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-112",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "有效配置零利率不是缺失兜底",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "经批准的显式配置rf年=0，R10。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "rf日=0；夏普年=(0.0015/0.01549193338482966754…)*√365=1.8498310733685927571355428786732297215276217921269；有效零源可用，但不能由抓取失败生成。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-022",
+      "V2-RISK-026"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-113",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "小时内刷新有上限",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10，一小时内刷新页面20次并触发多次采集；当前小时自动刷新已尝试1次。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "在默认每小时最多一次刷新尝试配置下，本小时不再新增外部拉取；页面使用现有有效值；不能每次GET抓外站。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-027"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-114",
+    "section": "夏普比率与无风险利率",
+    "fields": [
+      "夏普比率"
+    ],
+    "title": "页面运行天数缺失",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日收益样本R10完整，但页面r的有效运行天数缺失。",
+    "steps": [
+      "准备本行R10风险事实，并经已确认的利率配置/依赖替身入口准备利率证据；没有对应事实表时不伪造DB写入。",
+      "让正式利率读取、风险计算和发布执行，记录来源、可用日期、刷新请求及缓存有效性。",
+      "请求N01夏普及相关独立指标、N02同范围趋势，按页面收益率/天数和日样本标准差独立计算。",
+      "核对页面夏普值或不可用状态，以及不依赖利率的指标仍正常；保存证据后恢复本次配置和数据。"
+    ],
+    "expected": "夏普分子不可计算，夏普不可用；不能用日样本数10悄悄代替缺失时长。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-021",
+      "V2-MET-014"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RATE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-115",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "目标零且除全部样本数",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10；页面μ=0.0015；负日共4个，负收益平方和0.001，全部n=10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "下行偏差=√(0.001/10)=0.01；日索提诺0.15；卡片年化=2.86574597618142002687…；不能除负日数4。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-029"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-116",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "卡片年化趋势日值",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同R10范围N01/N02。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "N01=2.86574597618142002687…，N02日值=0.15；比值√365，频率元数据正确。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-028"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-117",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "全正日收益",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "3个有效日均+1%，页面r/d可算。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "下行偏差0，索提诺不可用；不输出Infinity或任意大数。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-030"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-118",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "全部日收益为零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "3日收益0，页面r=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "下行偏差0，索提诺不可用；不是0/0得到可用0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-030"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-119",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "全负日收益",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "10个日收益均-1%，D恒1000，G累计-100，页面r=-0.10、d=10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "下行偏差0.01，页面μ=-0.01；日索提诺=-1，卡片年化=-√365≈-19.10497317454280018…。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-030"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-120",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "均值为零但下行非零",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "10日交替+1%、-1%，D恒1000，末G=0，r=0、d=10。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "下行偏差=√0.00005；索提诺日/年均为可用0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-030"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-121",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "不扣无风险利率",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10，先rf年5%后改10%，其他原始事实不变。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "两个发布点索提诺年均2.86574597618142002687…；不跟随无风险利率改变。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-029",
+      "V2-RISK-031"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-122",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "美债不可用独立计算",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10；美债所有来源不可用。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "索提诺年2.86574597618142002687…仍可用；仅夏普不可用。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-031"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-123",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "无有效日样本",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "日界输入都不合格，n=0，页面r仍有独立当前值。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "索提诺不可用，不借用旧周期日样本或把无样本当0。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-030",
+      "V2-ASY-012"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-124",
+    "section": "索提诺比率",
+    "fields": [
+      "索提诺比率"
+    ],
+    "title": "不把日样本均值当分子",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10日样本均值0.002，页面r/d=0.0015。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "日索提诺必须0.15，不是0.2；年值2.86574597618142002687…，不是3.82099463490856…。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-021",
+      "V2-RISK-029"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-125",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "R10完整同范围计算",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10；年化=0.5475，分钟产品NAV最大回撤=1/51。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "卡玛=0.5475÷(1/51)=27.9225；分子/分母均由本账户同范围真实输入计算。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-032"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-126",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "未满七天拒算",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "运行6天23小时59分钟，r=0.05，最大回撤10%。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化和卡玛均不可用；即使有最大回撤也不按7天保底算。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-009",
+      "V2-RISK-033"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-127",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "零最大回撤",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=0.05、d=10，净值单调上涨、最大回撤=0。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化182.5%可用；卡玛不可用，不输出Infinity。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-033"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-128",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "零年化但有回撤",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "10日后G=0、D=1000，历史NAV1→1.1→1，最大回撤=1/11。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=0且可用；卡玛=0，不因分子0变为不可用。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-012",
+      "V2-RISK-032"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-129",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "负年化保留符号",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "r=-0.05、d=10；分钟NAV1→0.95且无更深回撤，最大回撤0.05。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "年化=-1.825，卡玛=-36.5；不取分子绝对值。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-032",
+      "V2-MET-013"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-130",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "缺最大回撤依赖",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "年化1.825可用；同范围分钟NAV不足以给出最大回撤。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "卡玛不可用；不能用管理顶部回撤、另一周期回撤或另一账户值替代。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-033"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-131",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "范围不一致拒绝拼接",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "当前lifetime年化1.825；仅有最近90天最大回撤0.1且lifetime回撤缺失。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "lifetime卡玛不可用，不能拼出18.25并标同范围正常。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-033",
+      "V2-ASY-012"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-132",
+    "section": "卡玛比率",
+    "fields": [
+      "卡玛比率"
+    ],
+    "title": "不平均策略卡玛",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同一账户历史跑A/B，两策略各自卡玛2/8；账户R10数据完整。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "账户卡玛27.9225；不是5，也不按策略权重平均。",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-032",
+      "V2-SEG-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；RISK",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-133",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "保证金（USDT）"
+    ],
+    "title": "日趋势金额点保持观测语义",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同日真实分钟保证金1000→1200→1100，N02日展示。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "日趋势按已确认取点语义显示该日金额；不得将同一余额三个快照累加成3300；金额聚合取点规则需绑定。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches",
+      "quant_account_snapshots"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-UI-001",
+      "V2-SRC-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FIN",
+    "status": "待口径绑定",
+    "notes": "N02各金额字段日点末值/聚合语义需要当前响应/文档绑定，不能自行假定所有金额都sum。"
+  },
+  {
+    "case_id": "ADC-MET-134",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "未实现盈亏（USDT）"
+    ],
+    "title": "图窗与精度分开",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同日分钟U=10→-5→20，N02 granularity=1d。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "观测粒度仍1m，展示粒度1d；保留对应字段日点规则与来源时间，不能把日显示称为日采集。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-UI-001",
+      "V2-RISK-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-135",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "已实现盈亏（USDT）"
+    ],
+    "title": "曲线读历史前缀",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "G按分钟0→100→205，D=2000。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "对应历史点G为0/100/205，不把当前205填到全部历史；r为0/5%/10.25%。",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "exchange_account_cash_flows",
+      "quant_segmented_nt_facts",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-015"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；PERF",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-136",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "总手续费（USDT）"
+    ],
+    "title": "趋势只呈现当时已发生费用",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "C累计0→10→20，真实源时点明确。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "各历史点累计C=0/10/20；不是全点20，也不把累计当增量累加30。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-008",
+      "V2-UI-001"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-137",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "累计资费（USDT）"
+    ],
+    "title": "有符号累计趋势",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "按事件顺序资金费+2、-3、+1，初值0。",
+    "steps": [
+      "在独立测试身份准备本行原始事实和关联；保留输入行ID、源时间、计数器周期和账户映射，不写入预期指标。",
+      "让正式采集/分段/发布消费者处理，核对本次源行进入的batch、source_generation及generation；实际源为Prometheus时使用其已确认测试入口。",
+      "以新读取视图请求N01账户摘要与本字段N02趋势；按同一对象、统计范围、公式版本和来源时间独立对账。",
+      "在账户详情核对本字段的值、单位、缺失状态和趋势；保存证据后按本次身份清理。"
+    ],
+    "expected": "累计历史点2/-1/0；末值为可用0，不能将支付取绝对值后显示6。",
+    "source_tables": [
+      "fact_fill",
+      "fact_funding_fee",
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_collection_batches"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-SRC-005",
+      "V2-SRC-019"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；FEE",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-138",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "总收益率",
+      "年化收益率"
+    ],
+    "title": "同刻卡片和曲线末点对账",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "同账户同范围相同截止点r=0.05，d=10；N01和N02均已消费同一输入。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "r均0.05，年化均1.825；差异只能来自明确不同窗口/截止点，不能静默拼不同对象。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-MET-011",
+      "V2-ASY-002"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-139",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "实时回撤",
+      "最大回撤"
+    ],
+    "title": "两字段同范围约束",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "DD0只运行至NAV1.1，maxDD=25%，currentDD=8.3333333333333%。",
+    "steps": [
+      "在独立测试身份准备本行分钟资金和已实现序列及真实运行时间，不写入收益率、净值、回撤或风险比率。",
+      "让正式消费者计算并发布；逐分钟独立算r=G/D和NAV=1+r，逐日记录入选边界与日收益。",
+      "同一范围分别请求N01摘要、N02分钟/日展示趋势；核对计算值、频率、formula_version及实际输入代次。",
+      "在账户详情核对卡片与对应趋势；真实0与不可用分别检查，保存输入和逐步计算证据后清理。"
+    ],
+    "expected": "实时≤最大；两值非负，且来自相同范围；页面不得交换两卡/两图。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-RISK-002",
+      "V2-RISK-010"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-140",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "夏普比率",
+      "索提诺比率",
+      "波动率（标准差）"
+    ],
+    "title": "新旧版本混杂不得伪装同批",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "R10新源已发布一部分，另一部分仍为旧formula_version/旧范围。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "每项版本与引用真实可追踪；不可拼接为同范围新结果。需要完整同代的依赖按现有状态规则等待或保留有标记旧值。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-ASY-002",
+      "V2-ASY-003",
+      "V2-ASY-025"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-141",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "总收益率"
+    ],
+    "title": "旧冻结视图与新输入隔离",
+    "priority": "P0",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "旧视图G=100、D=1000；追加真实G至200后新发布，D不变。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "旧冻结视图r=10%；新读取视图r=20%；旧snapshot_id不冒充已经消费新源。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-ASY-003",
+      "V2-ASY-004"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-142",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "保证金（USDT）",
+      "已实现盈亏（USDT）"
+    ],
+    "title": "采集时间不因页面刷新更新",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "10秒轮询期间无新采集事实；已发布E=2312.30/G=205。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "每次读数保持；observed_at保持真实源时间，不能将读取时间伪装为新的分钟样本。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-ASY-001",
+      "V2-ASY-003"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  },
+  {
+    "case_id": "ADC-MET-143",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "总收益率",
+      "年化收益率",
+      "实时回撤",
+      "最大回撤",
+      "波动率（标准差）"
+    ],
+    "title": "百分比与小数单位",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "分别准备r=0.05、annual=1.825、curDD=0.025、maxDD=0.1、vol=0.3。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "页面分别为5%、182.5%、2.5%、10%、30%；API原值保持小数，不二次乘100；回撤正号规则不反转。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-UI-010"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "该行可用真实数据复算结果覆盖映射；若直接注入派生值，仅记录读取/单位展示覆盖，不记录公式通过。"
+  },
+  {
+    "case_id": "ADC-MET-144",
+    "section": "字段状态、趋势与发布一致性",
+    "fields": [
+      "夏普比率",
+      "索提诺比率",
+      "卡玛比率"
+    ],
+    "title": "比率字段不显示成百分比",
+    "priority": "P1",
+    "preconditions": "隔离测试账户；账户维度lifetime（除本行显式指定范围）；实际DDL、源字段、消费者及部署版本已绑定。公共事实和执行流程见本文件。",
+    "input": "以R10实际计算出夏普1.684973367…、索提诺2.865745976…、卡玛27.9225。",
+    "steps": [
+      "准备本行独立事实并记录旧发布包与旧读取视图；不修改派生结果来制造通过。",
+      "通过正常任务执行追加/修订/发布或已确认的受控故障，再分别读取旧冻结视图和新视图。",
+      "比较N01、N02的对象、范围、来源时间、公式版本和输入引用，核对本行唯一状态或数值预期。",
+      "核对页面及趋势的显示、恢复行为；保存新旧证据后只清理本次身份关联资源。"
+    ],
+    "expected": "三卡按倍数/无量纲比率显示，不能变成168.497%、286.575%、2792.25%；显示精度按当前UI基线绑定。",
+    "source_tables": [
+      "quant_collection_batches",
+      "quant_segmented_performance_generations",
+      "quant_read_views",
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup"
+    ],
+    "api": "N01 GET Q/analytics/summary；N02 GET Q/analytics/series；subject_type=account，subject_id=本次专用数字account_id；按当前文档绑定scope/metric_basis/metric_source及字段参数。",
+    "checkpoints": [
+      "V2-UI-010",
+      "V2-RISK-028",
+      "V2-RISK-032"
+    ],
+    "basis": "产品账号详情；技术2026-10-20 Q1/Q3/Q4/Q5/Q7及6.2/6.3；META",
+    "status": "设计完成/待执行",
+    "notes": "源表按本行需要选择实际消费字段；不是要求同时写所有列出的表。2999仅作页面盘点入口，不直接覆盖其数据。"
+  }
+]

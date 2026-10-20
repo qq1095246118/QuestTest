@@ -5,28 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="356aabf0-7f97-4184-a52d-a71d0589141a" name="更改" comment="因子库策略管理业务自动化代码">
-      <change afterPath="$PROJECT_DIR$/service/strategy_dashboard_follow_up_contracts.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/design/04-follow-up-cases.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/design/05-remaining-coverage-cases.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/unit/test_strategy_dashboard_follow_up_contracts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/strategy_dashboard_raw_business_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/strategy_dashboard_raw_business_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-current-overview-reconciliation.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-current-overview-reconciliation.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-formula-coverage.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-formula-coverage.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-formula-expansion-state.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-formula-expansion-state.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-formula-full-matrix.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-formula-full-matrix.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-formula-injection.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-formula-injection.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-result-test-cases.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-result-test-cases.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/strategy-dashboard-ui-baseline-20260922.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/strategy-dashboard-ui-baseline-20260922.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/run_quant_interface_regression.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/run_quant_interface_regression.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/run_quant_readonly_supplement.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/run_quant_readonly_supplement.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/strategy_dashboard/design/01-data-and-pages.md" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/design/01-data-and-pages.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/strategy_dashboard/ingestion-boundary-cases.md" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/ingestion-boundary-cases.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/strategy_dashboard/page-display-boundary-cases.md" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/page-display-boundary-cases.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/strategy_dashboard/test_result_cases.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/test_result_cases.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/strategy_dashboard/test_source_capital_endpoints.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/test_source_capital_endpoints.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/cases/strategy_dashboard/test_source_history_formulas.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/cases/strategy_dashboard/test_source_history_formulas.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/data/strategy_dashboard/ingestion_boundaries.json" beforeDir="false" afterPath="$PROJECT_DIR$/tests/data/strategy_dashboard/ingestion_boundaries.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,7 +13,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="19073" />
+    <option name="cachedIndexableFilesCount" value="21864" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -64,18 +43,18 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;codex/kline-case-design&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/wrh/Downloads/索向/接口自动化/QuestTest&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;vcs.Git&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "codex/kline-case-design",
+    "last_opened_file_path": "/Users/wrh/Downloads/索向/接口自动化/QuestTest",
+    "settings.editor.selected.configurable": "ml.llm.AcpAgentsConfigurable"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -203,7 +182,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790238819407</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="因子库策略管理业务自动化代码">
+      <option name="closed" value="true" />
+      <created>1791775366607</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1791775366607</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

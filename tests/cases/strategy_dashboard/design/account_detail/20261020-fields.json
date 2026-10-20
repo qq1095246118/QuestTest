@@ -1,0 +1,2048 @@
+[
+  {
+    "field_id": "AF-HDR-01",
+    "section": "页头与操作",
+    "label": "账号名称",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-02",
+    "section": "页头与操作",
+    "label": "账号 ID",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-03",
+    "section": "页头与操作",
+    "label": "数据快照",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-04",
+    "section": "页头与操作",
+    "label": "时区",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-05",
+    "section": "页头与操作",
+    "label": "实时刷新频率",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-06",
+    "section": "页头与操作",
+    "label": "账号管理返回",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-07",
+    "section": "页头与操作",
+    "label": "导出报告",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-HDR-08",
+    "section": "页头与操作",
+    "label": "真实净值数据",
+    "kind": "资料/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_accounts",
+      "quant_account_profiles"
+    ],
+    "api": "E07 / N01 / 页面"
+  },
+  {
+    "field_id": "AF-RNG-01",
+    "section": "核心指标范围",
+    "label": "核心指标时间范围",
+    "kind": "日期控件",
+    "observed": "现场可见",
+    "source_tables": [],
+    "api": "N01；calculation_from/to/context"
+  },
+  {
+    "field_id": "AF-MET-01",
+    "section": "核心指标",
+    "label": "保证金（USDT）",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-02",
+    "section": "核心指标",
+    "label": "未实现盈亏（USDT）",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-03",
+    "section": "核心指标",
+    "label": "已实现盈亏（USDT）",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-04",
+    "section": "核心指标",
+    "label": "总收益率",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-05",
+    "section": "核心指标",
+    "label": "年化收益率",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-06",
+    "section": "核心指标",
+    "label": "实时回撤",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-07",
+    "section": "核心指标",
+    "label": "总手续费（USDT）",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-08",
+    "section": "核心指标",
+    "label": "累计资费（USDT）",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-09",
+    "section": "核心指标",
+    "label": "当前仓位",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-10",
+    "section": "核心指标",
+    "label": "夏普比率",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-11",
+    "section": "核心指标",
+    "label": "索提诺比率",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-12",
+    "section": "核心指标",
+    "label": "卡玛比率",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-13",
+    "section": "核心指标",
+    "label": "最大回撤",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-14",
+    "section": "核心指标",
+    "label": "波动率（标准差）",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-15",
+    "section": "核心指标",
+    "label": "胜率",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-MET-16",
+    "section": "核心指标",
+    "label": "盈亏比",
+    "kind": "计算/金额",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "fact_nav_sample",
+      "quant_segmented_performance_generations",
+      "quant_collection_batches"
+    ],
+    "api": "N01"
+  },
+  {
+    "field_id": "AF-SPK-01",
+    "section": "核心指标迷你趋势图",
+    "label": "保证金（USDT）趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-02",
+    "section": "核心指标迷你趋势图",
+    "label": "未实现盈亏（USDT）趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-03",
+    "section": "核心指标迷你趋势图",
+    "label": "已实现盈亏（USDT）趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-04",
+    "section": "核心指标迷你趋势图",
+    "label": "总收益率趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-05",
+    "section": "核心指标迷你趋势图",
+    "label": "年化收益率趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-06",
+    "section": "核心指标迷你趋势图",
+    "label": "实时回撤趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-07",
+    "section": "核心指标迷你趋势图",
+    "label": "总手续费（USDT）趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-08",
+    "section": "核心指标迷你趋势图",
+    "label": "累计资费（USDT）趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-09",
+    "section": "核心指标迷你趋势图",
+    "label": "当前仓位趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-10",
+    "section": "核心指标迷你趋势图",
+    "label": "夏普比率趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-11",
+    "section": "核心指标迷你趋势图",
+    "label": "索提诺比率趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-12",
+    "section": "核心指标迷你趋势图",
+    "label": "卡玛比率趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-13",
+    "section": "核心指标迷你趋势图",
+    "label": "最大回撤趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-14",
+    "section": "核心指标迷你趋势图",
+    "label": "波动率（标准差）趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-15",
+    "section": "核心指标迷你趋势图",
+    "label": "胜率趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-SPK-16",
+    "section": "核心指标迷你趋势图",
+    "label": "盈亏比趋势图",
+    "kind": "趋势图",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_curve_points_minute",
+      "quant_curve_points_rollup",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-NAV-01",
+    "section": "净值与回撤曲线",
+    "label": "账号展示区间",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-NAV-02",
+    "section": "净值与回撤曲线",
+    "label": "区间天数",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-NAV-03",
+    "section": "净值与回撤曲线",
+    "label": "净值",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-NAV-04",
+    "section": "净值与回撤曲线",
+    "label": "实时回撤",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-NAV-05",
+    "section": "净值与回撤曲线",
+    "label": "策略切换标记",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_assignment",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-PNL-01",
+    "section": "盈亏金额曲线",
+    "label": "账号展示区间",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-PNL-02",
+    "section": "盈亏金额曲线",
+    "label": "区间天数",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-PNL-03",
+    "section": "盈亏金额曲线",
+    "label": "未实现盈亏",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-PNL-04",
+    "section": "盈亏金额曲线",
+    "label": "已实现盈亏",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-PNL-05",
+    "section": "盈亏金额曲线",
+    "label": "总收益率",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-PNL-06",
+    "section": "盈亏金额曲线",
+    "label": "策略切换标记",
+    "kind": "图表/日期",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_performance_sample",
+      "account_strategy_migration",
+      "quant_segmented_performance_generations"
+    ],
+    "api": "N02"
+  },
+  {
+    "field_id": "AF-ASG-01",
+    "section": "已分配策略",
+    "label": "策略 ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-02",
+    "section": "已分配策略",
+    "label": "策略名称",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-03",
+    "section": "已分配策略",
+    "label": "研究员",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-04",
+    "section": "已分配策略",
+    "label": "运行状态",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-05",
+    "section": "已分配策略",
+    "label": "运行时间",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-06",
+    "section": "已分配策略",
+    "label": "结束时间",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-07",
+    "section": "已分配策略",
+    "label": "累计收益率",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-08",
+    "section": "已分配策略",
+    "label": "累计手续费",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-09",
+    "section": "已分配策略",
+    "label": "年化收益率",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-10",
+    "section": "已分配策略",
+    "label": "最大回撤",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-11",
+    "section": "已分配策略",
+    "label": "夏普比率",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-12",
+    "section": "已分配策略",
+    "label": "卡玛比率",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-13",
+    "section": "已分配策略",
+    "label": "操作",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-ASG-14",
+    "section": "已分配策略",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_strategy_account_runs",
+      "quant_strategy_definitions",
+      "quant_nt_account_strategy_assignments",
+      "account_strategy_assignment"
+    ],
+    "api": "N09"
+  },
+  {
+    "field_id": "AF-BIL-01",
+    "section": "历史分润",
+    "label": "账号 ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-02",
+    "section": "历史分润",
+    "label": "分润比例",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-03",
+    "section": "历史分润",
+    "label": "触发分润时间",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-04",
+    "section": "历史分润",
+    "label": "钱包余额（分润前）",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-05",
+    "section": "历史分润",
+    "label": "已实现收益（分润前）",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-06",
+    "section": "历史分润",
+    "label": "应收分润金额",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-07",
+    "section": "历史分润",
+    "label": "分润到账时间",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-08",
+    "section": "历史分润",
+    "label": "钱包余额（分润后）",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-09",
+    "section": "历史分润",
+    "label": "已实现收益（分润后）",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-10",
+    "section": "历史分润",
+    "label": "实收分润金额",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-11",
+    "section": "历史分润",
+    "label": "商务",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-12",
+    "section": "历史分润",
+    "label": "操作",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-BIL-13",
+    "section": "历史分润",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_cycles",
+      "quant_profit_share_receipts",
+      "quant_account_snapshots",
+      "quant_account_profiles"
+    ],
+    "api": "N21/N22；动作N23"
+  },
+  {
+    "field_id": "AF-CFL-01",
+    "section": "转账记录",
+    "label": "转出账户",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-02",
+    "section": "转账记录",
+    "label": "转出账户类型",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-03",
+    "section": "转账记录",
+    "label": "转入账户",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-04",
+    "section": "转账记录",
+    "label": "转入账户类型",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-05",
+    "section": "转账记录",
+    "label": "币种",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-06",
+    "section": "转账记录",
+    "label": "数量",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-07",
+    "section": "转账记录",
+    "label": "时间",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-08",
+    "section": "转账记录",
+    "label": "转账方向",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-CFL-09",
+    "section": "转账记录",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "exchange_account_cash_flows"
+    ],
+    "api": "N20"
+  },
+  {
+    "field_id": "AF-PCV-01",
+    "section": "持仓合约收益曲线",
+    "label": "每个持仓合约未实现盈亏",
+    "kind": "图表",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "当前批准来源/曲线分支待接入绑定"
+  },
+  {
+    "field_id": "AF-SIG-01",
+    "section": "信号与调仓",
+    "label": "最近一次调仓信号触发时间",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal",
+      "fact_signal_outcome",
+      "fact_rebalance_plan",
+      "fact_order_intent_event"
+    ],
+    "api": "N04/N14—N17，当前卡片映射待接入核实"
+  },
+  {
+    "field_id": "AF-SIG-02",
+    "section": "信号与调仓",
+    "label": "最近一次实际完成调仓时间",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal",
+      "fact_signal_outcome",
+      "fact_rebalance_plan",
+      "fact_order_intent_event"
+    ],
+    "api": "N04/N14—N17，当前卡片映射待接入核实"
+  },
+  {
+    "field_id": "AF-SIG-03",
+    "section": "信号与调仓",
+    "label": "信号与交易计划是否匹配",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal",
+      "fact_signal_outcome",
+      "fact_rebalance_plan",
+      "fact_order_intent_event"
+    ],
+    "api": "N04/N14—N17，当前卡片映射待接入核实"
+  },
+  {
+    "field_id": "AF-SIG-04",
+    "section": "信号与调仓",
+    "label": "调仓执行延迟",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal",
+      "fact_signal_outcome",
+      "fact_rebalance_plan",
+      "fact_order_intent_event"
+    ],
+    "api": "N04/N14—N17，当前卡片映射待接入核实"
+  },
+  {
+    "field_id": "AF-PSM-01",
+    "section": "持仓与止损一一对应",
+    "label": "当前持仓个数",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13/N01.exposure_summary"
+  },
+  {
+    "field_id": "AF-PSM-02",
+    "section": "持仓与止损一一对应",
+    "label": "持仓名义价值汇总",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13/N01.exposure_summary"
+  },
+  {
+    "field_id": "AF-PSM-03",
+    "section": "持仓与止损一一对应",
+    "label": "未实现盈亏汇总",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13/N01.exposure_summary"
+  },
+  {
+    "field_id": "AF-PSM-04",
+    "section": "持仓与止损一一对应",
+    "label": "保证金汇总",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13/N01.exposure_summary"
+  },
+  {
+    "field_id": "AF-PSM-05",
+    "section": "持仓与止损一一对应",
+    "label": "保证金使用率",
+    "kind": "摘要卡",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13/N01.exposure_summary"
+  },
+  {
+    "field_id": "AF-POS-01",
+    "section": "持仓列表",
+    "label": "symbol",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-02",
+    "section": "持仓列表",
+    "label": "side",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-03",
+    "section": "持仓列表",
+    "label": "当前仓位",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-04",
+    "section": "持仓列表",
+    "label": "名义价值",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-05",
+    "section": "持仓列表",
+    "label": "未实现盈亏",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-06",
+    "section": "持仓列表",
+    "label": "开仓价格",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-07",
+    "section": "持仓列表",
+    "label": "损益两平价",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-08",
+    "section": "持仓列表",
+    "label": "标记价格",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-09",
+    "section": "持仓列表",
+    "label": "保证金",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-10",
+    "section": "持仓列表",
+    "label": "强平价格",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-POS-11",
+    "section": "持仓列表",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_position_snapshot_batch",
+      "fact_position_snapshot",
+      "quant_collection_batches"
+    ],
+    "api": "N13"
+  },
+  {
+    "field_id": "AF-SGL-01",
+    "section": "收到信号记录",
+    "label": "平仓数",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal"
+    ],
+    "api": "N14"
+  },
+  {
+    "field_id": "AF-SGL-02",
+    "section": "收到信号记录",
+    "label": "多头数",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal"
+    ],
+    "api": "N14"
+  },
+  {
+    "field_id": "AF-SGL-03",
+    "section": "收到信号记录",
+    "label": "空头数",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal"
+    ],
+    "api": "N14"
+  },
+  {
+    "field_id": "AF-SGL-04",
+    "section": "收到信号记录",
+    "label": "信号ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal"
+    ],
+    "api": "N14"
+  },
+  {
+    "field_id": "AF-SGL-05",
+    "section": "收到信号记录",
+    "label": "合约数",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal"
+    ],
+    "api": "N14"
+  },
+  {
+    "field_id": "AF-SGL-06",
+    "section": "收到信号记录",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal"
+    ],
+    "api": "N14"
+  },
+  {
+    "field_id": "AF-BAT-01",
+    "section": "信号批次状态记录",
+    "label": "耗时秒",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-BAT-02",
+    "section": "信号批次状态记录",
+    "label": "计划合约数",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-BAT-03",
+    "section": "信号批次状态记录",
+    "label": "信号ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-BAT-04",
+    "section": "信号批次状态记录",
+    "label": "批次状态",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-BAT-05",
+    "section": "信号批次状态记录",
+    "label": "完成/失败时间",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-BAT-06",
+    "section": "信号批次状态记录",
+    "label": "完成/失败时间排序",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-BAT-07",
+    "section": "信号批次状态记录",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_signal_outcome"
+    ],
+    "api": "N15"
+  },
+  {
+    "field_id": "AF-PLN-01",
+    "section": "最近50次调仓交易计划",
+    "label": "信号ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-02",
+    "section": "最近50次调仓交易计划",
+    "label": "合约",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-03",
+    "section": "最近50次调仓交易计划",
+    "label": "状态",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-04",
+    "section": "最近50次调仓交易计划",
+    "label": "目标方向",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-05",
+    "section": "最近50次调仓交易计划",
+    "label": "当前持仓方向",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-06",
+    "section": "最近50次调仓交易计划",
+    "label": "权重",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-07",
+    "section": "最近50次调仓交易计划",
+    "label": "数量",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-08",
+    "section": "最近50次调仓交易计划",
+    "label": "最近50次范围",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-PLN-09",
+    "section": "最近50次调仓交易计划",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_rebalance_plan"
+    ],
+    "api": "N16"
+  },
+  {
+    "field_id": "AF-INT-01",
+    "section": "order_intents 计划仓位",
+    "label": "真实仓位",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order_intent_event",
+      "fact_order_intent_position_plan"
+    ],
+    "api": "N17"
+  },
+  {
+    "field_id": "AF-INT-02",
+    "section": "order_intents 计划仓位",
+    "label": "基准仓位",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order_intent_event",
+      "fact_order_intent_position_plan"
+    ],
+    "api": "N17"
+  },
+  {
+    "field_id": "AF-INT-03",
+    "section": "order_intents 计划仓位",
+    "label": "接受变化",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order_intent_event",
+      "fact_order_intent_position_plan"
+    ],
+    "api": "N17"
+  },
+  {
+    "field_id": "AF-INT-04",
+    "section": "order_intents 计划仓位",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order_intent_event",
+      "fact_order_intent_position_plan"
+    ],
+    "api": "N17"
+  },
+  {
+    "field_id": "AF-ORD-01",
+    "section": "委托记录",
+    "label": "信号ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-02",
+    "section": "委托记录",
+    "label": "合约",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-03",
+    "section": "委托记录",
+    "label": "事件类型",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-04",
+    "section": "委托记录",
+    "label": "方向",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-05",
+    "section": "委托记录",
+    "label": "订单类型",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-06",
+    "section": "委托记录",
+    "label": "波次路由",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-07",
+    "section": "委托记录",
+    "label": "数量",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-08",
+    "section": "委托记录",
+    "label": "价格",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-09",
+    "section": "委托记录",
+    "label": "状态",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-ORD-10",
+    "section": "委托记录",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_order"
+    ],
+    "api": "N18"
+  },
+  {
+    "field_id": "AF-FIL-01",
+    "section": "成交记录",
+    "label": "信号ID",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-02",
+    "section": "成交记录",
+    "label": "合约",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-03",
+    "section": "成交记录",
+    "label": "方向",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-04",
+    "section": "成交记录",
+    "label": "订单类型",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-05",
+    "section": "成交记录",
+    "label": "波次路由",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-06",
+    "section": "成交记录",
+    "label": "成交数量",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-07",
+    "section": "成交记录",
+    "label": "成交均价",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-08",
+    "section": "成交记录",
+    "label": "名义价值",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-09",
+    "section": "成交记录",
+    "label": "手续费",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-FIL-10",
+    "section": "成交记录",
+    "label": "分页",
+    "kind": "表格字段/控件",
+    "observed": "现场可见",
+    "source_tables": [
+      "fact_fill"
+    ],
+    "api": "N19"
+  },
+  {
+    "field_id": "AF-CON-01",
+    "section": "清算与登记条件态",
+    "label": "分润清算TAB",
+    "kind": "条件态字段/控件",
+    "observed": "当前2999未展示，按文档设计",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_receipts",
+      "quant_receipt_evidence_files",
+      "quant_account_profiles"
+    ],
+    "api": "N22/N23/凭证接口"
+  },
+  {
+    "field_id": "AF-CON-02",
+    "section": "清算与登记条件态",
+    "label": "到账金额",
+    "kind": "条件态字段/控件",
+    "observed": "当前2999未展示，按文档设计",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_receipts",
+      "quant_receipt_evidence_files",
+      "quant_account_profiles"
+    ],
+    "api": "N22/N23/凭证接口"
+  },
+  {
+    "field_id": "AF-CON-03",
+    "section": "清算与登记条件态",
+    "label": "到账时间",
+    "kind": "条件态字段/控件",
+    "observed": "当前2999未展示，按文档设计",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_receipts",
+      "quant_receipt_evidence_files",
+      "quant_account_profiles"
+    ],
+    "api": "N22/N23/凭证接口"
+  },
+  {
+    "field_id": "AF-CON-04",
+    "section": "清算与登记条件态",
+    "label": "凭证",
+    "kind": "条件态字段/控件",
+    "observed": "当前2999未展示，按文档设计",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_receipts",
+      "quant_receipt_evidence_files",
+      "quant_account_profiles"
+    ],
+    "api": "N22/N23/凭证接口"
+  },
+  {
+    "field_id": "AF-CON-05",
+    "section": "清算与登记条件态",
+    "label": "提交登记",
+    "kind": "条件态字段/控件",
+    "observed": "当前2999未展示，按文档设计",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_receipts",
+      "quant_receipt_evidence_files",
+      "quant_account_profiles"
+    ],
+    "api": "N22/N23/凭证接口"
+  },
+  {
+    "field_id": "AF-CON-06",
+    "section": "清算与登记条件态",
+    "label": "账单详情",
+    "kind": "条件态字段/控件",
+    "observed": "当前2999未展示，按文档设计",
+    "source_tables": [
+      "quant_profit_share_bills",
+      "quant_profit_share_receipts",
+      "quant_receipt_evidence_files",
+      "quant_account_profiles"
+    ],
+    "api": "N22/N23/凭证接口"
+  }
+]
