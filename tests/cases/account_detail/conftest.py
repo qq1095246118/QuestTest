@@ -25,7 +25,21 @@ def account_detail_api(privileged_account) -> AccountDetailAPI:
 
 
 @pytest.fixture(scope="module")
-def account_detail_source_flow(settings, pytestconfig, privileged_account) -> AccountDetailSourceFlow:
+def account_detail_subject_id(persistent_data_preflight) -> int:
+    """返回持久化策略数据集中可见的账户主体，不创建或修改账号。"""
+
+    persistent_data_preflight.require(
+        "account_detail", "performance_samples", "published_generation", case_id="ADC-PREFLIGHT"
+    )
+    return int(persistent_data_preflight.account_ids[0])
+
+
+@pytest.fixture(scope="module")
+def account_detail_source_flow(
+    settings,
+    pytestconfig,
+    privileged_account,
+) -> AccountDetailSourceFlow:
     """建立测试环境的自有源数据流程；没有显式 live/test 时阻断。"""
 
     if not pytestconfig.getoption("--live"):
@@ -35,7 +49,7 @@ def account_detail_source_flow(settings, pytestconfig, privileged_account) -> Ac
     if settings.database.driver != "mysql":
         pytest.skip("BLOCKED_ENV: account detail source tests require MySQL")
     client = HTTPClient(privileged_account.api_settings)
-    database = DatabaseClient.from_settings(settings.database)
+    database = DatabaseClient.from_settings(replace(settings.database, read_only=True))
     repository = AccountDetailFixtureRepository(database, environment=settings.environment)
     try:
         yield AccountDetailSourceFlow(repository, AccountDetailAPI(client), privileged_account.user_id)

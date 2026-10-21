@@ -215,10 +215,10 @@ def test_account_directory_live_exchange_filter_excludes_other_exchange(account_
         pytest.skip(str(error))
 
 
-def test_account_directory_live_without_snapshot_reports_business_status(account_management_source_flow) -> None:
+def test_account_directory_live_without_snapshot_reports_business_status(account_management_api_live) -> None:
     """AM-LIVE-007：页面默认请求不带 snapshot 时，成功响应中的数据状态可解释。"""
 
-    response = account_management_source_flow.api.accounts_page()
+    response = account_management_api_live.accounts_page()
     assert response["http_status"] == 200, response
     body = response["body"]
     assert body.get("success") is True, body
@@ -232,10 +232,10 @@ def test_account_directory_live_without_snapshot_reports_business_status(account
         assert "READ_LIMIT_EXCEEDED" in codes, body
 
 
-def test_portfolio_summary_live_without_snapshot_returns_real_response(account_management_source_flow) -> None:
+def test_portfolio_summary_live_without_snapshot_returns_real_response(account_management_api_live) -> None:
     """AM-LIVE-008：页面实际 portfolio 请求不携带 snapshot_id 时应返回真实响应。"""
 
-    response = account_management_source_flow.api.summary()
+    response = account_management_api_live.summary()
     assert response["http_status"] == 200, response
     body = response["body"]
     assert body.get("success") is True, body
@@ -269,11 +269,11 @@ def _assert_real_success(response: dict[str, Any], *, endpoint: str) -> dict[str
 
 
 def test_account_directory_default_request_covers_all_core_metrics(
-    account_management_default_page,
+    account_management_data_default_page,
 ) -> None:
     """AM-LIVE-009：页面默认目录真实请求必须携带 16 个核心指标且不伪造快照。"""
 
-    response = account_management_default_page
+    response = account_management_data_default_page
     data = _assert_real_success(response, endpoint="/admin/quant-accounts")
     params = response.get("request_params")
     assert isinstance(params, dict), response
@@ -289,11 +289,11 @@ def test_account_directory_default_request_covers_all_core_metrics(
 
 
 def test_account_portfolio_summary_returns_all_core_metric_objects(
-    account_management_default_summary,
+    account_management_data_default_summary,
 ) -> None:
     """AM-LIVE-010：portfolio 摘要必须逐项返回页面 16 张核心指标卡的数据对象。"""
 
-    response = account_management_default_summary
+    response = account_management_data_default_summary
     data = _assert_real_success(response, endpoint="/quantitative-trading/analytics/summary")
     params = response.get("request_params")
     assert isinstance(params, dict), response
@@ -312,11 +312,11 @@ def test_account_portfolio_summary_returns_all_core_metric_objects(
 
 
 def test_account_directory_read_limit_does_not_fabricate_totals(
-    account_management_default_page,
+    account_management_data_default_page,
 ) -> None:
     """AM-LIVE-011：读上限导致总数不可用时，目录必须保留明确原因而非返回假总数。"""
 
-    response = account_management_default_page
+    response = account_management_data_default_page
     data = _assert_real_success(response, endpoint="/admin/quant-accounts")
     page_info = data.get("page_info")
     assert isinstance(page_info, dict), data
@@ -337,16 +337,20 @@ def test_account_directory_read_limit_does_not_fabricate_totals(
 
 
 def test_account_directory_page_and_filter_parameters_are_serialized_on_real_request(
-    account_management_api_live,
+    account_management_api_live, persistent_data_preflight,
 ) -> None:
     """AM-LIVE-012：筛选参数真实发送，跳页没有首页快照时按协议拒绝。"""
 
+    snapshot = persistent_data_preflight.require(
+        "account_management", "multi_account", case_id="AM-LIVE-012"
+    )
+    account_ids = [str(value) for value in snapshot.account_ids[:2]]
     page_two = account_management_api_live.accounts_page(
         page=2,
         limit=2,
         runtime_status="running",
         exchange="binance",
-        account_ids=["2999", "3000"],
+        account_ids=account_ids,
     )
     assert page_two.get("http_status") == 400, page_two
     error = page_two.get("body", {}).get("error", {})
@@ -358,7 +362,7 @@ def test_account_directory_page_and_filter_parameters_are_serialized_on_real_req
     assert params.get("limit") == 2, params
     assert params.get("runtime_status") == "running", params
     assert params.get("exchange") == "binance", params
-    assert params.get("account_ids") == "2999,3000", params
+    assert params.get("account_ids") == ",".join(account_ids), params
     assert "snapshot_id" not in params, params
 
     response = account_management_api_live.accounts_page(
@@ -366,7 +370,7 @@ def test_account_directory_page_and_filter_parameters_are_serialized_on_real_req
         limit=2,
         runtime_status="running",
         exchange="binance",
-        account_ids=["2999", "3000"],
+        account_ids=account_ids,
     )
     data = _assert_real_success(response, endpoint="/admin/quant-accounts")
     params = response.get("request_params")
@@ -375,7 +379,7 @@ def test_account_directory_page_and_filter_parameters_are_serialized_on_real_req
     assert params.get("limit") == 2, params
     assert params.get("runtime_status") == "running", params
     assert params.get("exchange") == "binance", params
-    assert params.get("account_ids") == "2999,3000", params
+    assert params.get("account_ids") == ",".join(account_ids), params
     assert "snapshot_id" not in params, params
     page_info = data.get("page_info")
     assert isinstance(page_info, dict), data
@@ -385,11 +389,11 @@ def test_account_directory_page_and_filter_parameters_are_serialized_on_real_req
 
 
 def test_account_directory_items_keep_identity_and_metric_shape_when_data_is_available(
-    account_management_default_page,
+    account_management_data_default_page,
 ) -> None:
     """AM-LIVE-013：目录有数据时逐行保留账号身份及核心指标结构；空集合允许为空。"""
 
-    response = account_management_default_page
+    response = account_management_data_default_page
     data = _assert_real_success(response, endpoint="/admin/quant-accounts")
     items = data.get("items")
     assert isinstance(items, list), data

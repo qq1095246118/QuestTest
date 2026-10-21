@@ -4,9 +4,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
 from unittest import SkipTest
-from uuid import uuid4
 from api.strategy_detail_api import StrategyDetailAPI
 from db.strategy_detail_fixture_repository import StrategyDetailFixtureRepository
+from service.persistent_data_preflight import PersistentDataPreflight
 
 
 class StrategyDetailSourceContractBlocked(SkipTest):
@@ -86,11 +86,19 @@ class ExistingStrategyDetailEvidence:
 
 
 class StrategyDetailSourceFlow:
-    """准备策略视图并调用真实策略详情接口，结束后精确清理。"""
+    """发现持久化策略并调用真实详情接口；随机 fixture 写入入口已停用。"""
 
-    def __init__(self, repository: StrategyDetailFixtureRepository, api: StrategyDetailAPI,
-                 actor_id: int) -> None:
+    def __init__(
+        self,
+        repository: StrategyDetailFixtureRepository,
+        api: StrategyDetailAPI,
+        actor_id: int,
+        persistent_data_preflight: PersistentDataPreflight | None = None,
+    ) -> None:
+        """保存只读仓储、接口、操作者和持久化数据集发现结果。"""
+
         self.repository, self.api, self.actor_id = repository, api, actor_id
+        self.persistent_data_preflight = persistent_data_preflight
 
     @contextmanager
     def execute_existing(self, *, strategy_id: str | None = None,
@@ -107,8 +115,14 @@ class StrategyDetailSourceFlow:
         Raises:
             StrategyDetailSourceContractBlocked: 测试库中没有可见策略，或实际接口拒绝该主体。
         """
-        strategy = self.repository.find_existing_strategy() if strategy_id is None else None
-        selected_id = strategy_id or (str(strategy.get("id")) if strategy else "")
+        persisted_ids = self.persistent_data_preflight.strategy_ids if self.persistent_data_preflight else ()
+        selected_persisted_id = persisted_ids[0] if persisted_ids else None
+        strategy = (
+            self.repository.find_existing_strategy()
+            if strategy_id is None and selected_persisted_id is None
+            else None
+        )
+        selected_id = strategy_id or selected_persisted_id or (str(strategy.get("id")) if strategy else "")
         if not selected_id:
             raise StrategyDetailSourceContractBlocked(
                 "BLOCKED_DATA: no active/running strategy is available for live detail requests"
@@ -148,8 +162,14 @@ class StrategyDetailSourceFlow:
         该入口只调用 GET，不写 fixture 数据；resource 为 definition、accounts、analytics
         或 trading 资源名。后端实际生成的 snapshot 只用于响应身份断言，不作为请求参数回传。
         """
-        strategy = self.repository.find_existing_strategy() if strategy_id is None else None
-        selected_id = strategy_id or (str(strategy.get("id")) if strategy else "")
+        persisted_ids = self.persistent_data_preflight.strategy_ids if self.persistent_data_preflight else ()
+        selected_persisted_id = persisted_ids[0] if persisted_ids else None
+        strategy = (
+            self.repository.find_existing_strategy()
+            if strategy_id is None and selected_persisted_id is None
+            else None
+        )
+        selected_id = strategy_id or selected_persisted_id or (str(strategy.get("id")) if strategy else "")
         if not selected_id:
             raise StrategyDetailSourceContractBlocked(
                 "BLOCKED_DATA: no active/running strategy is available for live detail requests"
@@ -183,7 +203,12 @@ class StrategyDetailSourceFlow:
 
     @contextmanager
     def execute(self, *, metrics: dict[str, Any], accounts: list[dict[str, Any]] | None = None) -> Iterator[StrategyDetailSourceEvidence]:
-        """写入隔离测试视图，调用真实策略详情接口并在退出时清理。
+        """读取预置策略侧数据集。
+
+        旧实现会创建 ``qsd_*`` 策略、账号和 ``quant_read_views``，再在 Case
+        结束时清理。该读视图没有经过开发侧的全量采集/增量更新链，不能作为
+        策略详情结果来源。持久化数据由独立 seed 流程管理；旧的随机 fixture
+        入口保留为兼容 API，但默认明确跳过，不执行任何写库或清理。
 
         Args:
             metrics: 要由测试环境数据链路消费的策略详情指标载荷。
@@ -196,38 +221,12 @@ class StrategyDetailSourceFlow:
             StrategyDetailSourceContractBlocked: 测试视图未被后端 collector
                 消费，或真实接口返回非成功状态。
         """
-        fixture = "qsd_" + uuid4().hex
-        view = "read_" + uuid4().hex
-        strategy_id = "strat_" + uuid4().hex
-        requested_rows = accounts or [{"strategy_id": strategy_id}]
-        owned_accounts: list[int] = []
-        rows: list[dict[str, Any]] = []
-        try:
-            for index, row in enumerate(requested_rows):
-                account_id = self.repository.create_account(fixture, self.actor_id, index)
-                owned_accounts.append(account_id)
-                rows.append({**row, "id": account_id, "account_id": account_id, "strategy_id": strategy_id})
-            self.repository.create_view(fixture, view, self.actor_id, strategy_id, rows, metrics)
-            result = self.api.analytics(
-                "summary",
-                subject_id=strategy_id,
-                snapshot_id=view,
-                subject_type="strategy",
-                scope="lifetime",
-                metrics=(
-                    "margin_equity,unrealized_pnl,realized_pnl_gross,cumulative_return,"
-                    "annualized_return,current_drawdown,commission_expense,funding_pnl"
-                ),
-            )
-            body = _raise_for_fixture_response("summary", result)
-            meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
-            if meta.get("snapshot_id") != view or meta.get("mock") is not False:
-                raise StrategyDetailSourceContractBlocked(
-                    "BLOCKED_CONTRACT: strategy summary identity metadata does not match fixture; "
-                    f"snapshot_id={meta.get('snapshot_id')}, mock={meta.get('mock')}")
-            yield StrategyDetailSourceEvidence(fixture, view, strategy_id, body)
-        finally:
-            self.repository.cleanup(fixture, view, self.actor_id, owned_accounts)
+        if False:  # 保持 contextmanager 的生成器契约；不会执行任何数据操作。
+            yield StrategyDetailSourceEvidence("", "", "", {})
+        raise StrategyDetailSourceContractBlocked(
+            "BLOCKED_DATA_PRECONDITION: legacy strategy-detail fixture writes are disabled; "
+            "use the pre-seeded strategy dataset and read-only detail cases"
+        )
 
     @contextmanager
     def execute_resource(
@@ -238,7 +237,11 @@ class StrategyDetailSourceFlow:
         accounts: list[dict[str, Any]] | None = None,
         analytics: bool = False,
     ) -> Iterator[StrategyDetailResourceEvidence]:
-        """准备隔离 fixture，调用一个真实详情资源并在退出时清理。
+        """读取预置策略侧数据集的一个详情资源。
+
+        随机 ``qsd_*`` fixture 已停用，避免只写 read view 而跳过开发侧采集链。
+        持久化数据初始化由独立 seed 流程负责，live Case 走
+        :meth:`execute_existing_resource` 的无 snapshot 只读入口。
 
         Args:
             resource: ``definition``、``accounts``、analytics 或 trading 资源名。
@@ -253,46 +256,9 @@ class StrategyDetailSourceFlow:
             StrategyDetailSourceContractBlocked: fixture 未被真实接口消费。
             ValueError: resource 不属于允许的接口资源。
         """
-        fixture = "qsd_" + uuid4().hex
-        view = "read_" + uuid4().hex
-        strategy_id = "strat_" + uuid4().hex
-        requested_rows = accounts or [{"strategy_id": strategy_id}]
-        owned_accounts: list[int] = []
-        rows: list[dict[str, Any]] = []
-        try:
-            for index, row in enumerate(requested_rows):
-                account_id = self.repository.create_account(fixture, self.actor_id, index)
-                owned_accounts.append(account_id)
-                rows.append({**row, "id": account_id, "account_id": account_id, "strategy_id": strategy_id})
-            self.repository.create_view(fixture, view, self.actor_id, strategy_id, rows, metrics)
-            params = {
-                "subject_id": strategy_id,
-                "snapshot_id": view,
-                "subject_type": "strategy",
-            }
-            if analytics:
-                # Analytics resources share the summary scope contract. The
-                # trading resources intentionally do not accept ``scope``;
-                # passing it produced a client-side 400 even though the
-                # underlying request was otherwise valid.
-                params["scope"] = "lifetime"
-                if resource == "series":
-                    # N02 requires an explicit series selection. ``nav`` and
-                    # ``drawdown`` are the two curves rendered by the detail
-                    # page and are accepted as a comma-separated value.
-                    params["types"] = "nav,drawdown"
-                response = self.api.analytics(resource, **params)
-            elif resource in {"definition", "accounts"}:
-                response = getattr(self.api, resource)(strategy_id, **{"snapshot_id": view})
-            else:
-                response = self.api.trading(resource, **params)
-            body = _raise_for_fixture_response(resource, response)
-            meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
-            if meta.get("mock") is not False or meta.get("snapshot_id") != view:
-                raise StrategyDetailSourceContractBlocked(
-                    f"BLOCKED_CONTRACT: {resource} identity metadata mismatch; "
-                    f"snapshot_id={meta.get('snapshot_id')}, mock={meta.get('mock')}"
-                )
-            yield StrategyDetailResourceEvidence(fixture, view, strategy_id, resource, body)
-        finally:
-            self.repository.cleanup(fixture, view, self.actor_id, owned_accounts)
+        if False:  # 保持 contextmanager 的生成器契约；不会执行任何数据操作。
+            yield StrategyDetailResourceEvidence("", "", "", resource, {})
+        raise StrategyDetailSourceContractBlocked(
+            "BLOCKED_DATA_PRECONDITION: legacy strategy-detail fixture writes are disabled; "
+            "use the pre-seeded strategy dataset and read-only detail cases"
+        )

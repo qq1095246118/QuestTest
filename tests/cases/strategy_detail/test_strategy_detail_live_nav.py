@@ -32,9 +32,14 @@ def _data_container(body: dict[str, Any]) -> Any:
     return data
 
 
-def test_strategy_summary_live_without_snapshot_uses_real_subject(strategy_detail_source_flow) -> None:
+def test_strategy_summary_live_without_snapshot_uses_real_subject(
+    strategy_detail_source_flow, persistent_data_preflight
+) -> None:
     """SD-LIVE-001：策略详情核心指标使用后端实际生成快照并保持主体身份。"""
 
+    persistent_data_preflight.require(
+        "strategy_detail", "performance_samples", "published_generation", case_id="SD-LIVE-001"
+    )
     try:
         with strategy_detail_source_flow.execute_existing() as evidence:
             data = _data_container(evidence.response)
@@ -51,9 +56,14 @@ def test_strategy_summary_live_without_snapshot_uses_real_subject(strategy_detai
 
 
 @pytest.mark.parametrize("resource", ["risk", "series"])
-def test_strategy_analytics_live_without_snapshot(strategy_detail_source_flow, resource: str) -> None:
+def test_strategy_analytics_live_without_snapshot(
+    strategy_detail_source_flow, persistent_data_preflight, resource: str
+) -> None:
     """SD-LIVE-002/003：风险和净值/回撤曲线走真实无 snapshot 请求。"""
 
+    persistent_data_preflight.require(
+        "strategy_detail", "performance_samples", "published_generation", case_id=f"SD-LIVE-{resource}"
+    )
     try:
         with strategy_detail_source_flow.execute_existing_resource(resource) as evidence:
             data = _data_container(evidence.response)
@@ -78,9 +88,12 @@ def test_strategy_analytics_live_without_snapshot(strategy_detail_source_flow, r
 
 
 @pytest.mark.parametrize("resource", ["definition", "accounts"])
-def test_strategy_identity_resources_live_without_snapshot(strategy_detail_source_flow, resource: str) -> None:
+def test_strategy_identity_resources_live_without_snapshot(
+    strategy_detail_source_flow, persistent_data_preflight, resource: str
+) -> None:
     """SD-LIVE-004/005：策略定义和账号归属使用真实主体请求。"""
 
+    persistent_data_preflight.require("strategy_detail", case_id=f"SD-LIVE-{resource}")
     try:
         with strategy_detail_source_flow.execute_existing_resource(resource) as evidence:
             data = _data_container(evidence.response)
@@ -101,9 +114,21 @@ def test_strategy_identity_resources_live_without_snapshot(strategy_detail_sourc
     "resource",
     ["positions", "signals", "signal-batches", "rebalance-plans", "order-intents", "orders", "fills"],
 )
-def test_strategy_trading_resources_live_without_snapshot(strategy_detail_source_flow, resource: str) -> None:
+def test_strategy_trading_resources_live_without_snapshot(
+    strategy_detail_source_flow, persistent_data_preflight, resource: str
+) -> None:
     """SD-LIVE-006~012：交易资源验证真实主体、非 mock 和数据容器。"""
 
+    required = {
+        "positions": ("positions",),
+        "signals": ("signals",),
+        "signal-batches": ("signals",),
+        "rebalance-plans": ("signals",),
+        "order-intents": ("orders",),
+        "orders": ("orders",),
+        "fills": ("fills",),
+    }[resource]
+    persistent_data_preflight.require("strategy_detail", *required, case_id=f"SD-LIVE-{resource}")
     try:
         with strategy_detail_source_flow.execute_existing_resource(resource) as evidence:
             data = _data_container(evidence.response)

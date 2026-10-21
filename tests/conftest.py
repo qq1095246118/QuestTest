@@ -23,7 +23,9 @@ from db.client import DatabaseClient
 from db.factor4_calculation_repository import Factor4CalculationRepository
 from db.factor4_read_repository import Factor4ReadRepository
 from db.factor_combo_repository import FactorComboRepository
+from db.persistent_dataset_repository import PersistentDatasetRepository
 from service.factor_combo_service import FactorComboService
+from service.persistent_data_preflight import PersistentDataPreflight
 from tests.resource_scope import TestResourceScope
 from tools.http_response import read_json_object, read_json_or_diagnostic
 
@@ -142,6 +144,30 @@ def live_mode(pytestconfig: pytest.Config) -> bool:
 
     configured = os.getenv("AUTOMATION_LIVE", "").strip().lower() == "true"
     return bool(pytestconfig.getoption("--live") or configured)
+
+
+@pytest.fixture(scope="session")
+def persistent_data_preflight(
+    settings: Settings,
+    pytestconfig: pytest.Config,
+    live_mode: bool,
+) -> PersistentDataPreflight:
+    """只读检查三个量化页面共用的持久化策略数据集。
+
+    数据集必须由单独的 seed 步骤预先写入策略侧源表；本 fixture 不创建、更新或
+    清理任何业务数据。每个 live case 可调用 ``require`` 要求自身所需能力，
+    缺少数据时通过 ``PersistentDataBlocked`` 使该 case 单独跳过。
+    """
+
+    if not live_mode:
+        pytest.skip("NOT_RUN_LIVE: persistent data preflight requires --live")
+    if settings.environment != "test":
+        pytest.skip("BLOCKED_ENV: persistent page dataset checks require --env test")
+    if settings.database.driver != "mysql":
+        pytest.skip("BLOCKED_ENV: persistent page dataset checks require MySQL")
+    read_only_settings = replace(settings.database, read_only=True)
+    repository = PersistentDatasetRepository(DatabaseClient.from_settings(read_only_settings))
+    return PersistentDataPreflight.from_environment(repository)
 
 
 @pytest.fixture(scope="session")

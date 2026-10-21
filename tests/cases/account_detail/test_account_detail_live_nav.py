@@ -148,11 +148,11 @@ def test_account_summary_reports_missing_core_field_without_zero_fallback(
         pytest.skip(str(error))
 
 
-def test_account_summary_live_without_fixture_snapshot_is_successful(account_detail_api) -> None:
+def test_account_summary_live_without_fixture_snapshot_is_successful(account_detail_api, account_detail_subject_id) -> None:
     """ADC-LIVE-005：页面实际请求不携带 snapshot_id 时，接口应返回真实快照。"""
 
     response = account_detail_api.summary(
-        2999,
+        account_detail_subject_id,
         scope="lifetime",
         metric_basis="accrual",
         metrics="realized_pnl_gross,net_deposit,cumulative_return,margin_equity,unrealized_pnl",
@@ -164,10 +164,10 @@ def test_account_summary_live_without_fixture_snapshot_is_successful(account_det
     assert body.get("meta", {}).get("snapshot_id"), body
     context = body.get("data", {}).get("context", {})
     assert context.get("subject_type") == "account", context
-    assert str(context.get("subject_id")) == "2999", context
+    assert str(context.get("subject_id")) == str(account_detail_subject_id), context
 
 
-def test_account_summary_live_exposes_all_core_metric_states(account_detail_api) -> None:
+def test_account_summary_live_exposes_all_core_metric_states(account_detail_api, account_detail_subject_id) -> None:
     """ADC-LIVE-006：页面核心 16 个指标都必须能从真实 N01 响应追踪状态。
 
     当前环境的数据可能不足以计算每一个风险指标，因此用例不要求所有指标都有数值；
@@ -176,7 +176,7 @@ def test_account_summary_live_exposes_all_core_metric_states(account_detail_api)
     """
 
     response = account_detail_api.summary(
-        2999,
+        account_detail_subject_id,
         scope="lifetime",
         metric_basis="accrual",
         metrics=",".join(ACCOUNT_CORE_METRICS),
@@ -201,11 +201,11 @@ def test_account_summary_live_exposes_all_core_metric_states(account_detail_api)
             }
 
 
-def test_account_summary_live_date_window_is_reflected_in_request_context(account_detail_api) -> None:
+def test_account_summary_live_date_window_is_reflected_in_request_context(account_detail_api, account_detail_subject_id) -> None:
     """ADC-LIVE-007：真实 N01 支持页面日期窗口，并保留同一账户身份。"""
 
     response = account_detail_api.summary(
-        2999,
+        account_detail_subject_id,
         # N01 keeps the page's lifetime scope while the date picker is carried
         # by the explicit from/to window.
         scope="lifetime",
@@ -221,14 +221,14 @@ def test_account_summary_live_date_window_is_reflected_in_request_context(accoun
     context = body.get("data", {}).get("context")
     assert isinstance(context, dict), body
     assert context.get("subject_type") == "account", context
-    assert str(context.get("subject_id")) == "2999", context
+    assert str(context.get("subject_id")) == str(account_detail_subject_id), context
     # The response context is the stable identity contract.  Date formatting is a
     # presentation concern and may be normalized into metadata by the backend.
     assert body.get("meta", {}).get("snapshot_id"), body
     assert isinstance(body.get("data", {}).get("metrics"), dict), body
 
 
-def test_account_summary_live_snapshot_is_traceable_on_repeated_read(account_detail_api) -> None:
+def test_account_summary_live_snapshot_is_traceable_on_repeated_read(account_detail_api, account_detail_subject_id) -> None:
     """ADC-LIVE-008：每次真实读取都必须生成可追踪 snapshot，且不返回 mock。"""
 
     kwargs = {
@@ -236,14 +236,14 @@ def test_account_summary_live_snapshot_is_traceable_on_repeated_read(account_det
         "metric_basis": "accrual",
         "metrics": "margin_equity,realized_pnl_gross,cumulative_return",
     }
-    first = read_json_object(account_detail_api.summary(2999, **kwargs), "account detail first read")
-    second = read_json_object(account_detail_api.summary(2999, **kwargs), "account detail second read")
+    first = read_json_object(account_detail_api.summary(account_detail_subject_id, **kwargs), "account detail first read")
+    second = read_json_object(account_detail_api.summary(account_detail_subject_id, **kwargs), "account detail second read")
     for body in (first, second):
         assert body.get("success") is True, body
         assert body.get("meta", {}).get("mock") is False, body
         assert body.get("meta", {}).get("snapshot_id"), body
         assert body.get("data", {}).get("context", {}).get("subject_type") == "account", body
-        assert str(body.get("data", {}).get("context", {}).get("subject_id")) == "2999", body
+        assert str(body.get("data", {}).get("context", {}).get("subject_id")) == str(account_detail_subject_id), body
 
 
 def test_account_summary_live_invalid_account_returns_structured_business_error(account_detail_api) -> None:

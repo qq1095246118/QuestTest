@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 
 import pytest
 
@@ -14,7 +15,11 @@ from service.account_management_source_flow import AccountManagementSourceFlow
 
 
 @pytest.fixture(scope="module")
-def account_management_source_flow(settings, pytestconfig, privileged_account) -> Iterator[AccountManagementSourceFlow]:
+def account_management_source_flow(
+    settings,
+    pytestconfig,
+    privileged_account,
+) -> Iterator[AccountManagementSourceFlow]:
     """提供测试环境专用的多账号源数据流程。"""
 
     if not pytestconfig.getoption("--live"):
@@ -24,7 +29,7 @@ def account_management_source_flow(settings, pytestconfig, privileged_account) -
     if settings.database.driver != "mysql":
         pytest.skip("BLOCKED_ENV: account management source cases require MySQL")
     client = HTTPClient(privileged_account.api_settings)
-    database = DatabaseClient.from_settings(settings.database)
+    database = DatabaseClient.from_settings(replace(settings.database, read_only=True))
     repository = AccountManagementFixtureRepository(database, environment=settings.environment)
     try:
         yield AccountManagementSourceFlow(repository, AccountManagementAPI(client), privileged_account.user_id)
@@ -33,7 +38,11 @@ def account_management_source_flow(settings, pytestconfig, privileged_account) -
 
 
 @pytest.fixture(scope="module")
-def account_management_api_live(settings, pytestconfig, privileged_account) -> Iterator[AccountManagementAPI]:
+def account_management_api_live(
+    settings,
+    pytestconfig,
+    privileged_account,
+) -> Iterator[AccountManagementAPI]:
     """提供不写入数据库的真实账号管理 API 客户端。
 
     该 fixture 专门覆盖页面默认的无 ``snapshot_id`` 请求。它不创建 fixture
@@ -63,4 +72,30 @@ def account_management_default_page(account_management_api_live: AccountManageme
 def account_management_default_summary(account_management_api_live: AccountManagementAPI) -> dict:
     """读取一次页面默认 portfolio 摘要，供 16 个核心指标断言复用。"""
 
+    return account_management_api_live.summary()
+
+
+@pytest.fixture(scope="module")
+def account_management_data_default_page(
+    account_management_api_live: AccountManagementAPI,
+    persistent_data_preflight,
+) -> dict:
+    """检查持久化多账号数据后读取总览目录，供数据断言用例复用。"""
+
+    persistent_data_preflight.require(
+        "account_management", "multi_account", "published_generation", case_id="AM-PREFLIGHT"
+    )
+    return account_management_api_live.accounts_page()
+
+
+@pytest.fixture(scope="module")
+def account_management_data_default_summary(
+    account_management_api_live: AccountManagementAPI,
+    persistent_data_preflight,
+) -> dict:
+    """检查持久化多账号数据后读取 portfolio 摘要，供数据断言用例复用。"""
+
+    persistent_data_preflight.require(
+        "account_management", "multi_account", "published_generation", case_id="AM-PREFLIGHT"
+    )
     return account_management_api_live.summary()
