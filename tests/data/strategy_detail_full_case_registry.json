@@ -1,0 +1,1396 @@
+{
+  "scope": "strategy-detail-full-data",
+  "case_count": 139,
+  "cases": [
+    {
+      "id": "SD-101",
+      "group": "策略字段/身份/生命周期",
+      "title": "完整账户资金字段映射",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-102",
+      "group": "策略字段/身份/生命周期",
+      "title": "费用与资金费正负号",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-103",
+      "group": "策略字段/身份/生命周期",
+      "title": "金额、百分比和时间显示格式",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-104",
+      "group": "策略字段/身份/生命周期",
+      "title": "外部运行状态与本地绑定状态分离",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-105",
+      "group": "策略字段/身份/生命周期",
+      "title": "外部运行 ID 与本地策略 ID 映射",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-106",
+      "group": "策略字段/身份/生命周期",
+      "title": "同名策略列表分开展示，详情跨交易所聚合",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-107",
+      "group": "策略字段/身份/生命周期",
+      "title": "同名账号按稳定账号身份区分",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-108",
+      "group": "策略字段/身份/生命周期",
+      "title": "一账号多策略归属",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-109",
+      "group": "策略字段/身份/生命周期",
+      "title": "一策略多账号归属",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-110",
+      "group": "策略字段/身份/生命周期",
+      "title": "重取和重复事件去重",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-111",
+      "group": "策略字段/身份/生命周期",
+      "title": "运行状态枚举映射",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-112",
+      "group": "策略字段/身份/生命周期",
+      "title": "混合策略状态的账号汇总",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-113",
+      "group": "策略字段/身份/生命周期",
+      "title": "历史归属不被当前负责人改写",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-114",
+      "group": "策略字段/身份/生命周期",
+      "title": "绑定结束不删除历史结果",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-115",
+      "group": "策略字段/身份/生命周期",
+      "title": "stopped 账号的遗留持仓",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-116",
+      "group": "策略字段/身份/生命周期",
+      "title": "持仓价格字段语义区分",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-117",
+      "group": "策略字段/身份/生命周期",
+      "title": "多空持仓与数量单位",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-118",
+      "group": "策略字段/身份/生命周期",
+      "title": "空仓与零持仓展示",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-119",
+      "group": "策略字段/身份/生命周期",
+      "title": "信号、批次、计划和订单关联",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "SD-120",
+      "group": "策略字段/身份/生命周期",
+      "title": "部分成交和未平仓成交",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-001",
+      "group": "公式/风险/执行数据",
+      "title": "钱包、浮盈和权益三项关系",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-002",
+      "group": "公式/风险/执行数据",
+      "title": "净入金正值",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-003",
+      "group": "公式/风险/执行数据",
+      "title": "只有资金流变化",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-004",
+      "group": "公式/风险/执行数据",
+      "title": "已实现与未实现分离",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-005",
+      "group": "公式/风险/执行数据",
+      "title": "手续费和资金费的符号",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-006",
+      "group": "公式/风险/执行数据",
+      "title": "累计收益率正值",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-007",
+      "group": "公式/风险/执行数据",
+      "title": "累计收益率负值和零值",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-008",
+      "group": "公式/风险/执行数据",
+      "title": "非正净入金",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-009",
+      "group": "公式/风险/执行数据",
+      "title": "区间净交易收益",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-010",
+      "group": "公式/风险/执行数据",
+      "title": "区间边界不重计",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-011",
+      "group": "公式/风险/执行数据",
+      "title": "年化收益少于七天",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-012",
+      "group": "公式/风险/执行数据",
+      "title": "年化收益达到七天",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-013",
+      "group": "公式/风险/执行数据",
+      "title": "运行日定义待确认",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-014",
+      "group": "公式/风险/执行数据",
+      "title": "日收益率",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-015",
+      "group": "公式/风险/执行数据",
+      "title": "样本标准差和年化波动",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-016",
+      "group": "公式/风险/执行数据",
+      "title": "Sharpe",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-017",
+      "group": "公式/风险/执行数据",
+      "title": "Calmar",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-018",
+      "group": "公式/风险/执行数据",
+      "title": "当前回撤",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-019",
+      "group": "公式/风险/执行数据",
+      "title": "最大回撤",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-020",
+      "group": "公式/风险/执行数据",
+      "title": "缺历史峰值",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-021",
+      "group": "公式/风险/执行数据",
+      "title": "图表抽稀不改变指标",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-022",
+      "group": "公式/风险/执行数据",
+      "title": "策略贡献正负分母",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-023",
+      "group": "公式/风险/执行数据",
+      "title": "贡献分母为零",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-024",
+      "group": "公式/风险/执行数据",
+      "title": "Top6 贡献展示",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-025",
+      "group": "公式/风险/执行数据",
+      "title": "计划匹配率按目标数",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-026",
+      "group": "公式/风险/执行数据",
+      "title": "替换、取消和零目标",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-027",
+      "group": "公式/风险/执行数据",
+      "title": "健康度缺项",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-028",
+      "group": "公式/风险/执行数据",
+      "title": "健康度评分边界",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-029",
+      "group": "公式/风险/执行数据",
+      "title": "持仓数量和名义价值",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-030",
+      "group": "公式/风险/执行数据",
+      "title": "订单完成率",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-031",
+      "group": "公式/风险/执行数据",
+      "title": "成交均价",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-032",
+      "group": "公式/风险/执行数据",
+      "title": "执行延迟",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-043",
+      "group": "公式/风险/执行数据",
+      "title": "账户收益和策略收益不可互换",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-044",
+      "group": "公式/风险/执行数据",
+      "title": "原值与页面舍入",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-045",
+      "group": "公式/风险/执行数据",
+      "title": "负分母、零波动和缺样本",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-046",
+      "group": "公式/风险/执行数据",
+      "title": "同一窗口一致性",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-047",
+      "group": "公式/风险/执行数据",
+      "title": "图表缺口处理",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P1",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-048",
+      "group": "公式/风险/执行数据",
+      "title": "数据不足但基础值可用",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-049",
+      "group": "公式/风险/执行数据",
+      "title": "迟到结果不改写冻结结果",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "已有离线/契约覆盖部分",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "CALC-050",
+      "group": "公式/风险/执行数据",
+      "title": "汇总不按分页计算",
+      "input": "按该主场景构造正向、边界和对照数据",
+      "expected": "接口、独立Oracle和策略详情结果一致，缺失或冲突状态明确",
+      "status": "待补充自动化",
+      "priority": "P0",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-027",
+      "group": "策略身份",
+      "title": "strategy_id不存在或格式非法",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "缺失/非法策略身份应拒绝或返回明确错误，不进入默认策略",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-028",
+      "group": "策略身份",
+      "title": "同名策略不同strategy_id隔离",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "相同名称但不同定义不能串入同一详情",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-029",
+      "group": "策略身份",
+      "title": "strategy_id、名称、交易所映射",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "详情身份字段与列表/定义/交易所映射一致",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-030",
+      "group": "账号归属",
+      "title": "账号关联新增/解除边界",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "关联生效前后及结束时刻按半开区间归属",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-031",
+      "group": "账号归属",
+      "title": "同账号多次A→B→A",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "每个interval_id独立保留，收益和分钟事实不重复",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-032",
+      "group": "账号归属",
+      "title": "当前归属与历史归属",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "当前只取运行中，历史保留历史策略区间",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-033",
+      "group": "账号归属",
+      "title": "关联重复行去重",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同账户/交易所/策略重复关系不重复计入",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-034",
+      "group": "版本一致性",
+      "title": "定义/账号/summary同snapshot",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "跨资源返回相同snapshot/generation或明确冲突",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-035",
+      "group": "摘要曲线",
+      "title": "summary八个核心字段",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "8个指标逐字段与独立源/Oracle对账",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-036",
+      "group": "摘要曲线",
+      "title": "series时间升序和重复点",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "曲线按时间升序，重复分钟不重复",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-037",
+      "group": "摘要曲线",
+      "title": "查询窗口与展示窗口",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "metric_from/to与展示from/to按契约区分",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-038",
+      "group": "摘要曲线",
+      "title": "UTC+8日界",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "日边界分钟只归属一个日期",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-039",
+      "group": "摘要曲线",
+      "title": "缺分钟/迟到分钟",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "缺口不补0，迟到按版本/水位处理",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-040",
+      "group": "摘要曲线",
+      "title": "分页/limit完整",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "完整读取关联账户或曲线数据，不漏不重",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-041",
+      "group": "摘要曲线",
+      "title": "空窗口/无成员",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "返回空或unavailable，不复用旧结果",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-042",
+      "group": "摘要曲线",
+      "title": "summary/risk/series一致性",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同snapshot、同策略范围和时间窗口",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-043",
+      "group": "持仓",
+      "title": "同合约多空分开",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "多空仓位分别保留，不能相抵成空仓",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-044",
+      "group": "持仓",
+      "title": "同合约多账户净/毛名义",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "毛名义按绝对值，净名义另算，账户不串",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-045",
+      "group": "持仓",
+      "title": "字段逐项映射",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "当前仓位、名义、保证金、未实现盈亏逐源字段对账",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-046",
+      "group": "持仓",
+      "title": "position_id/账户/区间去重",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "稳定持仓身份去重，跨账户局部ID不互删",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-047",
+      "group": "持仓",
+      "title": "平仓后归零",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "平仓后从当前集合移除，历史记录仍可追踪",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-048",
+      "group": "持仓",
+      "title": "数量/价格/标记/强平价精度",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "原值、单位、负号和缺失状态正确",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-049",
+      "group": "持仓",
+      "title": "逐仓/全仓分母",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "不同保证金类型不直接混合；分母待正式口径",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-050",
+      "group": "持仓",
+      "title": "持仓与区间/snapshot一致",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "历史持仓不进入当前，资源代次一致",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-051",
+      "group": "信号",
+      "title": "信号ID+策略+账户身份",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "信号稳定身份和归属正确",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-052",
+      "group": "信号",
+      "title": "多合约/多空数量",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同一信号的合约数、多空数与明细对账",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-053",
+      "group": "信号",
+      "title": "触发时间和计划合约数",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "时间、计划数、实际数分别映射",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-054",
+      "group": "信号",
+      "title": "缺字段/未知状态",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "缺失保留unknown/unavailable，不默认成功",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-055",
+      "group": "信号",
+      "title": "重复信号幂等",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "重放不增加信号数或数量",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-056",
+      "group": "信号",
+      "title": "区间归属和分页",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "信号只属于策略区间，分页完整",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-057",
+      "group": "批次",
+      "title": "成功/失败/unknown",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "状态枚举和结果集合正确",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-058",
+      "group": "批次",
+      "title": "完成/失败时间和耗时",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "耗时使用同一批次原始事件，不能跨批次相减",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-059",
+      "group": "批次",
+      "title": "计划数与实际数",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "计划合约数与完成/失败合约数可对账",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-060",
+      "group": "批次",
+      "title": "同信号多批次",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同一信号不同批次分开，不能合并耗时",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-061",
+      "group": "批次",
+      "title": "重复/重放",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "批次重放不翻倍",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-062",
+      "group": "批次",
+      "title": "代次和空结果",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "snapshot/generation可追踪，空集合状态明确",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-063",
+      "group": "调仓计划",
+      "title": "计划生命周期",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "pending→success/failed状态变化可追踪",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-064",
+      "group": "调仓计划",
+      "title": "目标/当前方向、权重、数量",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "逐字段源映射，方向缺失不默认买",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-065",
+      "group": "调仓计划",
+      "title": "同信号多阶段",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同symbol多阶段计划不删除或错误合并",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-066",
+      "group": "调仓计划",
+      "title": "计划与实际持仓方向",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "目标方向、当前方向与最终持仓对账",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-067",
+      "group": "调仓计划",
+      "title": "数量/权重精度和0数量",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "真实0、缺失和极小值分开",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-068",
+      "group": "调仓计划",
+      "title": "跨账户局部执行隔离",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同signal/symbol在不同账户不串",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-069",
+      "group": "调仓计划",
+      "title": "最近N单位和分页",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "N的事件/批次口径按契约，分页完整",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-070",
+      "group": "order_intents",
+      "title": "三列独立映射",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "真实仓位、基准仓位、接受变化分别对源",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-071",
+      "group": "order_intents",
+      "title": "不擅自推导接受变化",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "accepted_change不能默认等于real-baseline",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-072",
+      "group": "order_intents",
+      "title": "多intent去重",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同signal/symbol多个intent按intent_id保留",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-073",
+      "group": "order_intents",
+      "title": "方向和0变化",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "正负方向、真实0变化不混淆",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-074",
+      "group": "order_intents",
+      "title": "与计划/账户/区间关联",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "intent可追到上游计划和策略区间",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-075",
+      "group": "order_intents",
+      "title": "缺字段/版本冲突",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "状态明确，不用空值补业务含义",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-076",
+      "group": "委托",
+      "title": "order_id跨账户唯一",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "局部order_id跨账户不互删",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-077",
+      "group": "委托",
+      "title": "事件/方向/类型/波次",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "字段逐项映射，缺方向不默认买",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-078",
+      "group": "委托",
+      "title": "多事件取最新",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同订单多事件按时间和版本取最新状态",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-079",
+      "group": "委托",
+      "title": "部分成交/取消/失败/未知",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "状态枚举及数量结算准确",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-080",
+      "group": "委托",
+      "title": "数量价格精度",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "原值与展示值分离，微小价格不按0处理",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-081",
+      "group": "委托",
+      "title": "策略区间归属",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "订单只能归对应策略区间",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-082",
+      "group": "委托",
+      "title": "重试/重复事件幂等",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "网络重试不制造重复订单事实",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-083",
+      "group": "委托",
+      "title": "分页/排序/snapshot",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "排序、分页和代次一致",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-084",
+      "group": "成交",
+      "title": "fill_id/order_id唯一",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "同fill重复和跨账户局部ID隔离",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-085",
+      "group": "成交",
+      "title": "多成交加权均价",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "数量加权，不使用展示价格",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-086",
+      "group": "成交",
+      "title": "名义价值精度",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "数量×成交价与源名义对账，展示0不能替代原值",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-087",
+      "group": "成交",
+      "title": "手续费归属和符号",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "手续费独立映射，正负语义正确",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-088",
+      "group": "成交",
+      "title": "方向/账户/策略区间",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "成交归属完整可追溯",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-089",
+      "group": "成交",
+      "title": "部分成交与订单数量",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "成交合计与订单数量状态对账",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-090",
+      "group": "成交",
+      "title": "迟到修订",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "按source/version替换，不叠加旧值",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-091",
+      "group": "成交",
+      "title": "退款/负费率",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "退款和负手续费保留原语义",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-092",
+      "group": "跨域一致性",
+      "title": "signal→batch→plan→intent→order→fill",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "全链路父子ID可追踪",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-093",
+      "group": "跨域一致性",
+      "title": "成功计划与订单/成交",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "成功计划必须有对应结果或明确未成交",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-094",
+      "group": "跨域一致性",
+      "title": "失败/取消不入收益",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "失败/取消事实不进入已实现收益",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-095",
+      "group": "跨域一致性",
+      "title": "成交与持仓对账",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "有效成交聚合与positions结果一致",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-096",
+      "group": "跨域一致性",
+      "title": "费用/资费不重复进profit",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "费用和资费只在对应区间入账一次",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-097",
+      "group": "跨域一致性",
+      "title": "当前/历史资源范围",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "所有资源遵守当前/历史集合定义",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-098",
+      "group": "跨域一致性",
+      "title": "同snapshot generation",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "冲突返回conflict/partial，不静默混用",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-099",
+      "group": "异常",
+      "title": "空策略/空账号/空交易数据",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "空集合和不可用状态明确",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-100",
+      "group": "异常",
+      "title": "缺strategy_id/account_id",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "缺身份拒绝，不查询默认对象",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-101",
+      "group": "异常",
+      "title": "非法时间窗",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "from>to、越界、空窗口错误结构明确",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-102",
+      "group": "异常",
+      "title": "未知resource/状态/交易所",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "返回明确错误或unknown，不猜测",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-103",
+      "group": "异常",
+      "title": "401/403/404/409/422",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "错误结构、业务码和数据无副作用",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-104",
+      "group": "异常",
+      "title": "GET无重试/无跳转",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "超时和网络异常不产生重复写或跳转",
+      "priority": "P1",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    },
+    {
+      "id": "RES-105",
+      "group": "异常",
+      "title": "大量账号和资源分页",
+      "input": "按该数据域构造正向、缺失、重复或边界样本",
+      "expected": "完整合并不漏不重，不能按当前页计算",
+      "priority": "P0",
+      "status": "待补充自动化",
+      "trace": "strategy_id, account_id, exchange, interval_id, source_id, snapshot_id, generation"
+    }
+  ]
+}
