@@ -76,12 +76,110 @@ class StrategyDetailResourceEvidence:
     response: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class ExistingStrategyDetailEvidence:
+    """真实已存在策略的无 snapshot HTTP 响应证据。"""
+
+    strategy_id: str
+    strategy: dict[str, Any]
+    response: dict[str, Any]
+
+
 class StrategyDetailSourceFlow:
     """准备策略视图并调用真实策略详情接口，结束后精确清理。"""
 
     def __init__(self, repository: StrategyDetailFixtureRepository, api: StrategyDetailAPI,
                  actor_id: int) -> None:
         self.repository, self.api, self.actor_id = repository, api, actor_id
+
+    @contextmanager
+    def execute_existing(self, *, strategy_id: str | None = None,
+                         metrics: str | None = None) -> Iterator[ExistingStrategyDetailEvidence]:
+        """对真实可见策略发起页面同款无 ``snapshot_id`` 摘要请求。
+
+        Args:
+            strategy_id: 已知策略 ID；为空时从测试库只读发现一个 active/running 策略。
+            metrics: 可选的指标选择串，默认覆盖策略详情核心卡片。
+
+        Yields:
+            ``ExistingStrategyDetailEvidence``，包含实际策略身份和原始 HTTP 响应。
+
+        Raises:
+            StrategyDetailSourceContractBlocked: 测试库中没有可见策略，或实际接口拒绝该主体。
+        """
+        strategy = self.repository.find_existing_strategy() if strategy_id is None else None
+        selected_id = strategy_id or (str(strategy.get("id")) if strategy else "")
+        if not selected_id:
+            raise StrategyDetailSourceContractBlocked(
+                "BLOCKED_DATA: no active/running strategy is available for live detail requests"
+            )
+        if strategy is None:
+            strategy = {"id": selected_id}
+        result = self.api.analytics(
+            "summary",
+            subject_id=selected_id,
+            subject_type="strategy",
+            scope="lifetime",
+            metric_basis="accrual",
+            metrics=metrics or (
+                "margin_equity,unrealized_pnl,realized_pnl_gross,cumulative_return,"
+                "annualized_return,current_drawdown,commission_expense,funding_pnl,position_ratio,"
+                "sharpe_ratio,sortino_ratio,calmar_ratio,max_drawdown,volatility,win_rate,profit_loss_ratio"
+            ),
+        )
+        body = _raise_for_fixture_response("existing-summary", result)
+        meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+        if meta.get("mock") is not False:
+            raise AssertionError(f"existing strategy summary unexpectedly mock: {body}")
+        if not meta.get("snapshot_id"):
+            raise AssertionError(f"existing strategy summary did not return a backend snapshot: {body}")
+        yield ExistingStrategyDetailEvidence(selected_id, strategy, body)
+
+    @contextmanager
+    def execute_existing_resource(
+        self,
+        resource: str,
+        *,
+        strategy_id: str | None = None,
+        metrics: str | None = None,
+    ) -> Iterator[StrategyDetailResourceEvidence]:
+        """对真实可见策略调用一个无 snapshot 的详情资源。
+
+        该入口只调用 GET，不写 fixture 数据；resource 为 definition、accounts、analytics
+        或 trading 资源名。后端实际生成的 snapshot 只用于响应身份断言，不作为请求参数回传。
+        """
+        strategy = self.repository.find_existing_strategy() if strategy_id is None else None
+        selected_id = strategy_id or (str(strategy.get("id")) if strategy else "")
+        if not selected_id:
+            raise StrategyDetailSourceContractBlocked(
+                "BLOCKED_DATA: no active/running strategy is available for live detail requests"
+            )
+        params: dict[str, Any] = {
+            "subject_id": selected_id,
+            "subject_type": "strategy",
+        }
+        if resource in {"summary", "risk", "series"}:
+            params["scope"] = "lifetime"
+            params["metric_basis"] = "accrual"
+            if metrics:
+                params["metrics"] = metrics
+            if resource == "series":
+                params["types"] = "nav,drawdown"
+            result = self.api.analytics(resource, **params)
+        elif resource in {"definition", "accounts"}:
+            result = getattr(self.api, resource)(selected_id)
+        else:
+            result = self.api.trading(resource, **params)
+        body = _raise_for_fixture_response("existing-" + resource, result)
+        meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+        if meta.get("mock") is not False:
+            raise AssertionError(f"existing strategy {resource} unexpectedly mock: {body}")
+        returned_id = body.get("data", {}).get("context", {}).get("subject_id") if isinstance(body.get("data"), dict) else None
+        if returned_id is not None and str(returned_id) != selected_id:
+            raise AssertionError(
+                f"existing strategy {resource} subject mismatch: expected={selected_id}, actual={returned_id}"
+            )
+        yield StrategyDetailResourceEvidence("", str(meta.get("snapshot_id") or ""), selected_id, resource, body)
 
     @contextmanager
     def execute(self, *, metrics: dict[str, Any], accounts: list[dict[str, Any]] | None = None) -> Iterator[StrategyDetailSourceEvidence]:

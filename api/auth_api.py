@@ -59,7 +59,10 @@ class AuthAPI:
             "/auth/login",
             json_body={"email": email, "password": password},
             headers={"Content-Type": "application/json"},
-            retryable=False,
+            # Login has no business-side effect; a bounded retry prevents a
+            # transient proxy/TLS EOF from aborting every live case before it
+            # reaches its actual API assertion.
+            retryable=True,
         )
 
     def get_current_user(self) -> requests.Response:

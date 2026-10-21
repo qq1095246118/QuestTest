@@ -9,6 +9,7 @@ import pytest
 
 from service.account_management_service import AccountAggregationInput, AccountManagementService
 from service.account_management_source_flow import AccountManagementSourceContractBlocked
+from api.account_management_api import ACCOUNT_MANAGEMENT_METRICS
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression, pytest.mark.account_management]
@@ -247,3 +248,175 @@ def test_portfolio_summary_live_without_snapshot_returns_real_response(account_m
         }
         assert "READ_LIMIT_EXCEEDED" in codes, body
     assert body.get("data", {}).get("context", {}).get("subject_type") == "portfolio", body
+
+
+_PAGE_METRICS = tuple(ACCOUNT_MANAGEMENT_METRICS.split(","))
+
+
+def _assert_real_success(response: dict[str, Any], *, endpoint: str) -> dict[str, Any]:
+    """校验真实页面 GET 的公共协议，不把业务数据状态当成 HTTP 失败。"""
+
+    assert response.get("http_status") == 200, {"endpoint": endpoint, "response": response}
+    body = response.get("body")
+    assert isinstance(body, dict), {"endpoint": endpoint, "response": response}
+    assert body.get("success") is True, {"endpoint": endpoint, "body": body}
+    meta = body.get("meta")
+    assert isinstance(meta, dict), {"endpoint": endpoint, "body": body}
+    assert meta.get("mock") is False, {"endpoint": endpoint, "meta": meta}
+    data = body.get("data")
+    assert isinstance(data, dict), {"endpoint": endpoint, "body": body}
+    return data
+
+
+def test_account_directory_default_request_covers_all_core_metrics(
+    account_management_default_page,
+) -> None:
+    """AM-LIVE-009：页面默认目录真实请求必须携带 16 个核心指标且不伪造快照。"""
+
+    response = account_management_default_page
+    data = _assert_real_success(response, endpoint="/admin/quant-accounts")
+    params = response.get("request_params")
+    assert isinstance(params, dict), response
+    assert "snapshot_id" not in params, params
+    assert params.get("population") == "all", params
+    assert params.get("scope") == "lifetime", params
+    assert params.get("metric_basis") == "accrual", params
+    assert params.get("metrics") == ACCOUNT_MANAGEMENT_METRICS, params
+    assert isinstance(data.get("items"), list), data
+    page_info = data.get("page_info")
+    assert isinstance(page_info, dict), data
+    assert page_info.get("mode") == "page", page_info
+
+
+def test_account_portfolio_summary_returns_all_core_metric_objects(
+    account_management_default_summary,
+) -> None:
+    """AM-LIVE-010：portfolio 摘要必须逐项返回页面 16 张核心指标卡的数据对象。"""
+
+    response = account_management_default_summary
+    data = _assert_real_success(response, endpoint="/quantitative-trading/analytics/summary")
+    params = response.get("request_params")
+    assert isinstance(params, dict), response
+    assert "snapshot_id" not in params, params
+    assert params.get("subject_type") == "portfolio", params
+    assert params.get("metrics") == ACCOUNT_MANAGEMENT_METRICS, params
+    assert data.get("context", {}).get("subject_type") == "portfolio", data
+    metrics = data.get("metrics")
+    assert isinstance(metrics, dict), data
+    missing = sorted(set(_PAGE_METRICS) - set(metrics))
+    assert not missing, {"missing_metrics": missing, "metrics": metrics, "body": response.get("body")}
+    for name in _PAGE_METRICS:
+        metric = metrics[name]
+        assert isinstance(metric, dict), {"metric": name, "value": metric}
+        assert isinstance(metric.get("status"), str), {"metric": name, "value": metric}
+
+
+def test_account_directory_read_limit_does_not_fabricate_totals(
+    account_management_default_page,
+) -> None:
+    """AM-LIVE-011：读上限导致总数不可用时，目录必须保留明确原因而非返回假总数。"""
+
+    response = account_management_default_page
+    data = _assert_real_success(response, endpoint="/admin/quant-accounts")
+    page_info = data.get("page_info")
+    assert isinstance(page_info, dict), data
+    status = page_info.get("total_status")
+    if status == "unavailable":
+        assert page_info.get("total") is None, page_info
+        assert page_info.get("total_reason_code") == "READ_LIMIT_EXCEEDED", page_info
+        assert data.get("total") is None, data
+        meta = response["body"].get("meta", {})
+        issue_codes = {
+            issue.get("code")
+            for issue in meta.get("issues", [])
+            if isinstance(issue, dict)
+        }
+        assert "READ_LIMIT_EXCEEDED" in issue_codes, {"meta": meta, "page_info": page_info}
+    else:
+        assert status in {"available", "complete"}, page_info
+
+
+def test_account_directory_page_and_filter_parameters_are_serialized_on_real_request(
+    account_management_api_live,
+) -> None:
+    """AM-LIVE-012：筛选参数真实发送，跳页没有首页快照时按协议拒绝。"""
+
+    page_two = account_management_api_live.accounts_page(
+        page=2,
+        limit=2,
+        runtime_status="running",
+        exchange="binance",
+        account_ids=["2999", "3000"],
+    )
+    assert page_two.get("http_status") == 400, page_two
+    error = page_two.get("body", {}).get("error", {})
+    assert error.get("code") == "PAGINATION_SNAPSHOT_REQUIRED", page_two
+    params = page_two.get("request_params")
+    assert isinstance(params, dict), page_two
+    assert params.get("pagination") == "page", params
+    assert params.get("page") == 2, params
+    assert params.get("limit") == 2, params
+    assert params.get("runtime_status") == "running", params
+    assert params.get("exchange") == "binance", params
+    assert params.get("account_ids") == "2999,3000", params
+    assert "snapshot_id" not in params, params
+
+    response = account_management_api_live.accounts_page(
+        page=1,
+        limit=2,
+        runtime_status="running",
+        exchange="binance",
+        account_ids=["2999", "3000"],
+    )
+    data = _assert_real_success(response, endpoint="/admin/quant-accounts")
+    params = response.get("request_params")
+    assert isinstance(params, dict), response
+    assert params.get("page") == 1, params
+    assert params.get("limit") == 2, params
+    assert params.get("runtime_status") == "running", params
+    assert params.get("exchange") == "binance", params
+    assert params.get("account_ids") == "2999,3000", params
+    assert "snapshot_id" not in params, params
+    page_info = data.get("page_info")
+    assert isinstance(page_info, dict), data
+    assert page_info.get("mode") == "page", page_info
+    assert page_info.get("page") == 1, page_info
+    assert page_info.get("limit") == 2, page_info
+
+
+def test_account_directory_items_keep_identity_and_metric_shape_when_data_is_available(
+    account_management_default_page,
+) -> None:
+    """AM-LIVE-013：目录有数据时逐行保留账号身份及核心指标结构；空集合允许为空。"""
+
+    response = account_management_default_page
+    data = _assert_real_success(response, endpoint="/admin/quant-accounts")
+    items = data.get("items")
+    assert isinstance(items, list), data
+    for item in items:
+        assert isinstance(item, dict), {"item": item, "body": response.get("body")}
+        identity = next(
+            (item.get(key) for key in ("account_id", "accountId", "id", "AccountID") if item.get(key) is not None),
+            None,
+        )
+        assert identity not in {None, ""}, {"item": item, "body": response.get("body")}
+        if "metrics" in item:
+            assert isinstance(item["metrics"], dict), item
+            for metric_name, metric in item["metrics"].items():
+                assert isinstance(metric, dict), {"metric": metric_name, "item": item}
+
+
+def test_account_directory_unknown_account_filter_returns_empty_selection_or_explicit_status(
+    account_management_api_live,
+) -> None:
+    """AM-LIVE-014：筛选不存在账号时不回退到全量账号，也不伪造一条目录记录。"""
+
+    response = account_management_api_live.accounts_page(account_ids=["999999999999"], limit=100)
+    data = _assert_real_success(response, endpoint="/admin/quant-accounts")
+    items = data.get("items")
+    assert isinstance(items, list), data
+    assert items == [], {"unexpected_fallback_items": items, "body": response.get("body")}
+    page_info = data.get("page_info")
+    assert isinstance(page_info, dict), data
+    if page_info.get("total_status") in {"available", "complete"}:
+        assert page_info.get("total") == 0, page_info

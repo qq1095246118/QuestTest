@@ -54,6 +54,29 @@ class StrategyDetailFixtureRepository:
             )
         return account_id
 
+    def find_existing_strategy(self) -> dict[str, Any] | None:
+        """读取一个测试环境中已经存在、可用于真实详情请求的策略。
+
+        该查询只用于发现真实 subject，不创建或修改任何业务数据。返回策略定义的
+        ``id``、``code``、``name`` 和 ``status``；没有可见策略时返回 ``None``，由
+        上层 live case 将环境能力明确标记为 skipped。
+        """
+
+        return self.client.fetch_one(
+            """SELECT d.id, d.code, d.name, d.status
+               FROM quant_strategy_definitions AS d
+               WHERE d.status IN ('active', 'running')
+                 AND d.code NOT LIKE 'qsd_%'
+                 AND EXISTS (
+                     SELECT 1
+                     FROM quant_strategy_account_runs AS r
+                     WHERE r.definition_id = d.id
+                       AND r.status IN ('active', 'running')
+                 )
+               ORDER BY d.updated_at DESC, d.id
+               LIMIT 1"""
+        )
+
     def create_view(self, fixture_id: str, view_id: str, actor_id: int, strategy_id: str,
                     accounts: list[dict[str, Any]], metrics: dict[str, Any]) -> None:
         """写入定义、归属、指标和交易资源的统一测试视图。"""
