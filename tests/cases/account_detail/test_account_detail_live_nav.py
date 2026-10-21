@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 
 import pytest
 
-from service.account_detail_source_flow import (
-    AccountDetailSourceContractBlocked,
-    AccountDetailSourceFlow,
-)
 from tools.http_response import read_json_object
 
 
@@ -47,105 +42,6 @@ def _metric(body: dict[str, Any], name: str) -> dict[str, Any]:
     if not isinstance(metric, dict):
         raise AssertionError({"error": "account summary metric missing", "metric": name, "body": body})
     return metric
-
-
-def test_nav_positions_are_calculated_from_owned_source_rows(
-    account_detail_source_flow: AccountDetailSourceFlow,
-) -> None:
-    """ADC-TRD-010/ADC-TRD-011/ADC-TRD-012：真实持仓源输入核对 N01 持仓汇总。"""
-
-    positions = [
-        {"symbol": "BTCUSDT", "position_side": "long", "signed_qty": "6", "mark_price": "100", "notional_usdt": "600", "margin_usdt": "100", "unrealized_pnl_usdt": "20"},
-        {"symbol": "ETHUSDT", "position_side": "short", "signed_qty": "-8", "mark_price": "50", "notional_usdt": "-400", "margin_usdt": "200", "unrealized_pnl_usdt": "-5"},
-    ]
-    try:
-        with account_detail_source_flow.execute(
-            realized_profit=Decimal("0"),
-            net_deposit=Decimal("0"),
-            positions=positions,
-            snapshot_overrides={"margin_equity": "1000", "margin_used": "300", "unrealized_pnl": "15"},
-        ) as evidence:
-            response = evidence.response_body
-            assert response["success"] is True, response
-            meta = response["meta"]
-            assert meta["mock"] is False, meta
-            assert meta["snapshot_id"] == evidence.view_id, meta
-            assert str(response["data"]["context"]["subject_id"]) == str(evidence.account_id), response
-            exposure = response["data"]["exposure_summary"]
-            assert exposure["position_count"] == 2, exposure
-            assert Decimal(str(exposure["total_notional"]["value"])) == Decimal("1000"), exposure
-            assert Decimal(str(exposure["unrealized_pnl"]["value"])) == Decimal("15"), exposure
-    except AccountDetailSourceContractBlocked as error:
-        pytest.skip(str(error))
-
-
-def test_account_summary_preserves_core_money_fields(
-    account_detail_source_flow: AccountDetailSourceFlow,
-) -> None:
-    """ADC-MET-001/006/010：N01 核心金额字段按源值返回并保留正负号。"""
-
-    try:
-        with account_detail_source_flow.execute(
-            realized_profit=Decimal("205"),
-            net_deposit=Decimal("5000"),
-            snapshot_overrides={
-                "margin_equity": "2312.30",
-                "unrealized_pnl": "125.30",
-                "margin_used": "300",
-                "commission_expense": "-12.50",
-                "funding_pnl": "-3.25",
-            },
-        ) as evidence:
-            body = evidence.response_body
-            expected = {
-                "margin_equity": Decimal("2312.30"),
-                "unrealized_pnl": Decimal("125.30"),
-                "realized_pnl_gross": Decimal("205"),
-                "commission_expense": Decimal("-12.50"),
-                "funding_pnl": Decimal("-3.25"),
-            }
-            for name, value in expected.items():
-                metric = _metric(body, name)
-                assert metric.get("value") is not None, {"metric": name, "body": body}
-                assert Decimal(str(metric["value"])) == value, {"metric": name, "expected": value, "actual": metric}
-    except AccountDetailSourceContractBlocked as error:
-        pytest.skip(str(error))
-
-
-def test_account_summary_keeps_zero_as_available_value(
-    account_detail_source_flow: AccountDetailSourceFlow,
-) -> None:
-    """ADC-MET-002/011：真实 0 不得被转换为缺失或 unavailable。"""
-
-    try:
-        with account_detail_source_flow.execute(
-            snapshot_overrides={"margin_equity": "0", "unrealized_pnl": "0", "margin_used": "0"}
-        ) as evidence:
-            for name in ("margin_equity", "unrealized_pnl"):
-                metric = _metric(evidence.response_body, name)
-                assert Decimal(str(metric.get("value"))) == Decimal("0"), metric
-                assert metric.get("status") not in {"unavailable", "missing"}, metric
-    except AccountDetailSourceContractBlocked as error:
-        pytest.skip(str(error))
-
-
-def test_account_summary_reports_missing_core_field_without_zero_fallback(
-    account_detail_source_flow: AccountDetailSourceFlow,
-) -> None:
-    """ADC-MET-004/009：缺失源字段要保留不可用状态，不能静默补 0。"""
-
-    try:
-        with account_detail_source_flow.execute(
-            realized_profit=None,
-            snapshot_overrides={"margin_equity": None, "unrealized_pnl": None},
-        ) as evidence:
-            for name in ("margin_equity", "unrealized_pnl", "realized_pnl_gross"):
-                metric = _metric(evidence.response_body, name)
-                assert metric.get("value") is None, metric
-                assert metric.get("status") in {"partial", "unavailable"}, metric
-                assert metric.get("reason_code"), metric
-    except AccountDetailSourceContractBlocked as error:
-        pytest.skip(str(error))
 
 
 def test_account_summary_live_without_fixture_snapshot_is_successful(account_detail_api, account_detail_subject_id) -> None:
@@ -201,9 +97,17 @@ def test_account_summary_live_exposes_all_core_metric_states(account_detail_api,
             }
 
 
-def test_account_summary_live_date_window_is_reflected_in_request_context(account_detail_api, account_detail_subject_id) -> None:
+def test_account_summary_live_date_window_is_reflected_in_request_context(
+    account_detail_api, account_detail_subject_id, persistent_data_preflight
+) -> None:
     """ADC-LIVE-007：真实 N01 支持页面日期窗口，并保留同一账户身份。"""
 
+    snapshot = persistent_data_preflight.require(
+        "account_detail", "historical_samples", "published_generation", case_id="ADC-LIVE-007"
+    )
+    assert snapshot.sample_start is not None and snapshot.sample_end is not None
+    from_at = snapshot.sample_start.strftime("%Y-%m-%dT%H:%M:%S+08:00")
+    to_at = snapshot.sample_end.strftime("%Y-%m-%dT%H:%M:%S+08:00")
     response = account_detail_api.summary(
         account_detail_subject_id,
         # N01 keeps the page's lifetime scope while the date picker is carried
@@ -211,8 +115,8 @@ def test_account_summary_live_date_window_is_reflected_in_request_context(accoun
         scope="lifetime",
         metric_basis="accrual",
         metrics="margin_equity,cumulative_return,annualized_return,max_drawdown",
-        from_at="2026-07-12T00:00:00+08:00",
-        to_at="2026-08-10T23:59:59+08:00",
+        from_at=from_at,
+        to_at=to_at,
     )
     body = read_json_object(response, "account detail range summary")
     assert response.status_code == 200, body
@@ -260,11 +164,13 @@ def test_account_summary_live_invalid_account_returns_structured_business_error(
     assert body.get("success") is False or body.get("error") or body.get("code"), body
 
 
-def test_account_summary_live_rejects_reversed_date_window(account_detail_api) -> None:
+def test_account_summary_live_rejects_reversed_date_window(
+    account_detail_api, account_detail_subject_id
+) -> None:
     """ADC-LIVE-010：结束时间早于开始时间时返回可定位的参数错误。"""
 
     response = account_detail_api.summary(
-        2999,
+        account_detail_subject_id,
         scope="lifetime",
         metric_basis="accrual",
         metrics="margin_equity,cumulative_return",

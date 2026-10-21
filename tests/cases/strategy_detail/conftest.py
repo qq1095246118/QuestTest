@@ -1,36 +1,42 @@
-"""策略详情真实测试环境 fixture。"""
+"""策略详情真实接口 Fixture。"""
+
 from __future__ import annotations
+
 from collections.abc import Iterator
-from dataclasses import replace
+
 import pytest
+
 from api.client import HTTPClient
 from api.strategy_detail_api import StrategyDetailAPI
-from db.client import DatabaseClient
-from db.strategy_detail_fixture_repository import StrategyDetailFixtureRepository
-from service.strategy_detail_source_flow import StrategyDetailSourceFlow
 
 
 @pytest.fixture(scope="module")
-def strategy_detail_source_flow(
+def strategy_detail_api(
     settings,
     pytestconfig,
     privileged_account,
-    persistent_data_preflight,
-) -> Iterator[StrategyDetailSourceFlow]:
-    """仅 --live --env test 时提供真实数据库到接口的流程。"""
+) -> Iterator[StrategyDetailAPI]:
+    """返回只读策略详情 API 客户端。
+
+    策略、账号归属和交易事实由独立持久化数据集提供；该 Fixture 不写数据库。
+    """
+
     if not pytestconfig.getoption("--live"):
-        pytest.skip("NOT_RUN_LIVE: strategy detail source cases require --live")
-    if settings.environment != "test" or settings.database.driver != "mysql":
-        pytest.skip("BLOCKED_ENV: strategy detail source cases require MySQL test environment")
-    http = HTTPClient(privileged_account.api_settings)
-    db = DatabaseClient.from_settings(replace(settings.database, read_only=True))
-    repo = StrategyDetailFixtureRepository(db, environment=settings.environment)
+        pytest.skip("NOT_RUN_LIVE: strategy detail API cases require --live")
+    if settings.environment != "test":
+        pytest.skip("BLOCKED_ENV: strategy detail API cases require --env test")
+    client = HTTPClient(privileged_account.api_settings)
     try:
-        yield StrategyDetailSourceFlow(
-            repo,
-            StrategyDetailAPI(http),
-            privileged_account.user_id,
-            persistent_data_preflight,
-        )
+        yield StrategyDetailAPI(client)
     finally:
-        http.close()
+        client.close()
+
+
+@pytest.fixture(scope="module")
+def strategy_detail_subject_id(persistent_data_preflight) -> str:
+    """返回数据集中的稳定策略主体，不创建或修改策略。"""
+
+    persistent_data_preflight.require("strategy_detail", case_id="SD-PREFLIGHT")
+    if not persistent_data_preflight.strategy_ids:
+        pytest.skip("PERSISTENT_DATASET_MISSING: no strategy id")
+    return str(persistent_data_preflight.strategy_ids[0])

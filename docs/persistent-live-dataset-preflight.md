@@ -36,3 +36,21 @@ seed 需要至少在策略定义的 `id/code/name`、运行关系的 `definition
 执行开发侧正式的首次全量拉取/计算/发布任务，并确认 `published_generation` 后再
 运行数据用例；只有源表行而没有 generation 时会以 `PERSISTENT_DATASET_NOT_PUBLISHED`
 跳过，而不会把源表插入误判为接口通过。
+
+## 一次性造数计划
+
+仓库提供 `scripts/persistent_dataset_seed.py` 作为造数前置检查工具。它默认只读，
+不会插入 `quant_strategy_performance_samples`、持仓快照、交易事件、分段结果或
+`quant_read_views`：
+
+```bash
+python3 scripts/persistent_dataset_seed.py plan \
+  --env test \
+  --manifest tests/data/persistent_dashboard_dataset_manifest.json
+```
+
+`plan` 会检查账号、策略、运行关系、NT 映射和交易源投影表是否存在，统计同一
+标签的残留以及派生表行数。当前策略侧 PG facts 的正式 DDL 和首次全量拉取命令
+尚未在本仓库确认，因此 `apply` 会明确返回 `SEED_CONTRACT_BLOCKED`，不会绕过
+策略侧 collector 写派生表。待开发提供 source adapter、正式全量入口并补齐
+manifest 的 `full_pull_command` 后，才允许增加测试环境的 apply 实现。

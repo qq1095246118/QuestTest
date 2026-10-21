@@ -1,0 +1,27 @@
+{
+  "dataset_tag": "qta_persist_20261022",
+  "version": "v1",
+  "accounts": [
+    "qta_persist_20261022_acct_a",
+    "qta_persist_20261022_acct_b",
+    "qta_persist_20261022_acct_c",
+    "qta_persist_20261022_acct_d"
+  ],
+  "strategies": [
+    "qta_persist_20261022_strategy_main",
+    "qta_persist_20261022_strategy_alt",
+    "qta_persist_20261022_strategy_other"
+  ],
+  "source_tables": [
+    "quant_accounts",
+    "quant_account_profiles",
+    "quant_strategy_definitions",
+    "quant_strategy_account_runs",
+    "quant_nt_execution_accounts",
+    "quant_nt_strategy_accounts",
+    "quant_nt_account_strategy_assignments",
+    "quant_nt_trading_history_events",
+    "quant_nt_trading_snapshots"
+  ],
+  "full_pull_command": null
+}
